@@ -1,55 +1,70 @@
 //! Controlled fixtures only. Cross-filesystem tests require an explicit disposable destination.
-use super::*;
+
 #[cfg(unix)]
 use std::os::unix::fs::{symlink, PermissionsExt};
+
+use super::*;
+
 struct Fixture {
     root: PathBuf,
-    dest: PathBuf,
+    destination: PathBuf,
 }
+
 impl Fixture {
     fn new() -> Self {
         let id = Operation::new().id;
         let base = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../.agent-tmp/tests");
         fs::create_dir_all(&base).unwrap();
+
         let root = base.join(&id);
         fs::create_dir(&root).unwrap();
-        let external=std::env::var_os("ARCHRESCUE_TEST_DESTINATION").expect("Set ARCHRESCUE_TEST_DESTINATION to a disposable directory on a separate filesystem; see scripts/test.sh");
-        let dest = PathBuf::from(external).join(&id);
-        fs::create_dir(&dest).unwrap();
+
+        let external = std::env::var_os("ARCHRESCUE_TEST_DESTINATION").expect(
+            "Set ARCHRESCUE_TEST_DESTINATION to a disposable directory on a separate filesystem; \
+             see scripts/test.sh",
+        );
+        let destination = PathBuf::from(external).join(&id);
+        fs::create_dir(&destination).unwrap();
+
         assert_ne!(
             identity(&root).unwrap().volume,
-            identity(&dest).unwrap().volume,
+            identity(&destination).unwrap().volume,
             "Tests require two real filesystems"
         );
+
         Self {
             root: fs::canonicalize(root).unwrap(),
-            dest: fs::canonicalize(dest).unwrap(),
+            destination: fs::canonicalize(destination).unwrap(),
         }
     }
+
     fn put(&self, name: &str, data: &[u8]) {
-        let p = self.root.join(name);
-        fs::create_dir_all(p.parent().unwrap()).unwrap();
-        fs::write(p, data).unwrap();
+        let path = self.root.join(name);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(path, data).unwrap();
     }
+
     fn copy(&self, selections: &[&str]) -> BackupResult {
         recover(
             &self.root,
             &selections.iter().map(PathBuf::from).collect::<Vec<_>>(),
-            &self.dest,
+            &self.destination,
             &AtomicBool::new(false),
             |_, _| {},
         )
     }
 }
+
 impl Drop for Fixture {
     fn drop(&mut self) {
         let _ = fs::remove_dir_all(&self.root);
-        let _ = fs::remove_dir_all(&self.dest);
+        let _ = fs::remove_dir_all(&self.destination);
     }
 }
+
 #[test]
 fn portable_paths_reject_traversal_and_devices() {
-    for p in [
+    for path in [
         "../secret",
         "/absolute",
         "NUL",
@@ -57,230 +72,289 @@ fn portable_paths_reject_traversal_and_devices() {
         "name:stream",
         "trailing.",
     ] {
-        assert!(portable_relative(Path::new(p)).is_err(), "{p}");
+        assert!(portable_relative(Path::new(path)).is_err(), "{path}");
     }
 }
+
 #[test]
 fn verified_copy_preserves_hierarchy_empty_dirs_and_source() {
-    let f = Fixture::new();
+    let fixture = Fixture::new();
     let data: Vec<u8> = (0..200_000).map(|n| (n % 251) as u8).collect();
-    f.put("profile/Documents/data.bin", &data);
-    f.put("profile/empty.txt", b"");
-    fs::create_dir(f.root.join("profile/empty-dir")).unwrap();
+    fixture.put("profile/Documents/data.bin", &data);
+    fixture.put("profile/empty.txt", b"");
+    fs::create_dir(fixture.root.join("profile/empty-dir")).unwrap();
+
     let before = sha256(
-        &f.root.join("profile/Documents/data.bin"),
+        &fixture.root.join("profile/Documents/data.bin"),
         &AtomicBool::new(false),
     )
     .unwrap();
+
     let mut progress = Vec::new();
-    let r = recover(
-        &f.root,
+
+    let result = recover(
+        &fixture.root,
         &["profile".into()],
-        &f.dest,
+        &fixture.destination,
         &AtomicBool::new(false),
-        |n, total| progress.push((n, total)),
+        |copied_bytes, total| progress.push((copied_bytes, total)),
     );
+
     assert_eq!(
-        r.operation.state,
+        result.operation.state,
         State::Completed,
         "{:?}",
-        r.operation.errors
+        result.operation.errors
     );
-    assert_eq!(r.files.len(), 2);
-    assert_eq!(r.copied_bytes, 200_000);
-    assert!(r.files.iter().all(|f| f.verified));
+
+    assert_eq!(result.files.len(), 2);
+    assert_eq!(result.copied_bytes, 200_000);
+    assert!(result.files.iter().all(|file| file.verified));
     assert_eq!(
-        fs::read(f.dest.join("profile/Documents/data.bin")).unwrap(),
+        fs::read(fixture.destination.join("profile/Documents/data.bin")).unwrap(),
         data
     );
-    assert!(f.dest.join("profile/empty-dir").is_dir());
+
+    assert!(fixture.destination.join("profile/empty-dir").is_dir());
     assert_eq!(
         before,
         sha256(
-            &f.root.join("profile/Documents/data.bin"),
+            &fixture.root.join("profile/Documents/data.bin"),
             &AtomicBool::new(false)
         )
         .unwrap()
     );
+
     assert!(progress.windows(2).all(|v| v[0].0 < v[1].0));
     assert_eq!(progress.last(), Some(&(200_000, 200_000)));
 }
+
 #[test]
 fn same_volume_rejected_before_writes() {
-    let f = Fixture::new();
-    f.put("a", b"original");
-    let sibling = f.root.with_extension("same-volume");
+    let fixture = Fixture::new();
+    fixture.put("a", b"original");
+    let sibling = fixture.root.with_extension("same-volume");
     fs::create_dir(&sibling).unwrap();
-    let r = recover(
-        &f.root,
+
+    let result = recover(
+        &fixture.root,
         &["a".into()],
         &sibling,
         &AtomicBool::new(false),
         |_, _| {},
     );
-    assert_eq!(r.operation.state, State::Failed);
+
+    assert_eq!(result.operation.state, State::Failed);
     assert!(!sibling.join("a").exists());
-    assert_eq!(fs::read(f.root.join("a")).unwrap(), b"original");
+    assert_eq!(fs::read(fixture.root.join("a")).unwrap(), b"original");
+
     fs::remove_dir(sibling).unwrap();
 }
+
 #[test]
 fn nested_destination_rejected() {
-    let f = Fixture::new();
-    f.put("folder/a", b"original");
-    let r = recover(
-        &f.root,
+    let fixture = Fixture::new();
+    fixture.put("folder/a", b"original");
+
+    let result = recover(
+        &fixture.root,
         &["folder".into()],
-        &f.root.join("folder"),
+        &fixture.root.join("folder"),
         &AtomicBool::new(false),
         |_, _| {},
     );
-    assert_eq!(r.operation.state, State::Failed);
-    assert!(!f.root.join("folder/folder").exists());
+
+    assert_eq!(result.operation.state, State::Failed);
+    assert!(!fixture.root.join("folder/folder").exists());
 }
+
 #[test]
 fn existing_destination_never_overwritten() {
-    let f = Fixture::new();
-    f.put("a", b"source");
-    fs::write(f.dest.join("a"), b"existing").unwrap();
-    let r = f.copy(&["a"]);
-    assert_eq!(r.operation.errors[0].kind, ErrorKind::Conflict);
-    assert_eq!(fs::read(f.dest.join("a")).unwrap(), b"existing");
-    assert_eq!(fs::read(f.root.join("a")).unwrap(), b"source");
+    let fixture = Fixture::new();
+    fixture.put("a", b"source");
+    fs::write(fixture.destination.join("a"), b"existing").unwrap();
+
+    let result = fixture.copy(&["a"]);
+
+    assert_eq!(result.operation.errors[0].kind, ErrorKind::Conflict);
+    assert_eq!(
+        fs::read(fixture.destination.join("a")).unwrap(),
+        b"existing"
+    );
+    assert_eq!(fs::read(fixture.root.join("a")).unwrap(), b"source");
 }
+
 #[test]
 fn insufficient_space_uses_actual_free_space() {
-    let f = Fixture::new();
-    let file = File::create(f.root.join("sparse.bin")).unwrap();
-    let available = space(&f.dest).unwrap().available;
+    let fixture = Fixture::new();
+    let file = File::create(fixture.root.join("sparse.bin")).unwrap();
+    let available = space(&fixture.destination).unwrap().available;
     file.set_len(available + 1).unwrap();
-    let r = f.copy(&["sparse.bin"]);
-    assert_eq!(r.operation.state, State::Failed);
-    assert!(r.operation.errors[0].context.contains("Insufficient"));
-    assert!(!f.dest.join("sparse.bin").exists());
+
+    let result = fixture.copy(&["sparse.bin"]);
+
+    assert_eq!(result.operation.state, State::Failed);
+    assert!(result.operation.errors[0].context.contains("Insufficient"));
+    assert!(!fixture.destination.join("sparse.bin").exists());
     assert_eq!(file.metadata().unwrap().len(), available + 1);
 }
+
 #[cfg(unix)]
 #[test]
 fn unreadable_source_is_not_silently_skipped() {
-    let f = Fixture::new();
-    f.put("denied", b"private fixture");
-    let p = f.root.join("denied");
-    fs::set_permissions(&p, fs::Permissions::from_mode(0o000)).unwrap();
-    let r = f.copy(&["denied"]);
-    fs::set_permissions(&p, fs::Permissions::from_mode(0o600)).unwrap();
-    assert_eq!(r.operation.state, State::Failed);
-    assert_eq!(r.operation.errors[0].kind, ErrorKind::Permission);
-    assert_eq!(fs::read(p).unwrap(), b"private fixture");
-    assert!(!f.dest.join("denied").exists());
+    let fixture = Fixture::new();
+    fixture.put("denied", b"private fixture");
+    let path = fixture.root.join("denied");
+    fs::set_permissions(&path, fs::Permissions::from_mode(0o000)).unwrap();
+
+    let result = fixture.copy(&["denied"]);
+    fs::set_permissions(&path, fs::Permissions::from_mode(0o600)).unwrap();
+
+    assert_eq!(result.operation.state, State::Failed);
+    assert_eq!(result.operation.errors[0].kind, ErrorKind::Permission);
+    assert_eq!(fs::read(path).unwrap(), b"private fixture");
+    assert!(!fixture.destination.join("denied").exists());
 }
+
 #[test]
 fn cancellation_reports_exact_partial_bytes() {
-    let f = Fixture::new();
+    let fixture = Fixture::new();
     let data = vec![42u8; 200_000];
-    f.put("a", &data);
+    fixture.put("a", &data);
     let cancel = AtomicBool::new(false);
-    let r = recover(&f.root, &["a".into()], &f.dest, &cancel, |n, _| {
-        if n >= 65536 {
-            cancel.store(true, Ordering::Relaxed)
-        }
-    });
-    assert_eq!(r.operation.state, State::Cancelled);
-    assert_eq!(r.copied_bytes, 65536);
-    assert_eq!(fs::metadata(f.dest.join("a")).unwrap().len(), 65536);
-    assert!(!r.files[0].verified);
-    assert_eq!(fs::read(f.root.join("a")).unwrap(), data);
+
+    let result = recover(
+        &fixture.root,
+        &["a".into()],
+        &fixture.destination,
+        &cancel,
+        |copied_bytes, _| {
+            if copied_bytes >= 65536 {
+                cancel.store(true, Ordering::Relaxed)
+            }
+        },
+    );
+
+    assert_eq!(result.operation.state, State::Cancelled);
+    assert_eq!(result.copied_bytes, 65536);
+    assert_eq!(
+        fs::metadata(fixture.destination.join("a")).unwrap().len(),
+        65536
+    );
+    assert!(!result.files[0].verified);
+    assert_eq!(fs::read(fixture.root.join("a")).unwrap(), data);
 }
+
 #[test]
 fn cancellation_before_preflight_writes_nothing() {
-    let f = Fixture::new();
-    f.put("a", b"original");
-    let r = recover(
-        &f.root,
+    let fixture = Fixture::new();
+    fixture.put("a", b"original");
+
+    let result = recover(
+        &fixture.root,
         &["a".into()],
-        &f.dest,
+        &fixture.destination,
         &AtomicBool::new(true),
         |_, _| {},
     );
-    assert_eq!(r.operation.state, State::Cancelled);
-    assert_eq!(fs::read_dir(&f.dest).unwrap().count(), 0);
+
+    assert_eq!(result.operation.state, State::Cancelled);
+    assert_eq!(fs::read_dir(&fixture.destination).unwrap().count(), 0);
 }
+
 #[test]
 fn partway_conflict_reports_partial_result() {
-    let f = Fixture::new();
-    f.put("a", b"first");
-    f.put("b", b"second");
-    let r = recover(
-        &f.root,
+    let fixture = Fixture::new();
+    fixture.put("a", b"first");
+    fixture.put("b", b"second");
+
+    let result = recover(
+        &fixture.root,
         &["a".into(), "b".into()],
-        &f.dest,
+        &fixture.destination,
         &AtomicBool::new(false),
         |_, _| {
-            fs::write(f.dest.join("b"), b"injected conflict").unwrap();
+            fs::write(fixture.destination.join("b"), b"injected conflict").unwrap();
         },
     );
-    assert_eq!(r.operation.state, State::Failed);
-    assert_eq!(r.copied_bytes, 5);
-    assert!(!r.files[0].verified);
-    assert_eq!(fs::read(f.root.join("a")).unwrap(), b"first");
-    assert_eq!(fs::read(f.root.join("b")).unwrap(), b"second");
+
+    assert_eq!(result.operation.state, State::Failed);
+    assert_eq!(result.copied_bytes, 5);
+    assert!(!result.files[0].verified);
+    assert_eq!(fs::read(fixture.root.join("a")).unwrap(), b"first");
+    assert_eq!(fs::read(fixture.root.join("b")).unwrap(), b"second");
 }
+
 #[test]
 fn unavailable_destination_never_completes() {
-    let f = Fixture::new();
-    f.put("a", b"first");
-    f.put("b", b"second");
-    let offline = f.dest.with_extension("offline");
-    let r = recover(
-        &f.root,
+    let fixture = Fixture::new();
+    fixture.put("a", b"first");
+    fixture.put("b", b"second");
+    let offline = fixture.destination.with_extension("offline");
+
+    let result = recover(
+        &fixture.root,
         &["a".into(), "b".into()],
-        &f.dest,
+        &fixture.destination,
         &AtomicBool::new(false),
-        |_, _| fs::rename(&f.dest, &offline).unwrap(),
+        |_, _| fs::rename(&fixture.destination, &offline).unwrap(),
     );
-    fs::rename(offline, &f.dest).unwrap();
-    assert_eq!(r.operation.state, State::Failed);
-    assert_eq!(r.copied_bytes, 5);
-    assert!(!f.dest.join("b").exists());
-    assert_eq!(fs::read(f.root.join("b")).unwrap(), b"second");
+    fs::rename(offline, &fixture.destination).unwrap();
+
+    assert_eq!(result.operation.state, State::Failed);
+    assert_eq!(result.copied_bytes, 5);
+    assert!(!fixture.destination.join("b").exists());
+    assert_eq!(fs::read(fixture.root.join("b")).unwrap(), b"second");
 }
+
 #[test]
 fn destination_corruption_is_caught_by_readback() {
-    let f = Fixture::new();
-    f.put("a", b"source bytes");
-    let r = recover(
-        &f.root,
+    let fixture = Fixture::new();
+    fixture.put("a", b"source bytes");
+
+    let result = recover(
+        &fixture.root,
         &["a".into()],
-        &f.dest,
+        &fixture.destination,
         &AtomicBool::new(false),
-        |_, _| fs::write(f.dest.join("a"), b"corrupted!!!").unwrap(),
+        |_, _| fs::write(fixture.destination.join("a"), b"corrupted!!!").unwrap(),
     );
-    assert_eq!(r.operation.state, State::Failed);
-    assert_eq!(r.operation.errors[0].kind, ErrorKind::Integrity);
-    assert!(!r.files[0].verified);
-    assert_eq!(fs::read(f.root.join("a")).unwrap(), b"source bytes");
+
+    assert_eq!(result.operation.state, State::Failed);
+    assert_eq!(result.operation.errors[0].kind, ErrorKind::Integrity);
+    assert!(!result.files[0].verified);
+    assert_eq!(fs::read(fixture.root.join("a")).unwrap(), b"source bytes");
 }
+
 #[cfg(unix)]
 #[test]
 fn symlink_source_and_destination_ancestors_are_rejected() {
-    let f = Fixture::new();
-    f.put("a", b"source");
-    symlink(f.root.join("a"), f.root.join("link")).unwrap();
-    assert_eq!(f.copy(&["link"]).operation.state, State::Blocked);
-    f.put("sub/b", b"second");
-    symlink(&f.root, f.dest.join("sub")).unwrap();
-    let r = f.copy(&["sub/b"]);
-    assert_ne!(r.operation.state, State::Completed);
-    assert_eq!(fs::read(f.root.join("a")).unwrap(), b"source");
+    let fixture = Fixture::new();
+    fixture.put("a", b"source");
+    symlink(fixture.root.join("a"), fixture.root.join("link")).unwrap();
+
+    assert_eq!(fixture.copy(&["link"]).operation.state, State::Blocked);
+
+    fixture.put("sub/b", b"second");
+    symlink(&fixture.root, fixture.destination.join("sub")).unwrap();
+
+    let result = fixture.copy(&["sub/b"]);
+
+    assert_ne!(result.operation.state, State::Completed);
+    assert_eq!(fs::read(fixture.root.join("a")).unwrap(), b"source");
 }
+
 #[test]
 fn case_collisions_and_overlapping_selections_are_rejected() {
-    let f = Fixture::new();
-    f.put("tree/a", b"a");
-    f.put("tree/A", b"b");
-    assert_ne!(f.copy(&["tree"]).operation.state, State::Completed);
+    let fixture = Fixture::new();
+    fixture.put("tree/a", b"a");
+    fixture.put("tree/A", b"b");
+
+    assert_ne!(fixture.copy(&["tree"]).operation.state, State::Completed);
     assert_ne!(
-        f.copy(&["tree", "tree/a"]).operation.state,
+        fixture.copy(&["tree", "tree/a"]).operation.state,
         State::Completed
     );
-    assert_eq!(fs::read_dir(&f.dest).unwrap().count(), 0);
+
+    assert_eq!(fs::read_dir(&fixture.destination).unwrap().count(), 0);
 }

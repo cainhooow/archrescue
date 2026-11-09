@@ -1,37 +1,52 @@
 //! Windows API adapter. Handles are read-only; only query IOCTLs are used.
-use super::*;
+
 use std::{
     ffi::OsStr,
     mem::{offset_of, size_of},
     os::windows::ffi::{OsStrExt, OsStringExt},
     ptr::{null, null_mut},
 };
+
 use windows_sys::Win32::{
     Devices::DeviceAndDriverInstallation::*,
     Foundation::*,
     Storage::FileSystem::*,
     System::{Ioctl::*, IO::DeviceIoControl},
 };
-fn wide(s: impl AsRef<OsStr>) -> Vec<u16> {
-    s.as_ref().encode_wide().chain(Some(0)).collect()
+
+use super::*;
+
+fn wide(text: impl AsRef<OsStr>) -> Vec<u16> {
+    text.as_ref().encode_wide().chain(Some(0)).collect()
 }
-fn string(s: &[u16]) -> String {
-    String::from_utf16_lossy(&s[..s.iter().position(|&c| c == 0).unwrap_or(s.len())])
+
+fn string(buffer: &[u16]) -> String {
+    let end = buffer
+        .iter()
+        .position(|&unit| unit == 0)
+        .unwrap_or(buffer.len());
+
+    String::from_utf16_lossy(&buffer[..end])
 }
+
 fn error(context: &str) -> Error {
     Error::io(context, std::io::Error::last_os_error())
 }
+
 struct Handle(HANDLE);
+
 impl Drop for Handle {
     fn drop(&mut self) {
+        // SAFETY: Handle owns a valid CreateFileW handle.
         unsafe {
             CloseHandle(self.0);
         }
     }
 }
+
 fn open(path: &str) -> Result<Handle> {
     // SAFETY: terminated UTF-16 input; shared read access only; no create/truncate.
-    let h = unsafe {
+    let raw_handle = unsafe {
         CreateFileW(
             wide(path).as_ptr(),
             GENERIC_READ,
@@ -42,116 +57,151 @@ fn open(path: &str) -> Result<Handle> {
             null_mut(),
         )
     };
-    if h == INVALID_HANDLE_VALUE {
+
+    if raw_handle == INVALID_HANDLE_VALUE {
         Err(error("Open read-only device"))
     } else {
-        Ok(Handle(h))
+        Ok(Handle(raw_handle))
     }
 }
-fn query(h: &Handle, code: u32, input: &[u8]) -> Result<Vec<u8>> {
+
+fn query(handle: &Handle, control_code: u32, input: &[u8]) -> Result<Vec<u8>> {
     // The cap bounds responses from damaged/unsupported drivers. Alignment is supplied by u64.
     for length in [4096usize, 65536, 1048576] {
         let mut buffer = vec![0u64; length / 8];
-        let mut returned = 0;
-        let ok = unsafe {
+        let mut bytes_returned = 0;
+
+        let input_ptr = if input.is_empty() {
+            null()
+        } else {
+            input.as_ptr().cast()
+        };
+
+        // SAFETY: the query is synchronous and both buffers cover their supplied lengths.
+        let succeeded = unsafe {
             DeviceIoControl(
-                h.0,
-                code,
-                if input.is_empty() {
-                    null()
-                } else {
-                    input.as_ptr().cast()
-                },
+                handle.0,
+                control_code,
+                input_ptr,
                 input.len() as u32,
                 buffer.as_mut_ptr().cast(),
                 length as u32,
-                &mut returned,
+                &mut bytes_returned,
                 null_mut(),
             )
         };
-        if ok != 0 {
-            if returned as usize > length {
+
+        if succeeded != 0 {
+            if bytes_returned as usize > length {
                 return Err(Error::new(ErrorKind::Io, "Invalid driver response size"));
             }
+
             // SAFETY: only initialized bytes within the allocated response are copied.
-            return Ok(unsafe {
-                std::slice::from_raw_parts(buffer.as_ptr().cast::<u8>(), returned as usize)
-            }
-            .to_vec());
+            let response = unsafe {
+                std::slice::from_raw_parts(buffer.as_ptr().cast::<u8>(), bytes_returned as usize)
+            };
+
+            return Ok(response.to_vec());
         }
-        let err = std::io::Error::last_os_error();
-        if !matches!(err.raw_os_error(), Some(122 | 234)) {
-            return Err(Error::io("Read-only device query", err));
+
+        let os_error = std::io::Error::last_os_error();
+        if !matches!(os_error.raw_os_error(), Some(122 | 234)) {
+            return Err(Error::io("Read-only device query", os_error));
         }
     }
+
     Err(Error::new(
         ErrorKind::Unsupported,
         "Device response exceeds bounded buffer",
     ))
 }
+
 fn value<T: Copy>(data: &[u8], offset: usize) -> Result<T> {
     if offset
         .checked_add(size_of::<T>())
-        .is_none_or(|n| n > data.len())
+        .is_none_or(|end| end > data.len())
     {
         return Err(Error::new(ErrorKind::Io, "Truncated device metadata"));
     }
+
     // SAFETY: length checked; Windows query structs here contain only integers/unions/GUIDs.
     Ok(unsafe { std::ptr::read_unaligned(data.as_ptr().add(offset).cast::<T>()) })
 }
+
 fn extents(volume: &str) -> Result<Vec<u32>> {
-    let h = open(volume.trim_end_matches('\\'))?;
-    let data = query(&h, IOCTL_VOLUME_GET_VOLUME_DISK_EXTENTS, &[])?;
+    let handle = open(volume.trim_end_matches('\\'))?;
+    let data = query(&handle, IOCTL_VOLUME_GET_VOLUME_DISK_EXTENTS, &[])?;
     let count = value::<u32>(&data, 0)? as usize;
+
     if count == 0 || count > 128 {
         return Err(Error::new(
             ErrorKind::Unsupported,
             "Unsupported disk extent count",
         ));
     }
+
     let mut disks = Vec::new();
-    for i in 0..count {
-        let e: DISK_EXTENT = value(
+    for index in 0..count {
+        let extent: DISK_EXTENT = value(
             &data,
-            offset_of!(VOLUME_DISK_EXTENTS, Extents) + i * size_of::<DISK_EXTENT>(),
+            offset_of!(VOLUME_DISK_EXTENTS, Extents) + index * size_of::<DISK_EXTENT>(),
         )?;
-        disks.push(e.DiskNumber);
+        disks.push(extent.DiskNumber);
     }
+
     disks.sort();
     disks.dedup();
+
     Ok(disks)
 }
+
 pub fn identity(path: &Path) -> Result<VolumeIdentity> {
-    let mut mount = vec![0u16; 32768];
-    let mut name = vec![0u16; 1024];
+    let mut mount_path = vec![0u16; 32768];
+    let mut volume_name = vec![0u16; 1024];
+
     unsafe {
-        if GetVolumePathNameW(wide(path).as_ptr(), mount.as_mut_ptr(), mount.len() as u32) == 0 {
+        if GetVolumePathNameW(
+            wide(path).as_ptr(),
+            mount_path.as_mut_ptr(),
+            mount_path.len() as u32,
+        ) == 0
+        {
             return Err(error("GetVolumePathNameW"));
         }
-        if GetVolumeNameForVolumeMountPointW(mount.as_ptr(), name.as_mut_ptr(), name.len() as u32)
-            == 0
+
+        if GetVolumeNameForVolumeMountPointW(
+            mount_path.as_ptr(),
+            volume_name.as_mut_ptr(),
+            volume_name.len() as u32,
+        ) == 0
         {
             return Err(error("GetVolumeNameForVolumeMountPointW"));
         }
     }
-    let volume = string(&name);
+
+    let volume = string(&volume_name);
     let physical_disks = extents(&volume)?;
+
     Ok(VolumeIdentity {
         volume,
         physical_disks,
     })
 }
+
 pub fn space(path: &Path) -> Result<Space> {
     let (mut available, mut total, mut free) = (0, 0, 0);
+
     if unsafe { GetDiskFreeSpaceExW(wide(path).as_ptr(), &mut available, &mut total, &mut free) }
         == 0
     {
         return Err(error("GetDiskFreeSpaceExW"));
     }
+
     Space::checked(total, free, available)
 }
+
 fn disk(path: String) -> Disk {
-    let mut d = Disk {
+    let mut disk = Disk {
         identity: path.clone(),
         device_path: path.clone(),
         capacity: None,
@@ -161,196 +211,256 @@ fn disk(path: String) -> Disk {
         partitions: vec![],
         errors: vec![],
     };
-    let h = match open(&path) {
-        Ok(h) => h,
-        Err(e) => {
-            d.errors.push(e);
-            return d;
+
+    let handle = match open(&path) {
+        Ok(handle) => handle,
+        Err(error) => {
+            disk.errors.push(error);
+            return disk;
         }
     };
-    match query(&h, IOCTL_DISK_GET_LENGTH_INFO, &[]).and_then(|v| value::<i64>(&v, 0)) {
-        Ok(n) if n >= 0 => d.capacity = Some(n as u64),
-        Ok(_) => d
+    let length =
+        query(&handle, IOCTL_DISK_GET_LENGTH_INFO, &[]).and_then(|bytes| value::<i64>(&bytes, 0));
+
+    match length {
+        Ok(length) if length >= 0 => disk.capacity = Some(length as u64),
+        Ok(_) => disk
             .errors
             .push(Error::new(ErrorKind::Io, "Negative disk length")),
-        Err(e) => d.errors.push(e),
+        Err(error) => disk.errors.push(error),
     }
+
     // StorageDeviceProperty / PropertyStandardQuery; no serial number is read or retained.
-    match query(&h, IOCTL_STORAGE_QUERY_PROPERTY, &[0; 12]) {
+    match query(&handle, IOCTL_STORAGE_QUERY_PROPERTY, &[0; 12]) {
         Ok(bytes) => {
             match value::<u32>(&bytes, offset_of!(STORAGE_DEVICE_DESCRIPTOR, BusType)) {
-                Ok(bus) => d.bus = Some(bus),
-                Err(e) => d.errors.push(e),
+                Ok(bus) => disk.bus = Some(bus),
+                Err(error) => disk.errors.push(error),
             }
+
             match bytes.get(offset_of!(STORAGE_DEVICE_DESCRIPTOR, RemovableMedia)) {
-                Some(0) => d.removable = Some(false),
-                Some(1) => d.removable = Some(true),
-                _ => d.errors.push(Error::new(
+                Some(0) => disk.removable = Some(false),
+                Some(1) => disk.removable = Some(true),
+                _ => disk.errors.push(Error::new(
                     ErrorKind::Io,
                     "Invalid removable-media metadata",
                 )),
             }
         }
-        Err(e) => d.errors.push(e),
+        Err(error) => disk.errors.push(error),
     }
-    if let Err(e) = read_layout(&h, &mut d) {
-        d.errors.push(e);
+
+    if let Err(error) = read_layout(&handle, &mut disk) {
+        disk.errors.push(error);
     }
-    d
+
+    disk
 }
-fn read_layout(h: &Handle, d: &mut Disk) -> Result<()> {
-    let bytes = query(h, IOCTL_DISK_GET_DRIVE_LAYOUT_EX, &[])?;
-    let parsed = crate::layout::parse(&bytes, d.capacity)?;
+
+fn read_layout(handle: &Handle, disk: &mut Disk) -> Result<()> {
+    let bytes = query(handle, IOCTL_DISK_GET_DRIVE_LAYOUT_EX, &[])?;
+    let parsed = crate::layout::parse(&bytes, disk.capacity)?;
+
     if let Some(id) = parsed.identity {
-        d.identity = if parsed.style == "MBR" {
-            format!("{id};{}", d.device_path)
+        disk.identity = if parsed.style == "MBR" {
+            format!("{id};{}", disk.device_path)
         } else {
             id
         };
     }
-    d.style = Some(parsed.style);
-    d.partitions = parsed.partitions;
+
+    disk.style = Some(parsed.style);
+    disk.partitions = parsed.partitions;
+
     Ok(())
 }
+
 pub fn inventory() -> Inventory {
     let mut result = Inventory::default();
-    // SAFETY: documented SetupAPI enumeration with bounded detail buffers and released set.
+
+    enumerate_disks(&mut result);
+    enumerate_volumes(&mut result);
+
+    result
+}
+
+fn enumerate_disks(result: &mut Inventory) {
+    // SAFETY: documented SetupAPI enumeration with bounded detail buffers and a released device set.
     unsafe {
-        let set = SetupDiGetClassDevsW(
+        let device_set = SetupDiGetClassDevsW(
             &GUID_DEVINTERFACE_DISK,
             null(),
             null_mut(),
             DIGCF_PRESENT | DIGCF_DEVICEINTERFACE,
         );
-        if set == -1 {
+
+        if device_set == -1 {
             result.errors.push(error("SetupDiGetClassDevsW"));
-        } else {
-            let mut index = 0;
-            loop {
-                let mut interface = SP_DEVICE_INTERFACE_DATA {
-                    cbSize: size_of::<SP_DEVICE_INTERFACE_DATA>() as u32,
-                    ..Default::default()
-                };
-                if SetupDiEnumDeviceInterfaces(
-                    set,
-                    null(),
-                    &GUID_DEVINTERFACE_DISK,
-                    index,
-                    &mut interface,
-                ) == 0
-                {
-                    if GetLastError() != ERROR_NO_MORE_ITEMS {
-                        result.errors.push(error("SetupDiEnumDeviceInterfaces"));
-                    }
-                    break;
-                }
-                index += 1;
-                let mut required = 0;
-                SetupDiGetDeviceInterfaceDetailW(
-                    set,
-                    &interface,
-                    null_mut(),
-                    0,
-                    &mut required,
-                    null_mut(),
-                );
-                if !(8..=65536).contains(&required) {
-                    result
-                        .errors
-                        .push(Error::new(ErrorKind::Io, "Invalid device interface length"));
-                    continue;
-                }
-                let mut buf = vec![0u64; (required as usize).div_ceil(8)];
-                let detail = buf.as_mut_ptr().cast::<SP_DEVICE_INTERFACE_DETAIL_DATA_W>();
-                (*detail).cbSize = size_of::<SP_DEVICE_INTERFACE_DETAIL_DATA_W>() as u32;
-                if SetupDiGetDeviceInterfaceDetailW(
-                    set,
-                    &interface,
-                    detail,
-                    required,
-                    null_mut(),
-                    null_mut(),
-                ) == 0
-                {
-                    result
-                        .errors
-                        .push(error("SetupDiGetDeviceInterfaceDetailW"));
-                    continue;
-                }
-                let path = std::slice::from_raw_parts(
-                    std::ptr::addr_of!((*detail).DevicePath).cast::<u16>(),
-                    (required as usize - 4) / 2,
-                );
-                result.disks.push(disk(string(path)));
-            }
-            SetupDiDestroyDeviceInfoList(set);
+            return;
         }
-        let mut name = vec![0u16; 1024];
-        let find = FindFirstVolumeW(name.as_mut_ptr(), name.len() as u32);
-        if find == INVALID_HANDLE_VALUE {
-            result.errors.push(error("FindFirstVolumeW"));
-            return result;
-        }
+
+        let mut index = 0;
         loop {
-            let id = string(&name);
-            let mut v = Volume {
-                identity: id.clone(),
-                paths: vec![],
-                filesystem: None,
-                space: None,
-                physical_disks: vec![],
-                errors: vec![],
+            let mut interface = SP_DEVICE_INTERFACE_DATA {
+                cbSize: size_of::<SP_DEVICE_INTERFACE_DATA>() as u32,
+                ..Default::default()
             };
-            let mut paths = vec![0u16; 32768];
-            let mut required = 0;
-            if GetVolumePathNamesForVolumeNameW(
-                name.as_ptr(),
-                paths.as_mut_ptr(),
-                paths.len() as u32,
-                &mut required,
-            ) != 0
+
+            if SetupDiEnumDeviceInterfaces(
+                device_set,
+                null(),
+                &GUID_DEVINTERFACE_DISK,
+                index,
+                &mut interface,
+            ) == 0
             {
-                v.paths = paths
-                    .split(|c| *c == 0)
-                    .take_while(|s| !s.is_empty())
-                    .map(|s| PathBuf::from(std::ffi::OsString::from_wide(s)))
-                    .collect();
-            } else {
-                v.errors.push(error("GetVolumePathNamesForVolumeNameW"));
+                if GetLastError() != ERROR_NO_MORE_ITEMS {
+                    result.errors.push(error("SetupDiEnumDeviceInterfaces"));
+                }
+                break;
             }
-            let mut fsname = vec![0u16; 256];
-            if GetVolumeInformationW(
-                name.as_ptr(),
+
+            index += 1;
+
+            let mut required_bytes = 0;
+            SetupDiGetDeviceInterfaceDetailW(
+                device_set,
+                &interface,
                 null_mut(),
                 0,
+                &mut required_bytes,
+                null_mut(),
+            );
+
+            if !(8..=65536).contains(&required_bytes) {
+                result
+                    .errors
+                    .push(Error::new(ErrorKind::Io, "Invalid device interface length"));
+                continue;
+            }
+
+            let mut detail_buffer = vec![0u64; (required_bytes as usize).div_ceil(8)];
+            let detail = detail_buffer
+                .as_mut_ptr()
+                .cast::<SP_DEVICE_INTERFACE_DETAIL_DATA_W>();
+            (*detail).cbSize = size_of::<SP_DEVICE_INTERFACE_DETAIL_DATA_W>() as u32;
+
+            if SetupDiGetDeviceInterfaceDetailW(
+                device_set,
+                &interface,
+                detail,
+                required_bytes,
                 null_mut(),
                 null_mut(),
-                null_mut(),
-                fsname.as_mut_ptr(),
-                fsname.len() as u32,
-            ) != 0
+            ) == 0
             {
-                v.filesystem = Some(string(&fsname));
-            } else {
-                v.errors.push(error("GetVolumeInformationW"));
+                result
+                    .errors
+                    .push(error("SetupDiGetDeviceInterfaceDetailW"));
+                continue;
             }
-            match space(Path::new(&id)) {
-                Ok(s) => v.space = Some(s),
-                Err(e) => v.errors.push(e),
-            }
-            match extents(&id) {
-                Ok(d) => v.physical_disks = d,
-                Err(e) => v.errors.push(e),
-            }
-            result.volumes.push(v);
-            if FindNextVolumeW(find, name.as_mut_ptr(), name.len() as u32) == 0 {
+
+            let path = std::slice::from_raw_parts(
+                std::ptr::addr_of!((*detail).DevicePath).cast::<u16>(),
+                (required_bytes as usize - 4) / 2,
+            );
+            result.disks.push(disk(string(path)));
+        }
+
+        SetupDiDestroyDeviceInfoList(device_set);
+    }
+}
+
+fn enumerate_volumes(result: &mut Inventory) {
+    // SAFETY: volume enumeration writes to the supplied buffer and releases the search handle.
+    unsafe {
+        let mut volume_name = vec![0u16; 1024];
+        let find_handle = FindFirstVolumeW(volume_name.as_mut_ptr(), volume_name.len() as u32);
+
+        if find_handle == INVALID_HANDLE_VALUE {
+            result.errors.push(error("FindFirstVolumeW"));
+            return;
+        }
+
+        loop {
+            // Successful enumeration supplies a NUL-terminated volume name.
+            result.volumes.push(read_volume(&volume_name));
+
+            if FindNextVolumeW(
+                find_handle,
+                volume_name.as_mut_ptr(),
+                volume_name.len() as u32,
+            ) == 0
+            {
                 if GetLastError() != ERROR_NO_MORE_FILES {
                     result.errors.push(error("FindNextVolumeW"));
                 }
                 break;
             }
         }
-        FindVolumeClose(find);
+
+        FindVolumeClose(find_handle);
     }
-    result
+}
+
+// The caller supplies a NUL-terminated volume name from Win32 enumeration.
+unsafe fn read_volume(volume_name: &[u16]) -> Volume {
+    let volume_id = string(volume_name);
+    let mut volume = Volume {
+        identity: volume_id.clone(),
+        paths: vec![],
+        filesystem: None,
+        space: None,
+        physical_disks: vec![],
+        errors: vec![],
+    };
+
+    let mut paths = vec![0u16; 32768];
+    let mut required = 0;
+    if GetVolumePathNamesForVolumeNameW(
+        volume_name.as_ptr(),
+        paths.as_mut_ptr(),
+        paths.len() as u32,
+        &mut required,
+    ) != 0
+    {
+        volume.paths = paths
+            .split(|unit| *unit == 0)
+            .take_while(|units| !units.is_empty())
+            .map(|units| PathBuf::from(std::ffi::OsString::from_wide(units)))
+            .collect();
+    } else {
+        volume
+            .errors
+            .push(error("GetVolumePathNamesForVolumeNameW"));
+    }
+
+    let mut filesystem_name = vec![0u16; 256];
+    if GetVolumeInformationW(
+        volume_name.as_ptr(),
+        null_mut(),
+        0,
+        null_mut(),
+        null_mut(),
+        null_mut(),
+        filesystem_name.as_mut_ptr(),
+        filesystem_name.len() as u32,
+    ) != 0
+    {
+        volume.filesystem = Some(string(&filesystem_name));
+    } else {
+        volume.errors.push(error("GetVolumeInformationW"));
+    }
+
+    match space(Path::new(&volume_id)) {
+        Ok(space) => volume.space = Some(space),
+        Err(error) => volume.errors.push(error),
+    }
+
+    match extents(&volume_id) {
+        Ok(disks) => volume.physical_disks = disks,
+        Err(error) => volume.errors.push(error),
+    }
+
+    volume
 }

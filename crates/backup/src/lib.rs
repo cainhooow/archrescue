@@ -1,9 +1,6 @@
 //! Selective file copy with strict preflight and content verification.
 //! No source write, deletion, overwrite, privilege escalation, or link traversal.
-use archrescue_core::{Error, ErrorKind, Operation, Result, State};
-use archrescue_storage::{identity, require_separate, safe_existing, space, VolumeIdentity};
-use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
+
 use std::{
     collections::HashSet,
     fs::{self, File, OpenOptions},
@@ -13,6 +10,16 @@ use std::{
     time::UNIX_EPOCH,
 };
 
+use archrescue_core::{Error, ErrorKind, Operation, Result, State};
+use archrescue_storage::{identity, require_separate, safe_existing, space, VolumeIdentity};
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
+
+const RESERVED_DEVICE_NAMES: [&str; 22] = [
+    "CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8",
+    "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
+];
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Entry {
     pub name: PathBuf,
@@ -21,38 +28,45 @@ pub struct Entry {
     pub modified_unix: Option<u64>,
     pub error: Option<Error>,
 }
+
 pub fn browse(directory: &Path) -> Result<Vec<Entry>> {
     let directory = safe_existing(directory)?;
     let mut entries = Vec::new();
-    for child in fs::read_dir(directory).map_err(|e| Error::io("List directory", e))? {
-        let child = child.map_err(|e| Error::io("Read directory entry", e))?;
+
+    for child in fs::read_dir(directory).map_err(|error| Error::io("List directory", error))? {
+        let child = child.map_err(|error| Error::io("Read directory entry", error))?;
         let path = child.path();
-        match safe_existing(&path)
-            .and_then(|p| fs::metadata(p).map_err(|e| Error::io("Read file metadata", e)))
-        {
-            Ok(m) => entries.push(Entry {
+        let metadata = safe_existing(&path).and_then(|path| {
+            fs::metadata(path).map_err(|error| Error::io("Read file metadata", error))
+        });
+
+        match metadata {
+            Ok(metadata) => entries.push(Entry {
                 name: child.file_name().into(),
-                directory: m.is_dir(),
-                bytes: m.len(),
-                modified_unix: m
+                directory: metadata.is_dir(),
+                bytes: metadata.len(),
+                modified_unix: metadata
                     .modified()
                     .ok()
-                    .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
-                    .map(|d| d.as_secs()),
+                    .and_then(|modified| modified.duration_since(UNIX_EPOCH).ok())
+                    .map(|duration| duration.as_secs()),
                 error: None,
             }),
-            Err(e) => entries.push(Entry {
+            Err(error) => entries.push(Entry {
                 name: child.file_name().into(),
                 directory: false,
                 bytes: 0,
                 modified_unix: None,
-                error: Some(e),
+                error: Some(error),
             }),
         }
     }
+
     entries.sort_by(|a, b| b.directory.cmp(&a.directory).then(a.name.cmp(&b.name)));
+
     Ok(entries)
 }
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FileResult {
     pub relative: PathBuf,
@@ -60,6 +74,7 @@ pub struct FileResult {
     pub sha256: Option<String>,
     pub verified: bool,
 }
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BackupResult {
     pub operation: Operation,
@@ -69,23 +84,33 @@ pub struct BackupResult {
     pub directories: Vec<PathBuf>,
     pub limitations: Vec<String>,
 }
+
 impl Default for BackupResult {
     fn default() -> Self {
         Self {
-            operation: Operation::new(), planned_bytes: 0, copied_bytes: 0,
-            files: vec![], directories: vec![],
+            operation: Operation::new(),
+            planned_bytes: 0,
+            copied_bytes: 0,
+            files: vec![],
+            directories: vec![],
             limitations: vec![
-                "Content-only copy: ACLs, timestamps, alternate streams and sparse allocation are not preserved".into(),
-                "Partial destination files are retained on failure and must not be treated as verified".into(),
+                "Content-only copy: ACLs, timestamps, alternate streams and sparse allocation \
+                 are not preserved"
+                    .into(),
+                "Partial destination files are retained on failure and must not be treated as \
+                 verified"
+                    .into(),
             ],
         }
     }
 }
+
 #[derive(Debug, Clone)]
 struct PlannedFile {
     relative: PathBuf,
     length: u64,
 }
+
 #[derive(Debug)]
 pub struct Plan {
     root: PathBuf,
@@ -104,31 +129,31 @@ fn check_cancel(cancel: &AtomicBool) -> Result<()> {
         Ok(())
     }
 }
+
 fn portable_relative(path: &Path) -> Result<()> {
     if path.as_os_str().is_empty()
         || path
             .components()
-            .any(|c| !matches!(c, Component::Normal(_)))
+            .any(|component| !matches!(component, Component::Normal(_)))
     {
         return Err(Error::new(
             ErrorKind::Validation,
             "Selection must be a relative path without traversal",
         ));
     }
-    for c in path.components() {
-        let name = c
+
+    for component in path.components() {
+        let name = component
             .as_os_str()
             .to_str()
             .ok_or_else(|| Error::new(ErrorKind::Unsupported, "Non-Unicode filename"))?;
         let stem = name.split('.').next().unwrap_or("").to_ascii_uppercase();
+
         if name.ends_with([' ', '.'])
-            || name.chars().any(|c| c < ' ' || "<>:\"/\\|?*".contains(c))
-            || [
-                "CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7",
-                "COM8", "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8",
-                "LPT9",
-            ]
-            .contains(&stem.as_str())
+            || name
+                .chars()
+                .any(|character| character < ' ' || "<>:\"/\\|?*".contains(character))
+            || RESERVED_DEVICE_NAMES.contains(&stem.as_str())
         {
             return Err(Error::new(
                 ErrorKind::Unsupported,
@@ -136,8 +161,10 @@ fn portable_relative(path: &Path) -> Result<()> {
             ));
         }
     }
+
     Ok(())
 }
+
 /// Preflight is read-only. Selection paths are relative to root; destination must exist.
 pub fn plan(
     root: &Path,
@@ -146,24 +173,29 @@ pub fn plan(
     cancel: &AtomicBool,
 ) -> Result<Plan> {
     check_cancel(cancel)?;
+
     let root = safe_existing(root)?;
     let destination = safe_existing(destination)?;
+
     if !root.is_dir() || !destination.is_dir() || selections.is_empty() {
         return Err(Error::new(
             ErrorKind::Validation,
             "Source/destination directories and a nonempty selection are required",
         ));
     }
+
     if destination.starts_with(&root) || root.starts_with(&destination) {
         return Err(Error::new(
             ErrorKind::Validation,
             "Source and destination trees overlap",
         ));
     }
+
     let source_id = identity(&root)?;
     let destination_id = identity(&destination)?;
     require_separate(&source_id, &destination_id)?;
-    let mut p = Plan {
+
+    let mut backup_plan = Plan {
         root,
         destination,
         source_id,
@@ -173,24 +205,32 @@ pub fn plan(
         bytes: 0,
     };
     let mut seen = HashSet::new();
+
     for selection in selections {
         portable_relative(selection)?;
         for other in selections {
-            if selection != other && (selection.starts_with(other) || other.starts_with(selection))
-            {
+            if selection == other {
+                continue;
+            }
+
+            if selection.starts_with(other) || other.starts_with(selection) {
                 return Err(Error::new(ErrorKind::Validation, "Overlapping selections"));
             }
         }
-        collect(&mut p, selection, &mut seen, cancel, 0)?;
+
+        collect(&mut backup_plan, selection, &mut seen, cancel, 0)?;
     }
-    if p.bytes > space(&p.destination)?.available {
+
+    if backup_plan.bytes > space(&backup_plan.destination)?.available {
         return Err(Error::new(
             ErrorKind::Validation,
             "Insufficient destination free space",
         ));
     }
-    Ok(p)
+
+    Ok(backup_plan)
 }
+
 fn collect(
     plan: &mut Plan,
     relative: &Path,
@@ -200,12 +240,14 @@ fn collect(
 ) -> Result<()> {
     check_cancel(cancel)?;
     portable_relative(relative)?;
+
     if depth > 128 || seen.len() >= 1_000_000 {
         return Err(Error::new(
             ErrorKind::Unsupported,
             "Selection exceeds traversal limits",
         ));
     }
+
     let key = relative.to_string_lossy().to_lowercase();
     if !seen.insert(key) {
         return Err(Error::new(
@@ -213,6 +255,7 @@ fn collect(
             "Duplicate or case-colliding selection",
         ));
     }
+
     let source = safe_existing(&plan.root.join(relative))?;
     if !source.starts_with(&plan.root) || identity(&source)?.volume != plan.source_id.volume {
         return Err(Error::new(
@@ -220,6 +263,7 @@ fn collect(
             "Selection crosses the source volume boundary",
         ));
     }
+
     let target = plan.destination.join(relative);
     match fs::symlink_metadata(&target) {
         Ok(_) => {
@@ -228,14 +272,19 @@ fn collect(
                 "Destination entry already exists",
             ))
         }
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-        Err(e) => return Err(Error::io("Check destination conflict", e)),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => return Err(Error::io("Check destination conflict", error)),
     }
-    let md = fs::metadata(&source).map_err(|e| Error::io("Read selected metadata", e))?;
-    if md.is_dir() {
+
+    let metadata =
+        fs::metadata(&source).map_err(|error| Error::io("Read selected metadata", error))?;
+    if metadata.is_dir() {
         plan.directories.push(relative.to_owned());
-        for entry in fs::read_dir(&source).map_err(|e| Error::io("Read selected directory", e))? {
-            let entry = entry.map_err(|e| Error::io("Read selected entry", e))?;
+
+        let children =
+            fs::read_dir(&source).map_err(|error| Error::io("Read selected directory", error))?;
+        for entry in children {
+            let entry = entry.map_err(|error| Error::io("Read selected entry", error))?;
             collect(
                 plan,
                 &relative.join(entry.file_name()),
@@ -244,15 +293,16 @@ fn collect(
                 depth + 1,
             )?;
         }
-    } else if md.is_file() {
-        File::open(&source).map_err(|e| Error::io("Check source readability", e))?;
+    } else if metadata.is_file() {
+        File::open(&source).map_err(|error| Error::io("Check source readability", error))?;
+
         plan.bytes = plan
             .bytes
-            .checked_add(md.len())
+            .checked_add(metadata.len())
             .ok_or_else(|| Error::new(ErrorKind::Validation, "Selection size overflow"))?;
         plan.files.push(PlannedFile {
             relative: relative.to_owned(),
-            length: md.len(),
+            length: metadata.len(),
         });
     } else {
         return Err(Error::new(
@@ -260,71 +310,90 @@ fn collect(
             "Special files are not supported",
         ));
     }
+
     Ok(())
 }
-fn revalidate(p: &Plan) -> Result<()> {
-    safe_existing(&p.root)?;
-    safe_existing(&p.destination)?;
-    let src = identity(&p.root)?;
-    let dst = identity(&p.destination)?;
-    if src.volume != p.source_id.volume
-        || dst.volume != p.destination_id.volume
-        || src.physical_disks != p.source_id.physical_disks
-        || dst.physical_disks != p.destination_id.physical_disks
+
+fn revalidate(backup_plan: &Plan) -> Result<()> {
+    safe_existing(&backup_plan.root)?;
+    safe_existing(&backup_plan.destination)?;
+
+    let source_identity = identity(&backup_plan.root)?;
+    let destination_identity = identity(&backup_plan.destination)?;
+
+    if source_identity.volume != backup_plan.source_id.volume
+        || destination_identity.volume != backup_plan.destination_id.volume
+        || source_identity.physical_disks != backup_plan.source_id.physical_disks
+        || destination_identity.physical_disks != backup_plan.destination_id.physical_disks
     {
         return Err(Error::new(
             ErrorKind::Validation,
             "Storage identity changed",
         ));
     }
-    require_separate(&src, &dst)
+
+    require_separate(&source_identity, &destination_identity)
 }
-fn parent(p: &Plan, target: &Path) -> Result<()> {
+
+fn prepare_destination_parent(backup_plan: &Plan, target: &Path) -> Result<()> {
     let parent = target
         .parent()
         .ok_or_else(|| Error::new(ErrorKind::Validation, "Missing destination parent"))?;
     let relative = parent
-        .strip_prefix(&p.destination)
+        .strip_prefix(&backup_plan.destination)
         .map_err(|_| Error::new(ErrorKind::Validation, "Destination escaped root"))?;
-    let mut current = p.destination.clone();
-    for c in relative.components() {
-        current.push(c);
+
+    let mut current = backup_plan.destination.clone();
+    for component in relative.components() {
+        current.push(component);
+
         if !current
             .try_exists()
-            .map_err(|e| Error::io("Probe destination parent", e))?
+            .map_err(|error| Error::io("Probe destination parent", error))?
         {
-            fs::create_dir(&current).map_err(|e| Error::io("Create destination directory", e))?;
+            fs::create_dir(&current)
+                .map_err(|error| Error::io("Create destination directory", error))?;
         }
+
         safe_existing(&current)?;
-        if identity(&current)?.volume != p.destination_id.volume {
+        if identity(&current)?.volume != backup_plan.destination_id.volume {
             return Err(Error::new(
                 ErrorKind::Validation,
                 "Destination crosses volume boundary",
             ));
         }
     }
+
     Ok(())
 }
+
 pub fn sha256(path: &Path, cancel: &AtomicBool) -> Result<String> {
     let mut file =
-        File::open(safe_existing(path)?).map_err(|e| Error::io("Open checksum file", e))?;
+        File::open(safe_existing(path)?).map_err(|error| Error::io("Open checksum file", error))?;
+
     hash_reader(&mut file, cancel)
 }
+
 fn hash_reader(file: &mut File, cancel: &AtomicBool) -> Result<String> {
     let mut hasher = Sha256::new();
     let mut buffer = [0u8; 65536];
+
     loop {
         check_cancel(cancel)?;
-        let n = file
+        let bytes_read = file
             .read(&mut buffer)
-            .map_err(|e| Error::io("Read checksum bytes", e))?;
-        if n == 0 {
+            .map_err(|error| Error::io("Read checksum bytes", error))?;
+
+        if bytes_read == 0 {
             break;
         }
-        hasher.update(&buffer[..n]);
+
+        hasher.update(&buffer[..bytes_read]);
     }
+
     Ok(format!("{:x}", hasher.finalize()))
 }
+
 /// Progress is invoked only for bytes actually written. Cancellation is also checked during verification.
 pub fn recover(
     root: &Path,
@@ -338,131 +407,168 @@ pub fn recover(
         .operation
         .transition(State::Validating)
         .expect("initial transition");
-    let run = (|| -> Result<()> {
-        let p = plan(root, selections, destination, cancel)?;
-        result.planned_bytes = p.bytes;
+
+    let outcome = (|| -> Result<()> {
+        let backup_plan = plan(root, selections, destination, cancel)?;
+        result.planned_bytes = backup_plan.bytes;
+
         result.operation.transition(State::Running)?;
-        execute(&p, &mut result, cancel, &mut progress)?;
+        execute(&backup_plan, &mut result, cancel, &mut progress)?;
+
         result.operation.transition(State::Verifying)?;
-        revalidate(&p)?;
-        for f in &mut result.files {
-            check_cancel(cancel)?;
-            if sha256(&p.destination.join(&f.relative), cancel)?
-                != f.sha256.clone().unwrap_or_default()
-                || sha256(&p.root.join(&f.relative), cancel)?
-                    != f.sha256.clone().unwrap_or_default()
-            {
-                return Err(Error::new(
-                    ErrorKind::Integrity,
-                    "Source/destination checksum mismatch",
-                ));
-            }
-            f.verified = true;
-        }
-        if result.copied_bytes != result.planned_bytes || result.files.len() != p.files.len() {
-            return Err(Error::new(
-                ErrorKind::Incomplete,
-                "Backup byte/file count mismatch",
-            ));
-        }
+        verify(&backup_plan, &mut result, cancel)?;
+
         check_cancel(cancel)?;
         result.operation.transition(State::Completed)?;
         Ok(())
     })();
-    if let Err(e) = run {
-        result.operation.fail(e);
+
+    if let Err(error) = outcome {
+        result.operation.fail(error);
     }
+
     result
 }
+
+fn verify(backup_plan: &Plan, result: &mut BackupResult, cancel: &AtomicBool) -> Result<()> {
+    revalidate(backup_plan)?;
+
+    for file in &mut result.files {
+        check_cancel(cancel)?;
+
+        let expected_hash = file.sha256.as_deref().unwrap_or_default();
+        let destination_hash = sha256(&backup_plan.destination.join(&file.relative), cancel)?;
+
+        if destination_hash != expected_hash
+            || sha256(&backup_plan.root.join(&file.relative), cancel)? != expected_hash
+        {
+            return Err(Error::new(
+                ErrorKind::Integrity,
+                "Source/destination checksum mismatch",
+            ));
+        }
+
+        file.verified = true;
+    }
+
+    if result.copied_bytes != result.planned_bytes || result.files.len() != backup_plan.files.len()
+    {
+        return Err(Error::new(
+            ErrorKind::Incomplete,
+            "Backup byte/file count mismatch",
+        ));
+    }
+
+    Ok(())
+}
+
 fn execute(
-    p: &Plan,
+    backup_plan: &Plan,
     result: &mut BackupResult,
     cancel: &AtomicBool,
     progress: &mut impl FnMut(u64, u64),
 ) -> Result<()> {
-    revalidate(p)?;
-    for dir in &p.directories {
+    revalidate(backup_plan)?;
+
+    for relative_directory in &backup_plan.directories {
         check_cancel(cancel)?;
-        let target = p.destination.join(dir);
-        parent(p, &target)?;
-        fs::create_dir(&target).map_err(|e| Error::io("Create selected directory", e))?;
-        result.directories.push(dir.clone());
+        let target = backup_plan.destination.join(relative_directory);
+        prepare_destination_parent(backup_plan, &target)?;
+        fs::create_dir(&target).map_err(|error| Error::io("Create selected directory", error))?;
+
+        result.directories.push(relative_directory.clone());
     }
-    for item in &p.files {
+
+    for planned_file in &backup_plan.files {
         check_cancel(cancel)?;
-        revalidate(p)?;
-        let source = safe_existing(&p.root.join(&item.relative))?;
-        if identity(&source)?.volume != p.source_id.volume {
+        revalidate(backup_plan)?;
+
+        let source = safe_existing(&backup_plan.root.join(&planned_file.relative))?;
+        if identity(&source)?.volume != backup_plan.source_id.volume {
             return Err(Error::new(
                 ErrorKind::Validation,
                 "Source file changed volume",
             ));
         }
-        let mut input = File::open(&source).map_err(|e| Error::io("Open source file", e))?;
+
+        let mut input =
+            File::open(&source).map_err(|error| Error::io("Open source file", error))?;
         let before = input
             .metadata()
-            .map_err(|e| Error::io("Read source metadata", e))?;
-        if before.len() != item.length {
+            .map_err(|error| Error::io("Read source metadata", error))?;
+
+        if before.len() != planned_file.length {
             return Err(Error::new(
                 ErrorKind::Integrity,
                 "Source length changed after preflight",
             ));
         }
-        let target = p.destination.join(&item.relative);
-        parent(p, &target)?;
+
+        let target = backup_plan.destination.join(&planned_file.relative);
+        prepare_destination_parent(backup_plan, &target)?;
         let mut output = OpenOptions::new()
             .write(true)
             .create_new(true)
             .open(&target)
-            .map_err(|e| Error::io("Create new destination file", e))?;
+            .map_err(|error| Error::io("Create new destination file", error))?;
+
         result.files.push(FileResult {
-            relative: item.relative.clone(),
+            relative: planned_file.relative.clone(),
             bytes: 0,
             sha256: None,
             verified: false,
         });
+
         let mut hash = Sha256::new();
         let mut buffer = [0u8; 65536];
-        let mut copied = 0u64;
+        let mut file_bytes_copied = 0u64;
+
         loop {
             check_cancel(cancel)?;
-            let n = input
+            let bytes_read = input
                 .read(&mut buffer)
-                .map_err(|e| Error::io("Read source bytes", e))?;
-            if n == 0 {
+                .map_err(|error| Error::io("Read source bytes", error))?;
+
+            if bytes_read == 0 {
                 break;
             }
-            if copied + n as u64 > item.length {
+            if file_bytes_copied + bytes_read as u64 > planned_file.length {
                 return Err(Error::new(ErrorKind::Integrity, "Source grew during copy"));
             }
+
             // write() accounts for short writes so partial-copy byte counts remain exact.
             let mut offset = 0;
-            while offset < n {
+            while offset < bytes_read {
                 check_cancel(cancel)?;
-                let wrote = output
-                    .write(&buffer[offset..n])
-                    .map_err(|e| Error::io("Write destination bytes", e))?;
-                if wrote == 0 {
+                let bytes_written = output
+                    .write(&buffer[offset..bytes_read])
+                    .map_err(|error| Error::io("Write destination bytes", error))?;
+                if bytes_written == 0 {
                     return Err(Error::new(
                         ErrorKind::Io,
                         "Destination returned a zero-length write",
                     ));
                 }
-                offset += wrote;
-                copied += wrote as u64;
-                result.copied_bytes += wrote as u64;
-                result.files.last_mut().unwrap().bytes = copied;
-                progress(result.copied_bytes, p.bytes);
+
+                offset += bytes_written;
+                file_bytes_copied += bytes_written as u64;
+                result.copied_bytes += bytes_written as u64;
+                result.files.last_mut().unwrap().bytes = file_bytes_copied;
+                progress(result.copied_bytes, backup_plan.bytes);
             }
-            hash.update(&buffer[..n]);
+
+            hash.update(&buffer[..bytes_read]);
         }
+
         output
             .sync_all()
-            .map_err(|e| Error::io("Flush destination file", e))?;
+            .map_err(|error| Error::io("Flush destination file", error))?;
+
         let after = input
             .metadata()
-            .map_err(|e| Error::io("Recheck source metadata", e))?;
-        if copied != item.length
+            .map_err(|error| Error::io("Recheck source metadata", error))?;
+
+        if file_bytes_copied != planned_file.length
             || before.len() != after.len()
             || before.modified().ok() != after.modified().ok()
         {
@@ -471,9 +577,12 @@ fn execute(
                 "Source changed during copy",
             ));
         }
+
         result.files.last_mut().unwrap().sha256 = Some(format!("{:x}", hash.finalize()));
     }
+
     Ok(())
 }
+
 #[cfg(test)]
 mod tests;
