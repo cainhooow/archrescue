@@ -23,3 +23,7 @@ Raw observations: [environment.txt](raw/environment.txt), [initial roadmap hash]
 ClickUp read access succeeded. P0 and QA are `to do`; MVP-001 explicitly defines P0 v0.0.1 before MVP v0.1.0. Migration is separate research. These current task descriptions supersede the older local roadmap statement that implementation must wait for MVP definition. No remote tasks or messages were changed.
 
 Boot ISO generation, both VM acceptance runs, and Secure Boot execution are BLOCKED on Windows ADK/WinPE and VM infrastructure. Native Linux tests will not count as WinPE boot evidence.
+
+## Final audit update
+
+Both `x86_64-pc-windows-gnu` and `x86_64-pc-windows-msvc` Rust standard-library targets were successfully installed. MSVC-target lint/type checking passes; the actual link attempt is BLOCKED by missing `link.exe`/Windows SDK. [Final toolchains](raw/final-toolchains.txt), [Windows build output](raw/windows-build.txt), [initial repository observation](raw/initial-repository-observation.txt). KVM was readable/writable, but no VM executable or firmware was installed and no VM was run. The controlled second filesystem used for tests was tmpfs; its volatile nature is explicitly recorded in storage evidence.

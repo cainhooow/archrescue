@@ -1,0 +1,19 @@
+Observed at the beginning of this session, before git init:
+
+$ pwd
+/home/cainhooow/Projetos/archrescue
+
+$ ls -la
+Only user project file: ARCHRESCUE_ROADMAP.md, 134786 bytes.
+
+$ git status --short
+fatal: not a git repository (or any parent up to mount point /)
+Stopping at filesystem boundary (GIT_DISCOVERY_ACROSS_FILESYSTEM not set).
+
+$ git branch --show-current
+$ git rev-parse HEAD
+$ git remote -v
+Each returned the same not-a-git-repository error. No initial HEAD, branch or remotes existed.
+
+No AGENTS.md was found in the project or checked ancestor directories.
+No git user.name or user.email was configured; explicit per-command engineering identity was used for local commits.

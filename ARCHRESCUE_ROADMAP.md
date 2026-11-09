@@ -3347,3 +3347,15 @@ API, manifests, permissões, assinatura e proibição de acesso irrestrito por p
 ---
 
 **Próximo passo deliberado:** realizar a definição formal do MVP (`MVP-001`) antes de iniciar execução de tarefas de desenvolvimento. Este roadmap é editável offline e deve ser reconciliado com o ClickUp quando a integração estiver disponível.
+
+## P0 execution addendum — 2026-11-09
+
+This English engineering addendum records execution under the current P0 directive. The original planning snapshot above is preserved; its older statement that MVP definition must precede implementation is superseded by the current [MVP-001 definition](https://app.clickup.com/t/1dfqjx6uw4w).
+
+**SYNC (read-only):** The [P0 implementation task](https://app.clickup.com/t/1dfqjx6uxnh), [P0 QA task](https://app.clickup.com/t/1dfqjx6uxnk), MVP definition and [migration research](https://app.clickup.com/t/1dfqjx6uxnj) were read through ClickUp. P0/QA/migration remained `to do`. No remote task was edited and no notification was sent.
+
+**Local status: BLOQUEADO for target acceptance; portable implementation and fixture QA completed.** Rust workspace, read-only Windows adapters, native pt-BR shell source, candidate/boot diagnostics, explorer, verified selective copy and reports are implemented. A Linux release executable runs; 31 Rust tests and an independent three-file/262174-byte copy/restore check pass. This does not complete any WinPE boot criterion.
+
+Source build: `32c1eb3e6a14f1f1d7c1295d732c7a0cd5bd27c0`. Windows linking is blocked by missing MSVC linker/SDK. ISO generation and two VM boot runs are blocked by missing Windows ADK/WinPE and virtualization infrastructure. No ISO was produced or published. The final source license and WinPE redistribution rights are unresolved.
+
+Evidence: [environment audit](docs/evidence/P0-ENVIRONMENT-AUDIT.md), [build results](docs/evidence/P0-BUILD-RESULTS.md), [feature matrix](docs/qa/P0-TEST-MATRIX.md), [storage safety](docs/evidence/P0-STORAGE-SAFETY.md), [homologation](docs/qa/P0-FINAL-HOMOLOGATION.md), [handoff](docs/P0-HANDOFF.md). No existing backlog checkbox was marked complete without target acceptance evidence. Preserve & Rebuild remains an architectural boundary only; no migration or destructive execution was added.

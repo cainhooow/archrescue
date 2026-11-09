@@ -1,0 +1,26 @@
+{
+  "operation": {
+    "id": "ar-18e682e375dd1e51-6f992-0",
+    "state": "FAILED",
+    "transitions": [
+      "PENDING",
+      "VALIDATING",
+      "FAILED"
+    ],
+    "errors": [
+      {
+        "kind": "CONFLICT",
+        "context": "Destination entry already exists",
+        "os_code": null
+      }
+    ]
+  },
+  "planned_bytes": 0,
+  "copied_bytes": 0,
+  "files": [],
+  "directories": [],
+  "limitations": [
+    "Content-only copy: ACLs, timestamps, alternate streams and sparse allocation are not preserved",
+    "Partial destination files are retained on failure and must not be treated as verified"
+  ]
+}

@@ -1,0 +1,125 @@
+    Checking archrescue-backup v0.0.1 (/home/cainhooow/Projetos/archrescue/crates/backup)
+    Checking archrescue-diagnostics v0.0.1 (/home/cainhooow/Projetos/archrescue/crates/diagnostics)
+    Checking archrescue-evidence v0.0.1 (/home/cainhooow/Projetos/archrescue/crates/evidence)
+    Checking archrescue-boot-shell v0.0.1 (/home/cainhooow/Projetos/archrescue/apps/boot-shell)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.28s
+   Compiling archrescue-diagnostics v0.0.1 (/home/cainhooow/Projetos/archrescue/crates/diagnostics)
+   Compiling archrescue-backup v0.0.1 (/home/cainhooow/Projetos/archrescue/crates/backup)
+   Compiling archrescue-evidence v0.0.1 (/home/cainhooow/Projetos/archrescue/crates/evidence)
+   Compiling archrescue-boot-shell v0.0.1 (/home/cainhooow/Projetos/archrescue/apps/boot-shell)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.49s
+     Running unittests src/lib.rs (target/debug/deps/archrescue_backup-33be64849a3a51df)
+
+running 14 tests
+test tests::cancellation_before_preflight_writes_nothing ... ok
+test tests::portable_paths_reject_traversal_and_devices ... ok
+test tests::insufficient_space_uses_actual_free_space ... ok
+test tests::existing_destination_never_overwritten ... ok
+test tests::case_collisions_and_overlapping_selections_are_rejected ... ok
+test tests::nested_destination_rejected ... ok
+test tests::destination_corruption_is_caught_by_readback ... ok
+test tests::same_volume_rejected_before_writes ... ok
+test tests::unreadable_source_is_not_silently_skipped ... ok
+test tests::partway_conflict_reports_partial_result ... ok
+test tests::unavailable_destination_never_completes ... ok
+test tests::symlink_source_and_destination_ancestors_are_rejected ... ok
+test tests::cancellation_reports_exact_partial_bytes ... ok
+test tests::verified_copy_preserves_hierarchy_empty_dirs_and_source ... ok
+
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s
+
+     Running unittests src/main.rs (target/debug/deps/archrescue_boot_shell-7006cf4356c43210)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/archrescue_core-fbc3d05ee1b752af)
+
+running 2 tests
+test tests::cancellation_is_terminal ... ok
+test tests::completion_cannot_skip_verification ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/archrescue_diagnostics-f251304251171ead)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/archrescue_evidence-31ca81986bba63a3)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/contracts.rs (target/debug/deps/contracts-40ce635b69beea82)
+
+running 9 tests
+test no_windows_is_an_empty_result ... ok
+test directory_named_windows_is_not_an_installation ... ok
+test explorer_lists_actual_names_sizes_and_directories ... ok
+test unreadable_boot_configuration_is_reported ... ok
+test corroborated_candidate_has_architecture_not_invented_version ... ok
+test missing_and_malformed_bcd_are_not_healthy ... ok
+test malformed_pe_header_is_rejected ... ok
+test malformed_registry_marker_is_rejected ... ok
+test report_export_roundtrips_and_preserves_source ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running unittests src/lib.rs (target/debug/deps/archrescue_storage-aa3944415ec92b52)
+
+running 6 tests
+test layout::tests::excessive_partition_count_rejected ... ok
+test layout::tests::gpt_efi_layout_is_decoded_from_bytes ... ok
+test layout::tests::invalid_boolean_bytes_are_never_reinterpreted ... ok
+test tests::malformed_space_rejected ... ok
+test tests::shared_extent_rejected ... ok
+test layout::tests::truncated_and_out_of_bounds_layout_rejected ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/archrescue_windows_detection-3dde4ad68280907a)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests archrescue_backup
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests archrescue_core
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests archrescue_diagnostics
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests archrescue_evidence
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests archrescue_storage
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests archrescue_windows_detection
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

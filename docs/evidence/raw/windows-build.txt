@@ -1,0 +1,21 @@
+$ cargo build --release --locked --target x86_64-pc-windows-msvc
+   Compiling archrescue-core v0.0.1 (/home/cainhooow/Projetos/archrescue/crates/core)
+   Compiling archrescue-storage v0.0.1 (/home/cainhooow/Projetos/archrescue/crates/storage)
+   Compiling archrescue-backup v0.0.1 (/home/cainhooow/Projetos/archrescue/crates/backup)
+   Compiling archrescue-windows-detection v0.0.1 (/home/cainhooow/Projetos/archrescue/crates/windows-detection)
+   Compiling archrescue-diagnostics v0.0.1 (/home/cainhooow/Projetos/archrescue/crates/diagnostics)
+   Compiling archrescue-evidence v0.0.1 (/home/cainhooow/Projetos/archrescue/crates/evidence)
+   Compiling archrescue-boot-shell v0.0.1 (/home/cainhooow/Projetos/archrescue/apps/boot-shell)
+error: linker `link.exe` not found
+  |
+  = note: No such file or directory (os error 2)
+
+note: the msvc targets depend on the msvc linker but `link.exe` was not found
+
+note: please ensure that Visual Studio 2017 or later, or Build Tools for Visual Studio were installed with the Visual C++ option
+
+note: VS Code is a different product, and is not sufficient
+
+error: could not compile `archrescue-boot-shell` (bin "archrescue-boot-shell") due to 1 previous error
+
+Exit code: 101

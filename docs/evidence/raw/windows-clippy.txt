@@ -1,0 +1,5 @@
+    Checking archrescue-backup v0.0.1 (/home/cainhooow/Projetos/archrescue/crates/backup)
+    Checking archrescue-diagnostics v0.0.1 (/home/cainhooow/Projetos/archrescue/crates/diagnostics)
+    Checking archrescue-evidence v0.0.1 (/home/cainhooow/Projetos/archrescue/crates/evidence)
+    Checking archrescue-boot-shell v0.0.1 (/home/cainhooow/Projetos/archrescue/apps/boot-shell)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.37s

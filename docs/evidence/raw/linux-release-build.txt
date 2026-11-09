@@ -1,0 +1,8 @@
+   Compiling archrescue-core v0.0.1 (/home/cainhooow/Projetos/archrescue/crates/core)
+   Compiling archrescue-storage v0.0.1 (/home/cainhooow/Projetos/archrescue/crates/storage)
+   Compiling archrescue-backup v0.0.1 (/home/cainhooow/Projetos/archrescue/crates/backup)
+   Compiling archrescue-windows-detection v0.0.1 (/home/cainhooow/Projetos/archrescue/crates/windows-detection)
+   Compiling archrescue-diagnostics v0.0.1 (/home/cainhooow/Projetos/archrescue/crates/diagnostics)
+   Compiling archrescue-evidence v0.0.1 (/home/cainhooow/Projetos/archrescue/crates/evidence)
+   Compiling archrescue-boot-shell v0.0.1 (/home/cainhooow/Projetos/archrescue/apps/boot-shell)
+    Finished `release` profile [optimized] target(s) in 7.09s

@@ -1,0 +1,45 @@
+{
+  "operation": {
+    "id": "ar-18e682e3754c4de5-6f991-0",
+    "state": "COMPLETED",
+    "transitions": [
+      "PENDING",
+      "VALIDATING",
+      "RUNNING",
+      "VERIFYING",
+      "COMPLETED"
+    ],
+    "errors": []
+  },
+  "planned_bytes": 262174,
+  "copied_bytes": 262174,
+  "files": [
+    {
+      "relative": "perfil/Documentos/dados.bin",
+      "bytes": 262144,
+      "sha256": "2312394bd99545d9de131c24efb781e765ac1aec243f2ed9347597a793a415e9",
+      "verified": true
+    },
+    {
+      "relative": "perfil/ol\u00e1.txt",
+      "bytes": 30,
+      "sha256": "94a89a51c713a7d1249880ca01243bdc1aee676a00cb927e995d39ed038d92bd",
+      "verified": true
+    },
+    {
+      "relative": "perfil/zero.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "verified": true
+    }
+  ],
+  "directories": [
+    "perfil",
+    "perfil/Documentos",
+    "perfil/vazia"
+  ],
+  "limitations": [
+    "Content-only copy: ACLs, timestamps, alternate streams and sparse allocation are not preserved",
+    "Partial destination files are retained on failure and must not be treated as verified"
+  ]
+}
