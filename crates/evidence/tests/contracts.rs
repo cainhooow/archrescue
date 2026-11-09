@@ -95,7 +95,7 @@ fn unreadable_boot_configuration_is_reported() {
     use std::os::unix::fs::PermissionsExt;
     let f = Fixture::new();
     f.put("Boot/BCD", b"regf fixture");
-    fs::set_permissions(f.0.join("Boot/BCD"), fs::Permissions::from_mode(0)).unwrap();
+    fs::set_permissions(f.0.join("Boot/BCD"), fs::Permissions::from_mode(0o000)).unwrap();
     let r = archrescue_diagnostics::inspect(std::slice::from_ref(&f.0));
     fs::set_permissions(f.0.join("Boot/BCD"), fs::Permissions::from_mode(0o600)).unwrap();
     assert!(r

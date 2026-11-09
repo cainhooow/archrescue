@@ -2,7 +2,7 @@
 #[cfg(windows)]
 mod gui;
 mod i18n;
-use archrescue_core::{Error, ErrorKind, Result, State, VERSION};
+use archrescue_core::{Error, ErrorKind, Result, State, BUILD_ID, VERSION};
 use std::{path::PathBuf, sync::atomic::AtomicBool};
 fn print_json<T: serde::Serialize>(value: &T) -> Result<()> {
     println!(
@@ -35,7 +35,7 @@ fn run() -> Result<()> {
         .to_str()
         .ok_or_else(|| Error::new(ErrorKind::Validation, "Invalid command encoding"))?;
     match command {
-        "--version" if args.len()==1=>println!("ArchRescue {VERSION} {} {}",std::env::consts::OS,std::env::consts::ARCH),
+        "--version" if args.len()==1=>println!("ArchRescue {VERSION} {} {} build={BUILD_ID}",std::env::consts::OS,std::env::consts::ARCH),
         "--help" if args.len()==1=>println!("ArchRescue {VERSION}\nComandos (caminhos absolutos):\n  inventory\n  discover RAIZ...\n  boot RAIZ...\n  browse DIRETÓRIO\n  backup ORIGEM DESTINO SELEÇÃO_RELATIVA...\n  report DESTINO [RAIZ...]\n\nBackup: rejeita o mesmo volume/disco, links e conflitos; copia apenas conteúdo e verifica SHA-256.\nRelatórios são locais. Exportar para RAM não preserva dados após reiniciar."),
         "inventory" if args.len()==1=>print_json(&archrescue_storage::inventory())?,
         "discover" if args.len()>1=>print_json(&archrescue_windows_detection::discover(&args[1..].iter().map(PathBuf::from).collect::<Vec<_>>()))?,

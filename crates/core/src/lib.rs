@@ -7,6 +7,10 @@ use std::{
 };
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+pub const BUILD_ID: &str = match option_env!("ARCHRESCUE_BUILD_ID") {
+    Some(id) => id,
+    None => "unrecorded-development-build",
+};
 pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

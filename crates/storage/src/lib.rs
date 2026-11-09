@@ -1,4 +1,5 @@
 //! Read-only storage inventory and destination validation primitives.
+pub mod layout;
 use archrescue_core::{Error, ErrorKind, Result};
 use serde::{Deserialize, Serialize};
 use std::{

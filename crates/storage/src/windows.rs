@@ -6,14 +6,11 @@ use std::{
     os::windows::ffi::{OsStrExt, OsStringExt},
     ptr::{null, null_mut},
 };
-use windows_sys::{
-    core::GUID,
-    Win32::{
-        Devices::DeviceAndDriverInstallation::*,
-        Foundation::*,
-        Storage::FileSystem::*,
-        System::{Ioctl::*, IO::DeviceIoControl},
-    },
+use windows_sys::Win32::{
+    Devices::DeviceAndDriverInstallation::*,
+    Foundation::*,
+    Storage::FileSystem::*,
+    System::{Ioctl::*, IO::DeviceIoControl},
 };
 fn wide(s: impl AsRef<OsStr>) -> Vec<u16> {
     s.as_ref().encode_wide().chain(Some(0)).collect()
@@ -102,22 +99,6 @@ fn value<T: Copy>(data: &[u8], offset: usize) -> Result<T> {
     // SAFETY: length checked; Windows query structs here contain only integers/unions/GUIDs.
     Ok(unsafe { std::ptr::read_unaligned(data.as_ptr().add(offset).cast::<T>()) })
 }
-fn guid(g: GUID) -> String {
-    format!(
-        "{:08x}-{:04x}-{:04x}-{:02x}{:02x}-{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}",
-        g.data1,
-        g.data2,
-        g.data3,
-        g.data4[0],
-        g.data4[1],
-        g.data4[2],
-        g.data4[3],
-        g.data4[4],
-        g.data4[5],
-        g.data4[6],
-        g.data4[7]
-    )
-}
 fn extents(volume: &str) -> Result<Vec<u32>> {
     let h = open(volume.trim_end_matches('\\'))?;
     let data = query(&h, IOCTL_VOLUME_GET_VOLUME_DISK_EXTENTS, &[])?;
@@ -195,12 +176,20 @@ fn disk(path: String) -> Disk {
         Err(e) => d.errors.push(e),
     }
     // StorageDeviceProperty / PropertyStandardQuery; no serial number is read or retained.
-    match query(&h, IOCTL_STORAGE_QUERY_PROPERTY, &[0; 12])
-        .and_then(|v| value::<STORAGE_DEVICE_DESCRIPTOR>(&v, 0))
-    {
-        Ok(s) => {
-            d.bus = Some(s.BusType as u32);
-            d.removable = Some(s.RemovableMedia);
+    match query(&h, IOCTL_STORAGE_QUERY_PROPERTY, &[0; 12]) {
+        Ok(bytes) => {
+            match value::<u32>(&bytes, offset_of!(STORAGE_DEVICE_DESCRIPTOR, BusType)) {
+                Ok(bus) => d.bus = Some(bus),
+                Err(e) => d.errors.push(e),
+            }
+            match bytes.get(offset_of!(STORAGE_DEVICE_DESCRIPTOR, RemovableMedia)) {
+                Some(0) => d.removable = Some(false),
+                Some(1) => d.removable = Some(true),
+                _ => d.errors.push(Error::new(
+                    ErrorKind::Io,
+                    "Invalid removable-media metadata",
+                )),
+            }
         }
         Err(e) => d.errors.push(e),
     }
@@ -211,69 +200,16 @@ fn disk(path: String) -> Disk {
 }
 fn read_layout(h: &Handle, d: &mut Disk) -> Result<()> {
     let bytes = query(h, IOCTL_DISK_GET_DRIVE_LAYOUT_EX, &[])?;
-    let layout: DRIVE_LAYOUT_INFORMATION_EX = value(&bytes, 0)?;
-    d.style = Some(
-        match layout.PartitionStyle as i32 {
-            PARTITION_STYLE_GPT => "GPT",
-            PARTITION_STYLE_MBR => "MBR",
-            _ => "RAW/unsupported",
-        }
-        .into(),
-    );
-    unsafe {
-        match layout.PartitionStyle as i32 {
-            PARTITION_STYLE_GPT => {
-                d.identity = format!("gpt:{}", guid(layout.Anonymous.Gpt.DiskId))
-            }
-            PARTITION_STYLE_MBR => {
-                d.identity = format!(
-                    "mbr:{:08x};{}",
-                    layout.Anonymous.Mbr.Signature, d.device_path
-                )
-            }
-            _ => {}
-        }
-    }
-    if layout.PartitionCount > 4096 {
-        return Err(Error::new(
-            ErrorKind::Unsupported,
-            "Excessive partition count",
-        ));
-    }
-    for i in 0..layout.PartitionCount as usize {
-        let p: PARTITION_INFORMATION_EX = value(
-            &bytes,
-            offset_of!(DRIVE_LAYOUT_INFORMATION_EX, PartitionEntry)
-                + i * size_of::<PARTITION_INFORMATION_EX>(),
-        )?;
-        if p.StartingOffset < 0 || p.PartitionLength < 0 {
-            return Err(Error::new(ErrorKind::Io, "Invalid partition bounds"));
-        }
-        if p.PartitionLength == 0 {
-            continue;
-        }
-        let end = (p.StartingOffset as u64)
-            .checked_add(p.PartitionLength as u64)
-            .ok_or_else(|| Error::new(ErrorKind::Io, "Partition bounds overflow"))?;
-        if d.capacity.is_some_and(|n| end > n) {
-            return Err(Error::new(ErrorKind::Io, "Partition outside disk"));
-        }
-        let kind = unsafe {
-            match p.PartitionStyle {
-                PARTITION_STYLE_GPT => guid(p.Anonymous.Gpt.PartitionType),
-                PARTITION_STYLE_MBR => format!("mbr:{:02x}", p.Anonymous.Mbr.PartitionType),
-                _ => "unsupported".into(),
-            }
+    let parsed = crate::layout::parse(&bytes, d.capacity)?;
+    if let Some(id) = parsed.identity {
+        d.identity = if parsed.style == "MBR" {
+            format!("{id};{}", d.device_path)
+        } else {
+            id
         };
-        let efi = kind == "c12a7328-f81f-11d2-ba4b-00a0c93ec93b" || kind == "mbr:ef";
-        d.partitions.push(Partition {
-            number: p.PartitionNumber,
-            offset: p.StartingOffset as u64,
-            length: p.PartitionLength as u64,
-            kind,
-            efi,
-        });
     }
+    d.style = Some(parsed.style);
+    d.partitions = parsed.partitions;
     Ok(())
 }
 pub fn inventory() -> Inventory {

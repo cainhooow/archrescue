@@ -11,7 +11,7 @@ Set-Location $repo
 foreach ($command in @('cargo','rustc','git','copype.cmd','MakeWinPEMedia.cmd','dism.exe','dumpbin.exe')) {
     if (-not (Get-Command $command -ErrorAction SilentlyContinue)) { throw "BLOCKED: missing $command. Load both ADK deployment tools and x64 MSVC tools." }
 }
-if ((& git status --porcelain).Length -ne 0) { throw 'Commit the source before building an identifiable artifact.' }
+if (@(& git status --porcelain).Count -ne 0) { throw 'Commit the source before building an identifiable artifact.' }
 $id = [Guid]::NewGuid().ToString('N')
 $output = Join-Path $repo "artifacts/winpe-$id"
 $work = Join-Path $repo ".agent-tmp/winpe-$id"
@@ -21,6 +21,7 @@ $mounted = $false
 Start-Transcript -Path (Join-Path $output 'build.log') | Out-Null
 function Check-Exit([string]$Step) { if ($LASTEXITCODE -ne 0) { throw "$Step failed with exit code $LASTEXITCODE" } }
 try {
+    $env:ARCHRESCUE_BUILD_ID = (& git rev-parse HEAD)
     & cargo build --release --locked --target x86_64-pc-windows-msvc -p archrescue-boot-shell
     Check-Exit 'Rust build'
     $exe = Join-Path $repo 'target/x86_64-pc-windows-msvc/release/archrescue-boot-shell.exe'

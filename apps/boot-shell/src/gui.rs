@@ -4,6 +4,7 @@ use archrescue_backup::{BackupResult, Entry};
 use archrescue_core::{Error, ErrorKind, Result, State, VERSION};
 use archrescue_evidence::Report;
 use std::{
+    cell::RefCell,
     path::PathBuf,
     ptr::{null, null_mut},
     sync::{
@@ -54,6 +55,9 @@ struct App {
     cancel: Arc<AtomicBool>,
     tx: Sender<Event>,
     rx: Receiver<Event>,
+}
+struct WindowState {
+    app: RefCell<App>,
     brush: HBRUSH,
 }
 unsafe fn control(hwnd: HWND, id: usize) -> HWND {
@@ -234,7 +238,6 @@ unsafe fn selected(hwnd: HWND, app: &App) -> Vec<PathBuf> {
     indices[..count as usize]
         .iter()
         .filter_map(|i| app.entries.get(*i as usize))
-        .filter(|e| e.error.is_none())
         .map(|e| e.name.clone())
         .collect()
 }
@@ -437,7 +440,7 @@ unsafe fn events(hwnd: HWND, app: &mut App) {
     }
 }
 unsafe extern "system" fn procedure(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> LRESULT {
-    let ptr = GetWindowLongPtrW(hwnd, GWLP_USERDATA) as *mut App;
+    let ptr = GetWindowLongPtrW(hwnd, GWLP_USERDATA) as *const WindowState;
     if msg == WM_NCCREATE {
         let create = &*(lp as *const CREATESTRUCTW);
         SetWindowLongPtrW(hwnd, GWLP_USERDATA, create.lpCreateParams as isize);
@@ -446,7 +449,21 @@ unsafe extern "system" fn procedure(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM
     if ptr.is_null() {
         return DefWindowProcW(hwnd, msg, wp, lp);
     }
-    let app = &mut *ptr;
+    let state = &*ptr;
+    if matches!(
+        msg,
+        WM_CTLCOLORSTATIC | WM_CTLCOLOREDIT | WM_CTLCOLORLISTBOX
+    ) {
+        SetTextColor(wp as HDC, 0x00eeeae5);
+        SetBkColor(wp as HDC, 0x0025221d);
+        return state.brush as isize;
+    }
+    // Native control calls can synchronously reenter this procedure. RefCell
+    // prevents overlapping mutable access; paint messages above need no borrow.
+    let Ok(mut borrowed) = state.app.try_borrow_mut() else {
+        return DefWindowProcW(hwnd, msg, wp, lp);
+    };
+    let app = &mut *borrowed;
     match msg {
         WM_COMMAND => {
             action(hwnd, app, wp & 0xffff, ((wp >> 16) & 0xffff) as u32);
@@ -464,11 +481,6 @@ unsafe extern "system" fn procedure(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM
             let info = &mut *(lp as *mut MINMAXINFO);
             info.ptMinTrackSize = POINT { x: 800, y: 600 };
             0
-        }
-        WM_CTLCOLORSTATIC | WM_CTLCOLOREDIT | WM_CTLCOLORLISTBOX => {
-            SetTextColor(wp as HDC, 0x00eeeae5);
-            SetBkColor(wp as HDC, 0x0025221d);
-            app.brush as isize
         }
         WM_CLOSE => {
             if app.busy {
@@ -511,15 +523,17 @@ pub fn run() -> Result<()> {
             DEFAULT_PITCH as u32,
             w("Segoe UI").as_ptr(),
         );
-        let mut app = Box::new(App {
-            section: 0,
-            report: None,
-            entries: vec![],
-            directory: PathBuf::new(),
-            busy: false,
-            cancel: Arc::new(AtomicBool::new(false)),
-            tx,
-            rx,
+        let app = Box::new(WindowState {
+            app: RefCell::new(App {
+                section: 0,
+                report: None,
+                entries: vec![],
+                directory: PathBuf::new(),
+                busy: false,
+                cancel: Arc::new(AtomicBool::new(false)),
+                tx,
+                rx,
+            }),
             brush,
         });
         let class = w("ArchRescueP0");
@@ -547,7 +561,7 @@ pub fn run() -> Result<()> {
             null_mut(),
             null_mut(),
             instance,
-            (&mut *app as *mut App).cast(),
+            (&*app as *const WindowState).cast(),
         );
         if hwnd.is_null() {
             return Err(os_error("Create ArchRescue window"));
@@ -618,7 +632,7 @@ pub fn run() -> Result<()> {
         ShowWindow(hwnd, SW_SHOW);
         UpdateWindow(hwnd);
         SetTimer(hwnd, 1, 100, None);
-        refresh(hwnd, &mut app);
+        refresh(hwnd, &mut app.app.borrow_mut());
         let mut msg = MSG::default();
         loop {
             let result = GetMessageW(&mut msg, null_mut(), 0, 0);

@@ -79,6 +79,16 @@ pub fn discover(roots: &[PathBuf]) -> Discovery {
             }
             _ => {}
         }
+        #[cfg(windows)]
+        if std::env::var_os("SystemRoot").and_then(|p| std::fs::canonicalize(PathBuf::from(p)).ok())
+            == std::fs::canonicalize(&windows).ok()
+        {
+            result.errors.push(Error::new(
+                ErrorKind::Unsupported,
+                "Running Windows/WinPE environment excluded from offline discovery",
+            ));
+            continue;
+        }
         let system = windows.join("System32");
         let markers = [system.join("config/SYSTEM"), system.join("config/SOFTWARE")];
         let mut valid = true;

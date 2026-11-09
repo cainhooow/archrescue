@@ -1,6 +1,6 @@
 //! Explicit, local report export. No telemetry or automatic persistent writes.
 use archrescue_backup::BackupResult;
-use archrescue_core::{Error, ErrorKind, Operation, Result, VERSION};
+use archrescue_core::{Error, ErrorKind, Operation, Result, BUILD_ID, VERSION};
 use archrescue_diagnostics::BootReport;
 use archrescue_storage::{safe_existing, Inventory};
 use archrescue_windows_detection::Discovery;
@@ -15,6 +15,7 @@ use std::{
 pub struct Report {
     pub schema_version: u32,
     pub version: String,
+    pub build_id: String,
     pub runtime_os: String,
     pub architecture: String,
     pub generated_unix: u64,
