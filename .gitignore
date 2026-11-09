@@ -1,0 +1,7 @@
+/target/
+/.agent-tmp/
+/artifacts/
+*.iso
+*.wim
+*.vhd*
+*.qcow2

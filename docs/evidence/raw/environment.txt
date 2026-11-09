@@ -1,0 +1,51 @@
+Linux 7.2.14-arch1-1 x86_64 GNU/Linux
+NAME="Arch Linux"
+PRETTY_NAME="Arch Linux"
+ID=arch
+BUILD_ID=rolling
+ANSI_COLOR="38;2;23;147;209"
+HOME_URL="https://archlinux.org/"
+DOCUMENTATION_URL="https://wiki.archlinux.org/"
+SUPPORT_URL="https://bbs.archlinux.org/"
+BUG_REPORT_URL="https://gitlab.archlinux.org/groups/archlinux/-/issues"
+PRIVACY_POLICY_URL="https://terms.archlinux.org/docs/privacy-policy/"
+LOGO=archlinux-logo
+uid=1000(cainhooow) gid=1000(cainhooow) groups=1000(cainhooow),998(wheel)
+rustc 1.99.1 (58cf8f9c3 2026-10-13)
+binary: rustc
+commit-hash: 58cf8f9c35b355199727627d07ae34a4e2846d67
+commit-date: 2026-10-13
+host: x86_64-unknown-linux-gnu
+release: 1.99.1
+LLVM version: 23.1.1
+cargo 1.99.1 (5f94df478 2026-08-27)
+x86_64-unknown-linux-gnu
+cargo-x86_64-unknown-linux-gnu
+clippy-x86_64-unknown-linux-gnu
+rust-docs-x86_64-unknown-linux-gnu
+rust-std-x86_64-unknown-linux-gnu
+rustc-x86_64-unknown-linux-gnu
+rustfmt-x86_64-unknown-linux-gnu
+/usr/bin/git
+/usr/bin/cc
+clang: MISSING
+lld-link: MISSING
+/usr/bin/objdump
+qemu-system-x86_64: MISSING
+qemu-img: MISSING
+VBoxManage: MISSING
+virsh: MISSING
+xorriso: MISSING
+pwsh: MISSING
+powershell: MISSING
+wine: MISSING
+copype: MISSING
+DISM: MISSING
+MakeWinPEMedia: MISSING
+crw-rw-rw- 1 root kvm 10, 232 Nov  8 21:19 /dev/kvm
+KVM readable
+KVM writable
+Filesystem      Size  Used Avail Use% Mounted on
+/dev/nvme0n1p2  465G   24G  441G   6% /home
+ls: cannot access '/usr/share/OVMF': No such file or directory
+ls: cannot access '/usr/share/edk2': No such file or directory
