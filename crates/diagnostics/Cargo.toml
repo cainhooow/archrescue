@@ -1,0 +1,10 @@
+[package]
+name = "archrescue-diagnostics"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+serde.workspace = true
+archrescue-core.workspace = true
+archrescue-storage.workspace = true

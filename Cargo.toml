@@ -1,0 +1,27 @@
+[workspace]
+members = ["crates/*", "apps/boot-shell"]
+resolver = "2"
+
+[workspace.package]
+version = "0.0.1"
+edition = "2021"
+rust-version = "1.85"
+publish = false
+
+[workspace.dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+sha2 = "0.10"
+libc = "0.2"
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Storage_FileSystem", "Win32_System_IO", "Win32_System_Ioctl", "Win32_Devices_DeviceAndDriverInstallation", "Win32_UI_WindowsAndMessaging", "Win32_Graphics_Gdi", "Win32_System_LibraryLoader", "Win32_System_Threading", "Win32_Security", "Win32_UI_Controls", "Win32_UI_Input_KeyboardAndMouse", "Win32_System_Console"] }
+archrescue-core = { path = "crates/core" }
+archrescue-storage = { path = "crates/storage" }
+archrescue-windows-detection = { path = "crates/windows-detection" }
+archrescue-diagnostics = { path = "crates/diagnostics" }
+archrescue-backup = { path = "crates/backup" }
+archrescue-evidence = { path = "crates/evidence" }
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = "debuginfo"

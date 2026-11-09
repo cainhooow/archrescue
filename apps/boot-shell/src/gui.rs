@@ -1,0 +1,640 @@
+//! Native Win32 shell. Long-running filesystem work is performed outside the UI thread.
+use crate::i18n;
+use archrescue_backup::{BackupResult, Entry};
+use archrescue_core::{Error, ErrorKind, Result, State, VERSION};
+use archrescue_evidence::Report;
+use std::{
+    path::PathBuf,
+    ptr::{null, null_mut},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        mpsc::{self, Receiver, Sender},
+        Arc,
+    },
+    thread,
+};
+use windows_sys::Win32::{
+    Foundation::*,
+    Graphics::Gdi::*,
+    System::LibraryLoader::GetModuleHandleW,
+    UI::{Input::KeyboardAndMouse::EnableWindow, WindowsAndMessaging::*},
+};
+const REFRESH: usize = 200;
+const ADDRESS: usize = 201;
+const OPEN: usize = 202;
+const UP: usize = 203;
+const FILES: usize = 204;
+const DEST: usize = 205;
+const COPY: usize = 206;
+const CANCEL: usize = 207;
+const EXPORT: usize = 208;
+const CONSOLE: usize = 209;
+const CONTENT: usize = 210;
+const STATUS: usize = 211;
+fn w(s: &str) -> Vec<u16> {
+    s.encode_utf16().chain(Some(0)).collect()
+}
+fn os_error(s: &str) -> Error {
+    Error::io(s, std::io::Error::last_os_error())
+}
+enum Event {
+    Snapshot(Box<Report>),
+    Listing(PathBuf, Vec<Entry>),
+    Progress(u64, u64),
+    Backup(BackupResult),
+    Exported(PathBuf),
+    Failure(Error),
+}
+struct App {
+    section: usize,
+    report: Option<Report>,
+    entries: Vec<Entry>,
+    directory: PathBuf,
+    busy: bool,
+    cancel: Arc<AtomicBool>,
+    tx: Sender<Event>,
+    rx: Receiver<Event>,
+    brush: HBRUSH,
+}
+unsafe fn control(hwnd: HWND, id: usize) -> HWND {
+    GetDlgItem(hwnd, id as i32)
+}
+unsafe fn set(hwnd: HWND, id: usize, text: &str) {
+    SetWindowTextW(control(hwnd, id), w(&text.replace('\n', "\r\n")).as_ptr());
+}
+unsafe fn get(hwnd: HWND, id: usize) -> String {
+    let h = control(hwnd, id);
+    let n = GetWindowTextLengthW(h);
+    let mut b = vec![0u16; (n + 1).max(1) as usize];
+    GetWindowTextW(h, b.as_mut_ptr(), b.len() as i32);
+    String::from_utf16_lossy(&b[..n as usize])
+}
+unsafe fn add(
+    hwnd: HWND,
+    id: usize,
+    class: &str,
+    text: &str,
+    style: u32,
+    font: HFONT,
+) -> Result<()> {
+    let child = CreateWindowExW(
+        0,
+        w(class).as_ptr(),
+        w(text).as_ptr(),
+        WS_CHILD | WS_VISIBLE | style,
+        0,
+        0,
+        100,
+        30,
+        hwnd,
+        id as HMENU,
+        GetModuleHandleW(null()),
+        null(),
+    );
+    if child.is_null() {
+        return Err(os_error("Create native control"));
+    }
+    SendMessageW(child, WM_SETFONT, font as usize, 1);
+    Ok(())
+}
+unsafe fn place(hwnd: HWND, id: usize, x: i32, y: i32, width: i32, height: i32) {
+    MoveWindow(control(hwnd, id), x, y, width.max(1), height.max(1), 1);
+}
+unsafe fn layout(hwnd: HWND) {
+    let mut r = RECT::default();
+    GetClientRect(hwnd, &mut r);
+    let width = r.right;
+    let height = r.bottom;
+    for i in 0..7 {
+        place(hwnd, 100 + i, 12, 58 + i as i32 * 43, 192, 36);
+    }
+    place(hwnd, REFRESH, 12, 370, 192, 34);
+    place(hwnd, CONSOLE, 12, 413, 192, 34);
+    place(hwnd, ADDRESS, 224, 58, width - 430, 30);
+    place(hwnd, OPEN, width - 194, 58, 90, 30);
+    place(hwnd, UP, width - 98, 58, 86, 30);
+    place(hwnd, FILES, 224, 100, width - 236, height - 290);
+    place(hwnd, CONTENT, 224, 100, width - 236, height - 290);
+    place(hwnd, DEST, 224, height - 176, width - 236, 30);
+    place(hwnd, COPY, 224, height - 132, 195, 34);
+    place(hwnd, CANCEL, 429, height - 132, 110, 34);
+    place(hwnd, EXPORT, 549, height - 132, 190, 34);
+    place(hwnd, STATUS, 224, height - 85, width - 236, 65);
+}
+unsafe fn render(hwnd: HWND, app: &App) {
+    ShowWindow(
+        control(hwnd, FILES),
+        if app.section == 4 { SW_SHOW } else { SW_HIDE },
+    );
+    ShowWindow(
+        control(hwnd, CONTENT),
+        if app.section == 4 { SW_HIDE } else { SW_SHOW },
+    );
+    for id in [OPEN, UP, ADDRESS] {
+        ShowWindow(
+            control(hwnd, id),
+            if app.section == 4 { SW_SHOW } else { SW_HIDE },
+        );
+    }
+    EnableWindow(control(hwnd, COPY), (!app.busy && app.section == 4) as i32);
+    EnableWindow(control(hwnd, CANCEL), app.busy as i32);
+    EnableWindow(control(hwnd, REFRESH), (!app.busy) as i32);
+    EnableWindow(
+        control(hwnd, EXPORT),
+        (!app.busy && app.report.is_some()) as i32,
+    );
+    let Some(report) = &app.report else {
+        set(
+            hwnd,
+            CONTENT,
+            if app.busy { i18n::LOADING } else { i18n::EMPTY },
+        );
+        return;
+    };
+    let text=match app.section {
+        0=>format!("ARCHRESCUE  {VERSION}\nRecuperação e diagnóstico • ArchGTi\n\n{} discos | {} volumes | {} candidatos Windows\n\nOrigem: somente leitura pela aplicação.\nBackup: conteúdo verificado com SHA-256 em outro disco.\n\nSelecione uma seção. No Explorador, informe uma pasta absoluta, selecione arquivos com Ctrl/Shift e informe o destino abaixo.\n\nNão há diagnóstico de saúde física. Partições inacessíveis são relatadas sem desbloqueio.\n\n{}",report.inventory.disks.len(),report.inventory.volumes.len(),report.installations.installations.len(),report.inventory.errors.iter().map(ToString::to_string).collect::<Vec<_>>().join("\n")),
+        1=>{let mut s=String::from("DISCOS E PARTIÇÕES\n\n");for d in &report.inventory.disks{s.push_str(&format!("{}\nDispositivo: {}\nCapacidade: {:?} bytes | Barramento: {:?} | Removível: {:?}\nEstilo: {:?}\n",d.identity,d.device_path,d.capacity,d.bus,d.removable,d.style));for p in &d.partitions{s.push_str(&format!("  Partição {}: {} bytes | {} | EFI: {}\n",p.number,p.length,p.kind,p.efi));}for e in &d.errors{s.push_str(&format!("  Indisponível: {e}\n"));}}for v in &report.inventory.volumes{s.push_str(&format!("\nVolume: {}\nCaminhos: {:?} | Sistema: {:?}\n",v.identity,v.paths,v.filesystem));if let Some(sizes)=&v.space{s.push_str(&format!("Total: {} | Usado: {} | Disponível: {} bytes\n",sizes.total,sizes.used,sizes.available));}for e in &v.errors{s.push_str(&format!("Indisponível: {e}\n"));}}if report.inventory.disks.is_empty(){s.push_str("Nenhum disco enumerado. Consulte os erros no relatório.\n");}s},
+        2=>{let mut s=String::from("INSTALAÇÕES WINDOWS\nCandidatos offline; não implica instalação íntegra.\n\n");for i in &report.installations.installations{s.push_str(&format!("{}\nArquitetura: {:?} | Versão: {:?}\nEvidências: {:?}\nLimitações: {:?}\n\n",i.path.display(),i.architecture,i.version,i.evidence,i.limitations));}if report.installations.installations.is_empty(){s.push_str("Nenhuma instalação encontrada nas raízes acessíveis.\n");}for e in &report.installations.errors{s.push_str(&format!("Falha: {e}\n"));}s},
+        3=>{let mut s=String::from("DIAGNÓSTICO DE BOOT • SOMENTE LEITURA\n\n");for o in &report.boot.observations{s.push_str(&format!("{}\n{}: {}\n\n",o.path.display(),o.status,o.detail));}s.push_str(&report.boot.limitations.join("\n"));s},
+        5=>{let mut s=String::from("BACKUP\nSelecione arquivos no Explorador e use Copiar seleção.\nConflitos bloqueiam a cópia; arquivos parciais permanecem identificados como não verificados.\n\n");for b in &report.operations{s.push_str(&format!("{}\nEstado: {}\n{} / {} bytes | {} / {} arquivos verificados\n",b.operation.id,state_label(b.operation.state),b.copied_bytes,b.planned_bytes,b.files.iter().filter(|f|f.verified).count(),b.files.len()));for e in &b.operation.errors{s.push_str(&format!("Falha: {e}\n"));}}s},
+        6=>format!("RELATÓRIOS\nInforme abaixo um diretório persistente autorizado e use Exportar relatório.\nDados em X: (RAM) não sobrevivem à reinicialização.\n\n{}",report.readable()),
+        _=>String::new()
+    };
+    set(hwnd, CONTENT, &text);
+}
+fn state_label(state: State) -> &'static str {
+    match state {
+        State::Pending => "Pendente",
+        State::Validating => "Validando",
+        State::Running => "Copiando",
+        State::Verifying => "Verificando",
+        State::Completed => "Concluído e verificado",
+        State::Failed => "Falhou — resultado incompleto",
+        State::Cancelled => "Cancelado — resultado incompleto",
+        State::Blocked => "Bloqueado",
+    }
+}
+fn work(app: &mut App, job: impl FnOnce() -> Event + Send + 'static) {
+    app.busy = true;
+    let tx = app.tx.clone();
+    thread::spawn(move || {
+        let event =
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(job)).unwrap_or_else(|_| {
+                Event::Failure(Error::new(
+                    ErrorKind::Incomplete,
+                    "Worker stopped unexpectedly",
+                ))
+            });
+        let _ = tx.send(event);
+    });
+}
+unsafe fn refresh(hwnd: HWND, app: &mut App) {
+    set(hwnd, STATUS, i18n::LOADING);
+    work(app, || {
+        let inventory = archrescue_storage::inventory();
+        let roots = inventory
+            .volumes
+            .iter()
+            .filter_map(|v| v.paths.first().cloned())
+            .collect::<Vec<_>>();
+        let mut report = Report::collect(&roots);
+        report.inventory = inventory;
+        Event::Snapshot(Box::new(report))
+    });
+    render(hwnd, app);
+}
+unsafe fn browse(hwnd: HWND, app: &mut App, path: PathBuf) {
+    set(hwnd, STATUS, i18n::LOADING);
+    work(app, move || {
+        match archrescue_storage::safe_existing(&path)
+            .and_then(|p| archrescue_backup::browse(&p).map(|entries| (p, entries)))
+        {
+            Ok((p, entries)) => Event::Listing(p, entries),
+            Err(e) => Event::Failure(e),
+        }
+    });
+    render(hwnd, app);
+}
+unsafe fn selected(hwnd: HWND, app: &App) -> Vec<PathBuf> {
+    let list = control(hwnd, FILES);
+    let n = SendMessageW(list, LB_GETSELCOUNT, 0, 0);
+    if n <= 0 {
+        return vec![];
+    }
+    let mut indices = vec![0i32; n as usize];
+    let count = SendMessageW(
+        list,
+        LB_GETSELITEMS,
+        n as usize,
+        indices.as_mut_ptr() as isize,
+    );
+    if count < 0 {
+        return vec![];
+    }
+    indices[..count as usize]
+        .iter()
+        .filter_map(|i| app.entries.get(*i as usize))
+        .filter(|e| e.error.is_none())
+        .map(|e| e.name.clone())
+        .collect()
+}
+unsafe fn action(hwnd: HWND, app: &mut App, id: usize, notification: u32) {
+    if (100..107).contains(&id) {
+        app.section = id - 100;
+        render(hwnd, app);
+        return;
+    }
+    if id == CANCEL {
+        app.cancel.store(true, Ordering::Relaxed);
+        set(
+            hwnd,
+            STATUS,
+            "Cancelamento solicitado; aguardando confirmação da operação.",
+        );
+        return;
+    }
+    if app.busy {
+        return;
+    }
+    match id {
+        REFRESH => refresh(hwnd, app),
+        OPEN => {
+            let path = PathBuf::from(get(hwnd, ADDRESS));
+            browse(hwnd, app, path);
+        }
+        UP => {
+            if let Some(parent) = app.directory.parent() {
+                browse(hwnd, app, parent.to_owned());
+            }
+        }
+        FILES if notification == LBN_DBLCLK => {
+            let selection = selected(hwnd, app);
+            if selection.len() == 1 {
+                let path = app.directory.join(&selection[0]);
+                if path.is_dir() {
+                    browse(hwnd, app, path);
+                }
+            }
+        }
+        COPY => {
+            let selections = selected(hwnd, app);
+            if selections.is_empty() {
+                set(
+                    hwnd,
+                    STATUS,
+                    "Selecione pelo menos um arquivo ou diretório acessível.",
+                );
+                return;
+            }
+            let root = app.directory.clone();
+            let dest = PathBuf::from(get(hwnd, DEST));
+            let message=format!("Copiar {} seleções de {} para {}?\n\nApenas conteúdo; sem ACLs ou fluxos alternativos. Conflitos serão rejeitados.",selections.len(),root.display(),dest.display());
+            if MessageBoxW(
+                hwnd,
+                w(&message).as_ptr(),
+                w("Confirmar destino do backup").as_ptr(),
+                MB_YESNO | MB_ICONQUESTION,
+            ) != IDYES
+            {
+                return;
+            }
+            app.cancel = Arc::new(AtomicBool::new(false));
+            let cancel = app.cancel.clone();
+            let tx = app.tx.clone();
+            work(app, move || {
+                let mut last = std::time::Instant::now();
+                let result =
+                    archrescue_backup::recover(&root, &selections, &dest, &cancel, |n, total| {
+                        if last.elapsed().as_millis() >= 100 || n == total {
+                            let _ = tx.send(Event::Progress(n, total));
+                            last = std::time::Instant::now();
+                        }
+                    });
+                Event::Backup(result)
+            });
+            app.section = 5;
+            set(hwnd, STATUS, "Validando origem, destino, espaço e seleção…");
+            render(hwnd, app);
+        }
+        EXPORT => {
+            let Some(report) = app.report.clone() else {
+                return;
+            };
+            let destination = PathBuf::from(get(hwnd, DEST));
+            work(app, move || {
+                match archrescue_evidence::export(&report, &destination) {
+                    Ok(p) => Event::Exported(p),
+                    Err(e) => Event::Failure(e),
+                }
+            });
+            set(hwnd, STATUS, "Exportando e verificando relatório…");
+            render(hwnd, app);
+        }
+        CONSOLE => {
+            if let Some(system) = std::env::var_os("SystemRoot") {
+                match std::process::Command::new(PathBuf::from(system).join("System32/cmd.exe"))
+                    .spawn()
+                {
+                    Ok(_) => set(
+                        hwnd,
+                        STATUS,
+                        "Console aberto. Comandos manuais não são limitados pela aplicação.",
+                    ),
+                    Err(e) => set(hwnd, STATUS, &format!("Falha ao abrir console: {e}")),
+                }
+            }
+        }
+        _ => {}
+    }
+}
+unsafe fn events(hwnd: HWND, app: &mut App) {
+    while let Ok(event) = app.rx.try_recv() {
+        match event {
+            Event::Progress(n, total) => {
+                set(hwnd,STATUS,&format!("Copiados: {n} / {total} bytes. A conclusão depende da verificação SHA-256."));
+                continue;
+            }
+            Event::Snapshot(mut report) => {
+                if let Some(old) = &app.report {
+                    report.operations = old.operations.clone();
+                }
+                if app.directory.as_os_str().is_empty() {
+                    if let Some(root) = report
+                        .inventory
+                        .volumes
+                        .iter()
+                        .flat_map(|v| &v.paths)
+                        .next()
+                    {
+                        app.directory = root.clone();
+                        set(hwnd, ADDRESS, &root.to_string_lossy());
+                    }
+                }
+                app.report = Some(*report);
+                set(
+                    hwnd,
+                    STATUS,
+                    "Consulta concluída. Confira erros e limitações nas seções.",
+                );
+            }
+            Event::Listing(path, entries) => {
+                app.directory = path;
+                app.entries = entries;
+                set(hwnd, ADDRESS, &app.directory.to_string_lossy());
+                SendMessageW(control(hwnd, FILES), LB_RESETCONTENT, 0, 0);
+                for e in &app.entries {
+                    let text = format!(
+                        "{}  {}  {}",
+                        if e.directory { "[Pasta]" } else { "[Arquivo]" },
+                        e.name.display(),
+                        if let Some(err) = &e.error {
+                            format!("Indisponível: {err}")
+                        } else {
+                            format!("{} bytes", e.bytes)
+                        }
+                    );
+                    SendMessageW(
+                        control(hwnd, FILES),
+                        LB_ADDSTRING,
+                        0,
+                        w(&text).as_ptr() as isize,
+                    );
+                }
+                set(
+                    hwnd,
+                    STATUS,
+                    if app.entries.is_empty() {
+                        "Pasta vazia."
+                    } else {
+                        "Listagem concluída. Ctrl/Shift para selecionar; clique duplo para abrir uma pasta."
+                    },
+                );
+            }
+            Event::Backup(result) => {
+                set(
+                    hwnd,
+                    STATUS,
+                    &format!(
+                        "{} — {} / {} bytes",
+                        state_label(result.operation.state),
+                        result.copied_bytes,
+                        result.planned_bytes
+                    ),
+                );
+                if let Some(report) = &mut app.report {
+                    report.operations.push(result);
+                }
+            }
+            Event::Exported(path) => set(
+                hwnd,
+                STATUS,
+                &format!("Relatório gravado e verificado: {}", path.display()),
+            ),
+            Event::Failure(e) => set(hwnd, STATUS, &format!("Falha: {e}")),
+        }
+        app.busy = false;
+        render(hwnd, app);
+    }
+}
+unsafe extern "system" fn procedure(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> LRESULT {
+    let ptr = GetWindowLongPtrW(hwnd, GWLP_USERDATA) as *mut App;
+    if msg == WM_NCCREATE {
+        let create = &*(lp as *const CREATESTRUCTW);
+        SetWindowLongPtrW(hwnd, GWLP_USERDATA, create.lpCreateParams as isize);
+        return DefWindowProcW(hwnd, msg, wp, lp);
+    }
+    if ptr.is_null() {
+        return DefWindowProcW(hwnd, msg, wp, lp);
+    }
+    let app = &mut *ptr;
+    match msg {
+        WM_COMMAND => {
+            action(hwnd, app, wp & 0xffff, ((wp >> 16) & 0xffff) as u32);
+            0
+        }
+        WM_TIMER => {
+            events(hwnd, app);
+            0
+        }
+        WM_SIZE => {
+            layout(hwnd);
+            0
+        }
+        WM_GETMINMAXINFO => {
+            let info = &mut *(lp as *mut MINMAXINFO);
+            info.ptMinTrackSize = POINT { x: 800, y: 600 };
+            0
+        }
+        WM_CTLCOLORSTATIC | WM_CTLCOLOREDIT | WM_CTLCOLORLISTBOX => {
+            SetTextColor(wp as HDC, 0x00eeeae5);
+            SetBkColor(wp as HDC, 0x0025221d);
+            app.brush as isize
+        }
+        WM_CLOSE => {
+            if app.busy {
+                app.cancel.store(true, Ordering::Relaxed);
+                set(
+                    hwnd,
+                    STATUS,
+                    "Aguarde a operação terminar ou confirmar cancelamento antes de fechar.",
+                );
+            } else {
+                DestroyWindow(hwnd);
+            }
+            0
+        }
+        WM_DESTROY => {
+            KillTimer(hwnd, 1);
+            PostQuitMessage(0);
+            0
+        }
+        _ => DefWindowProcW(hwnd, msg, wp, lp),
+    }
+}
+pub fn run() -> Result<()> {
+    unsafe {
+        let (tx, rx) = mpsc::channel();
+        let brush = CreateSolidBrush(0x0025221d);
+        let font = CreateFontW(
+            -17,
+            0,
+            0,
+            0,
+            400,
+            0,
+            0,
+            0,
+            DEFAULT_CHARSET as u32,
+            OUT_DEFAULT_PRECIS as u32,
+            CLIP_DEFAULT_PRECIS as u32,
+            DEFAULT_QUALITY as u32,
+            DEFAULT_PITCH as u32,
+            w("Segoe UI").as_ptr(),
+        );
+        let mut app = Box::new(App {
+            section: 0,
+            report: None,
+            entries: vec![],
+            directory: PathBuf::new(),
+            busy: false,
+            cancel: Arc::new(AtomicBool::new(false)),
+            tx,
+            rx,
+            brush,
+        });
+        let class = w("ArchRescueP0");
+        let instance = GetModuleHandleW(null());
+        let wc = WNDCLASSW {
+            lpfnWndProc: Some(procedure),
+            hInstance: instance,
+            hCursor: LoadCursorW(null_mut(), IDC_ARROW),
+            hbrBackground: brush,
+            lpszClassName: class.as_ptr(),
+            ..Default::default()
+        };
+        if RegisterClassW(&wc) == 0 {
+            return Err(os_error("Register native window"));
+        }
+        let hwnd = CreateWindowExW(
+            WS_EX_CONTROLPARENT,
+            class.as_ptr(),
+            w(&format!("ArchRescue {VERSION} — Recuperação e diagnóstico")).as_ptr(),
+            WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN,
+            CW_USEDEFAULT,
+            CW_USEDEFAULT,
+            1100,
+            740,
+            null_mut(),
+            null_mut(),
+            instance,
+            (&mut *app as *mut App).cast(),
+        );
+        if hwnd.is_null() {
+            return Err(os_error("Create ArchRescue window"));
+        }
+        for (i, label) in i18n::SECTIONS.iter().enumerate() {
+            add(hwnd, 100 + i, "BUTTON", label, WS_TABSTOP, font)?;
+        }
+        for (id, label) in [
+            (REFRESH, "Atualizar diagnóstico"),
+            (OPEN, "Abrir"),
+            (UP, "Subir"),
+            (COPY, "Copiar seleção"),
+            (CANCEL, "Cancelar"),
+            (EXPORT, "Exportar relatório"),
+            (CONSOLE, "Console de diagnóstico"),
+        ] {
+            add(hwnd, id, "BUTTON", label, WS_TABSTOP, font)?;
+        }
+        add(
+            hwnd,
+            ADDRESS,
+            "EDIT",
+            "",
+            WS_TABSTOP | WS_BORDER | ES_AUTOHSCROLL as u32,
+            font,
+        )?;
+        add(
+            hwnd,
+            DEST,
+            "EDIT",
+            "",
+            WS_TABSTOP | WS_BORDER | ES_AUTOHSCROLL as u32,
+            font,
+        )?;
+        SendMessageW(
+            control(hwnd, DEST),
+            0x1501,
+            1,
+            w("Destino: diretório absoluto em volume persistente autorizado").as_ptr() as isize,
+        );
+        add(
+            hwnd,
+            FILES,
+            "LISTBOX",
+            "",
+            WS_TABSTOP
+                | WS_BORDER
+                | WS_VSCROLL
+                | WS_HSCROLL
+                | LBS_EXTENDEDSEL as u32
+                | LBS_NOTIFY as u32,
+            font,
+        )?;
+        add(
+            hwnd,
+            CONTENT,
+            "EDIT",
+            i18n::LOADING,
+            WS_TABSTOP
+                | WS_VSCROLL
+                | ES_MULTILINE as u32
+                | ES_READONLY as u32
+                | ES_AUTOVSCROLL as u32,
+            font,
+        )?;
+        add(hwnd, STATUS, "STATIC", i18n::LOADING, 0, font)?;
+        layout(hwnd);
+        ShowWindow(hwnd, SW_SHOW);
+        UpdateWindow(hwnd);
+        SetTimer(hwnd, 1, 100, None);
+        refresh(hwnd, &mut app);
+        let mut msg = MSG::default();
+        loop {
+            let result = GetMessageW(&mut msg, null_mut(), 0, 0);
+            if result == 0 {
+                break;
+            }
+            if result == -1 {
+                return Err(os_error("Native message loop"));
+            }
+            if IsDialogMessageW(hwnd, &msg) == 0 {
+                TranslateMessage(&msg);
+                DispatchMessageW(&msg);
+            }
+        }
+        DeleteObject(font);
+        DeleteObject(brush);
+        Ok(())
+    }
+}

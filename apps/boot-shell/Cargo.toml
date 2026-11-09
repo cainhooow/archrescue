@@ -1,0 +1,16 @@
+[package]
+name = "archrescue-boot-shell"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+serde_json.workspace = true
+serde.workspace = true
+windows-sys.workspace = true
+archrescue-core.workspace = true
+archrescue-storage.workspace = true
+archrescue-windows-detection.workspace = true
+archrescue-diagnostics.workspace = true
+archrescue-backup.workspace = true
+archrescue-evidence.workspace = true

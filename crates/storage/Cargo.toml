@@ -1,0 +1,11 @@
+[package]
+name = "archrescue-storage"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+serde.workspace = true
+archrescue-core.workspace = true
+windows-sys.workspace = true
+libc.workspace = true
