@@ -1,0 +1,17 @@
+# P0 VM acceptance procedure — not yet executed
+
+Required platforms: QEMU + OVMF x64 UEFI and Hyper-V Generation 2 or VirtualBox x64 EFI. Record actual versions, CPU/RAM/display, firmware hash, Secure Boot keys/settings, executable SHA-256, ISO SHA-256, build-info.json and source commit. Keep the virtual NIC disconnected.
+
+Use only disposable known virtual disks. Attach the source Windows test image read-only through the hypervisor. Provide a separate writable virtual disk for backup and reports. Do not attach a host physical disk. Use legitimate Windows test media and retain proof of provenance; no Windows fixture images are bundled here.
+
+1. Hash both original virtual disks and snapshot the VM. Independently inventory a small dataset (nested directories, empty directory, empty file, Unicode filename, and at least one file spanning multiple 64 KiB chunks). Record names, byte counts and SHA-256 before boot.
+2. Boot the produced ISO using x64 UEFI. Capture firmware settings, the boot sequence, actual ArchRescue startup and version. Test at 800x600 and 1280x720. Exercise keyboard navigation. A shell screenshot alone is not proof of the ISO used: include build-info and its executable hash.
+3. Exercise all seven sections. Compare reported disks, GPT partitions, EFI partition, NTFS volumes, total/free/available space against the known fixture layout. Note WinPE RAM-disk identity separately. Include an unmounted EFI partition to verify the application reports its limitation rather than mounting it.
+4. Detect the legitimate offline Windows installation and reject an empty Windows directory. Verify PE architecture evidence and the explicit unavailable version field. A synthetic marker fixture is insufficient for Windows installation acceptance.
+5. Inspect existing and missing EFI/BCD paths. Capture bcdedit read-only output and error cases. Ensure no repair, registry mount, firmware update or BCD write occurs.
+6. Browse, navigate, multi-select and copy the controlled dataset to the other disk. Confirm the displayed source/destination and real progress. Export the final report to that destination. Inspect all file hashes with an independent tool, compare byte and file counts, and restore the copies into a third disposable directory for another comparison.
+7. Repeat same-volume/same-physical-disk, overlap, full destination, unreadable file, missing volume, existing conflict, cancellation, partial I/O failure and corrupt metadata scenarios. Partial copies must never show Completed. Do not use real customer files or fill a host volume to simulate failure.
+8. Close/reopen the shell and test the fallback console. Reboot, verify exported reports and copied data persist, then compare source file hashes and source virtual image hash against the original. Any source image differences require investigation; normal metadata updates are not an application read-only guarantee.
+9. Repeat on the second VM platform. Run Secure Boot separately with documented firmware trust configuration. Absence of the platform is BLOCKED; omission of an executable test with prerequisites available is NOT TESTED.
+
+No script may mark boot PASS solely because an ISO exists or QEMU exits zero. A human-observed functional walkthrough plus independently verified data and matching artifact evidence is required. Save raw logs/screenshots under a new evidence directory and explicitly record PASS/FAIL/BLOCKED/NOT TESTED per capability.
