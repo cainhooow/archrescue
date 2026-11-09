@@ -20,7 +20,13 @@ pub struct BootReport {
     pub limitations: Vec<String>,
 }
 pub fn inspect(roots: &[PathBuf]) -> BootReport {
-    let mut report=BootReport { limitations:vec!["Only supplied accessible roots are examined. Unmounted EFI partitions are not mounted or modified.".into(),"File presence does not establish correct firmware boot order or valid BCD device references.".into()],..Default::default()};
+    let mut report = BootReport {
+        limitations: vec![
+            "Only supplied accessible roots are examined. Unmounted EFI partitions are not mounted or modified.".into(),
+            "File presence does not establish correct firmware boot order or valid BCD device references.".into(),
+        ],
+        ..Default::default()
+    };
     for root in roots {
         let root = match safe_existing(root) {
             Ok(p) => p,
@@ -95,8 +101,11 @@ fn check(path: &Path, bcd: bool) -> std::result::Result<String, Error> {
                     format!("BCD enumeration failed: {}", output.status),
                 ));
             }
-            // Do not infer health from localized command output. Raw output is available only interactively.
-            Ok(format!("Registry signature present; bcdedit /store /enum all returned {} bytes. Reference consistency remains unverified.",output.stdout.len()))
+            // Preserve supporting evidence, without interpreting localized strings as health.
+            Ok(format!(
+                "BCD enumeration output (lossy decoding may affect the OEM code page):\n{}\nReference consistency remains unverified.",
+                String::from_utf8_lossy(&output.stdout)
+            ))
         }
         #[cfg(not(windows))]
         {

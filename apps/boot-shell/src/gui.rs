@@ -1,7 +1,7 @@
 //! Native Win32 shell. Long-running filesystem work is performed outside the UI thread.
-use crate::i18n;
+use crate::{i18n, views::state_label};
 use archrescue_backup::{BackupResult, Entry};
-use archrescue_core::{Error, ErrorKind, Result, State, VERSION};
+use archrescue_core::{Error, ErrorKind, Result, VERSION};
 use archrescue_evidence::Report;
 use std::{
     cell::RefCell,
@@ -52,6 +52,7 @@ struct App {
     entries: Vec<Entry>,
     directory: PathBuf,
     busy: bool,
+    cancellable: bool,
     cancel: Arc<AtomicBool>,
     tx: Sender<Event>,
     rx: Receiver<Event>,
@@ -141,7 +142,7 @@ unsafe fn render(hwnd: HWND, app: &App) {
         );
     }
     EnableWindow(control(hwnd, COPY), (!app.busy && app.section == 4) as i32);
-    EnableWindow(control(hwnd, CANCEL), app.busy as i32);
+    EnableWindow(control(hwnd, CANCEL), (app.busy && app.cancellable) as i32);
     EnableWindow(control(hwnd, REFRESH), (!app.busy) as i32);
     EnableWindow(
         control(hwnd, EXPORT),
@@ -155,31 +156,12 @@ unsafe fn render(hwnd: HWND, app: &App) {
         );
         return;
     };
-    let text=match app.section {
-        0=>format!("ARCHRESCUE  {VERSION}\nRecuperação e diagnóstico • ArchGTi\n\n{} discos | {} volumes | {} candidatos Windows\n\nOrigem: somente leitura pela aplicação.\nBackup: conteúdo verificado com SHA-256 em outro disco.\n\nSelecione uma seção. No Explorador, informe uma pasta absoluta, selecione arquivos com Ctrl/Shift e informe o destino abaixo.\n\nNão há diagnóstico de saúde física. Partições inacessíveis são relatadas sem desbloqueio.\n\n{}",report.inventory.disks.len(),report.inventory.volumes.len(),report.installations.installations.len(),report.inventory.errors.iter().map(ToString::to_string).collect::<Vec<_>>().join("\n")),
-        1=>{let mut s=String::from("DISCOS E PARTIÇÕES\n\n");for d in &report.inventory.disks{s.push_str(&format!("{}\nDispositivo: {}\nCapacidade: {:?} bytes | Barramento: {:?} | Removível: {:?}\nEstilo: {:?}\n",d.identity,d.device_path,d.capacity,d.bus,d.removable,d.style));for p in &d.partitions{s.push_str(&format!("  Partição {}: {} bytes | {} | EFI: {}\n",p.number,p.length,p.kind,p.efi));}for e in &d.errors{s.push_str(&format!("  Indisponível: {e}\n"));}}for v in &report.inventory.volumes{s.push_str(&format!("\nVolume: {}\nCaminhos: {:?} | Sistema: {:?}\n",v.identity,v.paths,v.filesystem));if let Some(sizes)=&v.space{s.push_str(&format!("Total: {} | Usado: {} | Disponível: {} bytes\n",sizes.total,sizes.used,sizes.available));}for e in &v.errors{s.push_str(&format!("Indisponível: {e}\n"));}}if report.inventory.disks.is_empty(){s.push_str("Nenhum disco enumerado. Consulte os erros no relatório.\n");}s},
-        2=>{let mut s=String::from("INSTALAÇÕES WINDOWS\nCandidatos offline; não implica instalação íntegra.\n\n");for i in &report.installations.installations{s.push_str(&format!("{}\nArquitetura: {:?} | Versão: {:?}\nEvidências: {:?}\nLimitações: {:?}\n\n",i.path.display(),i.architecture,i.version,i.evidence,i.limitations));}if report.installations.installations.is_empty(){s.push_str("Nenhuma instalação encontrada nas raízes acessíveis.\n");}for e in &report.installations.errors{s.push_str(&format!("Falha: {e}\n"));}s},
-        3=>{let mut s=String::from("DIAGNÓSTICO DE BOOT • SOMENTE LEITURA\n\n");for o in &report.boot.observations{s.push_str(&format!("{}\n{}: {}\n\n",o.path.display(),o.status,o.detail));}s.push_str(&report.boot.limitations.join("\n"));s},
-        5=>{let mut s=String::from("BACKUP\nSelecione arquivos no Explorador e use Copiar seleção.\nConflitos bloqueiam a cópia; arquivos parciais permanecem identificados como não verificados.\n\n");for b in &report.operations{s.push_str(&format!("{}\nEstado: {}\n{} / {} bytes | {} / {} arquivos verificados\n",b.operation.id,state_label(b.operation.state),b.copied_bytes,b.planned_bytes,b.files.iter().filter(|f|f.verified).count(),b.files.len()));for e in &b.operation.errors{s.push_str(&format!("Falha: {e}\n"));}}s},
-        6=>format!("RELATÓRIOS\nInforme abaixo um diretório persistente autorizado e use Exportar relatório.\nDados em X: (RAM) não sobrevivem à reinicialização.\n\n{}",report.readable()),
-        _=>String::new()
-    };
+    let text = crate::views::section(app.section, report);
     set(hwnd, CONTENT, &text);
-}
-fn state_label(state: State) -> &'static str {
-    match state {
-        State::Pending => "Pendente",
-        State::Validating => "Validando",
-        State::Running => "Copiando",
-        State::Verifying => "Verificando",
-        State::Completed => "Concluído e verificado",
-        State::Failed => "Falhou — resultado incompleto",
-        State::Cancelled => "Cancelado — resultado incompleto",
-        State::Blocked => "Bloqueado",
-    }
 }
 fn work(app: &mut App, job: impl FnOnce() -> Event + Send + 'static) {
     app.busy = true;
+    app.cancellable = false;
     let tx = app.tx.clone();
     thread::spawn(move || {
         let event =
@@ -315,6 +297,7 @@ unsafe fn action(hwnd: HWND, app: &mut App, id: usize, notification: u32) {
                     });
                 Event::Backup(result)
             });
+            app.cancellable = true;
             app.section = 5;
             set(hwnd, STATUS, "Validando origem, destino, espaço e seleção…");
             render(hwnd, app);
@@ -530,6 +513,7 @@ pub fn run() -> Result<()> {
                 entries: vec![],
                 directory: PathBuf::new(),
                 busy: false,
+                cancellable: false,
                 cancel: Arc::new(AtomicBool::new(false)),
                 tx,
                 rx,

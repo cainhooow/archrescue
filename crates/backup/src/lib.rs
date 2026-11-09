@@ -71,7 +71,14 @@ pub struct BackupResult {
 }
 impl Default for BackupResult {
     fn default() -> Self {
-        Self{operation:Operation::new(),planned_bytes:0,copied_bytes:0,files:vec![],directories:vec![],limitations:vec!["Content-only copy: ACLs, timestamps, alternate streams and sparse allocation are not preserved".into(),"Partial destination files are retained on failure and must not be treated as verified".into()]}
+        Self {
+            operation: Operation::new(), planned_bytes: 0, copied_bytes: 0,
+            files: vec![], directories: vec![],
+            limitations: vec![
+                "Content-only copy: ACLs, timestamps, alternate streams and sparse allocation are not preserved".into(),
+                "Partial destination files are retained on failure and must not be treated as verified".into(),
+            ],
+        }
     }
 }
 #[derive(Debug, Clone)]

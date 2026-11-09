@@ -40,6 +40,9 @@ try:
     (source / 'perfil/zero.txt').write_bytes(b'')
     before = manifest(source)
     version = run('--version').strip()
+    expected_build = os.environ.get('ARCHRESCUE_EXPECTED_BUILD') or subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=REPO, text=True).strip()
+    assert f'build={expected_build}' in version, 'Stale or unidentified binary; rebuild successfully before acceptance'
+
     browse = json.loads(run('browse', source / 'perfil'))
     assert len(browse) == 4
     assert json.loads(run('discover', source))['installations'] == []

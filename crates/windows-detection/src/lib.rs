@@ -117,7 +117,18 @@ pub fn discover(roots: &[PathBuf]) -> Discovery {
             }
         };
         if valid {
-            result.installations.push(Installation {path:windows,volume:root,architecture,version:None,confidence:"candidate: corroborated filesystem markers".into(),evidence:vec!["SYSTEM and SOFTWARE have regf signatures".into(),"ntoskrnl.exe has a valid PE signature and supported machine type".into()],limitations:vec!["Registry hive contents and kernel signatures are not authenticated; this is not proof of a healthy or bootable installation".into(),"Version/build is unavailable in P0; no running-OS version is substituted".into()]});
+            result.installations.push(Installation {
+                path: windows, volume: root, architecture, version: None,
+                confidence: "candidate: corroborated filesystem markers".into(),
+                evidence: vec![
+                    "SYSTEM and SOFTWARE have regf signatures".into(),
+                    "ntoskrnl.exe has a valid PE signature and supported machine type".into(),
+                ],
+                limitations: vec![
+                    "Registry hive contents and kernel signatures are not authenticated; this is not proof of a healthy or bootable installation".into(),
+                    "Version/build is unavailable in P0; no running-OS version is substituted".into(),
+                ],
+            });
         }
     }
     result

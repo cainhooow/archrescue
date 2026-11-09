@@ -27,10 +27,30 @@ pub struct Report {
 }
 impl Report {
     pub fn collect(roots: &[PathBuf]) -> Self {
-        Self{schema_version:1,version:VERSION.into(),runtime_os:std::env::consts::OS.into(),architecture:std::env::consts::ARCH.into(),generated_unix:SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs(),inventory:archrescue_storage::inventory(),installations:archrescue_windows_detection::discover(roots),boot:archrescue_diagnostics::inspect(roots),operations:vec![],limitations:vec!["No hardware health or bootability verdict is inferred from enumeration".into(),"WinPE RAM-disk exports are volatile; choose a persistent authorized destination".into(),"Selected relative paths and volume identities are local recovery metadata; review before sharing".into()]}
+        Self {
+            schema_version: 1,
+            version: VERSION.into(),
+            build_id: BUILD_ID.into(),
+            runtime_os: std::env::consts::OS.into(),
+            architecture: std::env::consts::ARCH.into(),
+            generated_unix: SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs(),
+            inventory: archrescue_storage::inventory(),
+            installations: archrescue_windows_detection::discover(roots),
+            boot: archrescue_diagnostics::inspect(roots),
+            operations: vec![],
+            limitations: vec![
+                "No hardware health or bootability verdict is inferred from enumeration".into(),
+                "WinPE RAM-disk exports are volatile; choose a persistent authorized destination".into(),
+                "Selected relative paths and volume identities are local recovery metadata; review before sharing".into(),
+            ],
+        }
     }
     pub fn readable(&self) -> String {
-        let mut s=format!("ArchRescue {} — Technical report\nRuntime: {} / {}\nSchema: {}\nDisks: {} | Volumes: {} | Windows candidates: {}\n\n",self.version,self.runtime_os,self.architecture,self.schema_version,self.inventory.disks.len(),self.inventory.volumes.len(),self.installations.installations.len());
+        let mut s = format!(
+            "ArchRescue {} — Technical report\nBuild: {}\nRuntime: {} / {}\nSchema: {}\nDisks: {} | Volumes: {} | Windows candidates: {}\n\n",
+            self.version, self.build_id, self.runtime_os, self.architecture, self.schema_version,
+            self.inventory.disks.len(), self.inventory.volumes.len(), self.installations.installations.len()
+        );
         for op in &self.operations {
             s.push_str(&format!(
                 "Operation {}: {:?}\nCopied {} / {} bytes; verified {} / {} files\n",
