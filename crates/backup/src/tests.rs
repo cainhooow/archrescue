@@ -345,16 +345,96 @@ fn symlink_source_and_destination_ancestors_are_rejected() {
 }
 
 #[test]
-fn case_collisions_and_overlapping_selections_are_rejected() {
+fn distinct_unicode_case_collisions_are_rejected() {
     let fixture = Fixture::new();
-    fixture.put("tree/a", b"a");
-    fixture.put("tree/A", b"b");
-
-    assert_ne!(fixture.copy(&["tree"]).operation.state, State::Completed);
-    assert_ne!(
-        fixture.copy(&["tree", "tree/a"]).operation.state,
-        State::Completed
+    fixture.put("tree/k.txt", b"ASCII name");
+    let kelvin_name = "tree/\u{212a}.txt";
+    OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(fixture.root.join(kelvin_name))
+        .unwrap()
+        .write_all(b"Kelvin sign name")
+        .unwrap();
+    assert_eq!(fs::read_dir(fixture.root.join("tree")).unwrap().count(), 2);
+    assert_eq!(
+        fs::read(fixture.root.join("tree/k.txt")).unwrap(),
+        b"ASCII name"
+    );
+    assert_eq!(
+        fs::read(fixture.root.join(kelvin_name)).unwrap(),
+        b"Kelvin sign name"
     );
 
+    for selections in [vec!["tree"], vec!["tree/k.txt", kelvin_name]] {
+        let result = fixture.copy(&selections);
+
+        assert_eq!(result.operation.state, State::Failed);
+        assert_eq!(result.operation.errors[0].kind, ErrorKind::Conflict);
+        assert_eq!(result.copied_bytes, 0);
+        assert_eq!(fs::read_dir(&fixture.destination).unwrap().count(), 0);
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn distinct_ascii_case_collisions_are_rejected() {
+    let fixture = Fixture::new();
+    fixture.put("tree/a", b"lowercase");
+    OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(fixture.root.join("tree/A"))
+        .unwrap()
+        .write_all(b"uppercase")
+        .unwrap();
+    assert_eq!(fs::read_dir(fixture.root.join("tree")).unwrap().count(), 2);
+
+    let result = fixture.copy(&["tree"]);
+
+    assert_eq!(result.operation.state, State::Failed);
+    assert_eq!(result.operation.errors[0].kind, ErrorKind::Conflict);
+    assert_eq!(result.copied_bytes, 0);
+    assert_eq!(fs::read_dir(&fixture.destination).unwrap().count(), 0);
+}
+
+#[cfg(windows)]
+#[test]
+fn case_alias_selections_are_rejected_on_default_ntfs() {
+    let fixture = Fixture::new();
+    fixture.put("tree/a", b"one entry");
+    let lowercase = fixture.root.join("tree/a");
+    let uppercase = fixture.root.join("tree/A");
+    let alias_creation = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&uppercase)
+        .unwrap_err();
+    assert_eq!(alias_creation.kind(), std::io::ErrorKind::AlreadyExists);
+    assert_eq!(fs::read_dir(fixture.root.join("tree")).unwrap().count(), 1);
+    assert_eq!(
+        fs::canonicalize(lowercase).unwrap(),
+        fs::canonicalize(uppercase).unwrap()
+    );
+
+    let result = fixture.copy(&["tree/a", "tree/A"]);
+
+    assert_eq!(result.operation.state, State::Failed);
+    assert_eq!(result.operation.errors[0].kind, ErrorKind::Conflict);
+    assert_eq!(result.copied_bytes, 0);
+    assert_eq!(fs::read_dir(&fixture.destination).unwrap().count(), 0);
+}
+
+#[test]
+fn overlapping_selections_are_rejected_without_a_collision() {
+    let fixture = Fixture::new();
+    fixture.put("tree/a", b"child");
+
+    let result = fixture.copy(&["tree", "tree/a"]);
+
+    assert_eq!(result.operation.state, State::Failed);
+    assert_eq!(result.operation.errors[0].kind, ErrorKind::Validation);
+    assert_eq!(result.operation.errors[0].context, "Overlapping selections");
+    assert_eq!(result.copied_bytes, 0);
     assert_eq!(fs::read_dir(&fixture.destination).unwrap().count(), 0);
 }
