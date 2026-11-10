@@ -9,7 +9,10 @@ import subprocess
 import tempfile
 
 REPO = Path(__file__).resolve().parents[1]
-BINARY = REPO / 'target/release/archrescue-boot-shell'
+CACHE = Path(os.environ.get('XDG_CACHE_HOME', Path.home() / '.cache')) / 'archrescue'
+SCRATCH = Path(os.environ.get('ARCHRESCUE_SCRATCH_ROOT', CACHE))
+DEFAULT_TARGET = REPO / 'target' if (REPO / 'target').is_dir() else SCRATCH / 'cargo-target'
+BINARY = Path(os.environ.get('CARGO_TARGET_DIR', DEFAULT_TARGET)) / 'release/archrescue-boot-shell'
 BASE = REPO / '.agent-tmp/cli'
 BASE.mkdir(parents=True, exist_ok=True)
 external = os.environ.get('ARCHRESCUE_TEST_DESTINATION')
@@ -17,8 +20,8 @@ if not external:
     raise SystemExit('BLOCKED: ARCHRESCUE_TEST_DESTINATION is required')
 source = Path(tempfile.mkdtemp(prefix='source-', dir=BASE))
 destination = Path(tempfile.mkdtemp(prefix='destination-', dir=external))
-output = REPO / '.agent-tmp/cli-evidence'
-output.mkdir(exist_ok=True)
+output = Path(os.environ.get('ARCHRESCUE_CLI_EVIDENCE', REPO / '.agent-tmp/cli-evidence'))
+output.mkdir(parents=True, exist_ok=True)
 
 def run(*args, expected=0):
     result = subprocess.run([str(BINARY), *map(str, args)], capture_output=True, text=True)
