@@ -537,8 +537,30 @@ unsafe extern "system" fn procedure(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM
         return state.brush as isize;
     }
 
-    // Native control calls can synchronously reenter this procedure. RefCell
-    // prevents overlapping mutable access; paint messages above need no borrow.
+    // Native window operations can send these messages synchronously while
+    // application state is borrowed. They only need the window and must still run.
+    match msg {
+        WM_SIZE => {
+            layout(hwnd);
+            return 0;
+        }
+        WM_GETMINMAXINFO => {
+            let info = &mut *(lp as *mut MINMAXINFO);
+            info.ptMinTrackSize = POINT {
+                x: 800,
+                y: 600,
+            };
+            return 0;
+        }
+        WM_DESTROY => {
+            KillTimer(hwnd, 1);
+            PostQuitMessage(0);
+            return 0;
+        }
+        _ => {}
+    }
+
+    // RefCell prevents overlapping mutable access when native controls reenter.
     let Ok(mut app_borrow) = state.app.try_borrow_mut() else {
         return DefWindowProcW(hwnd, msg, wp, lp);
     };
@@ -553,18 +575,6 @@ unsafe extern "system" fn procedure(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM
             events(hwnd, app);
             0
         }
-        WM_SIZE => {
-            layout(hwnd);
-            0
-        }
-        WM_GETMINMAXINFO => {
-            let info = &mut *(lp as *mut MINMAXINFO);
-            info.ptMinTrackSize = POINT {
-                x: 800,
-                y: 600,
-            };
-            0
-        }
         WM_CLOSE => {
             if app.busy {
                 app.cancel.store(true, Ordering::Relaxed);
@@ -576,11 +586,6 @@ unsafe extern "system" fn procedure(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM
             } else {
                 DestroyWindow(hwnd);
             }
-            0
-        }
-        WM_DESTROY => {
-            KillTimer(hwnd, 1);
-            PostQuitMessage(0);
             0
         }
         _ => DefWindowProcW(hwnd, msg, wp, lp),
