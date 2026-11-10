@@ -1,5 +1,7 @@
 # ArchRescue P0 Windows engineering report
 
+The corrective run uses a new source and artifact identity. See its final matrix for the current P0 status. The results below describe the earlier run. [Corrective homologation](P0-CORRECTIVE-HOMOLOGATION.md)
+
 Execution date 2026-11-09, America/Sao_Paulo. Product version 0.0.1. Final tested application source `64bf3a6c92702368a0cb4fe8dc66b9385536d3a4`.
 
 ## Initial environment and recovery

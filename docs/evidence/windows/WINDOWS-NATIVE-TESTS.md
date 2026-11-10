@@ -1,5 +1,7 @@
 # Native Windows tests
 
+Both historical failures were reproduced and corrected. The final native suite recorded 30 passed and zero failed. The results below describe the earlier run. [Corrective homologation](../../qa/P0-CORRECTIVE-HOMOLOGATION.md#c-native-windows-failure-reproduction-and-correction)
+
 Final CLI and Rust suite source `64bf3a6c92702368a0cb4fe8dc66b9385536d3a4`, Windows 10 Home 22H2 x64, elevated SSH for CLI and workspace tests. The release process and artifact identity are recorded in [Windows build results](WINDOWS-BUILD-RESULTS.md).
 
 ## Fixtures

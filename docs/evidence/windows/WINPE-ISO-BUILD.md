@@ -1,5 +1,7 @@
 # WinPE ISO build
 
+The corrective run produced a new ISO from source `513c8de`. Both hypervisors and the separate Secure Boot run used its verified hash. The ISO below is historical. [Corrective homologation](../../qa/P0-CORRECTIVE-HOMOLOGATION.md#j-final-artifacts)
+
 **ISO GENERATION PASS.** The final ISO was produced on W10Val by the repository's `packaging/winpe/build.ps1` in a clean Windows checkout. Boot evidence is tracked in [VirtualBox QA](VIRTUALBOX-QA.md).
 
 | Item | Final value |

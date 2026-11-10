@@ -1,5 +1,7 @@
 # Native Windows build results
 
+The corrective run built a new x64 release from source `513c8de`. The build below is the historical executable. [Corrective homologation](../../qa/P0-CORRECTIVE-HOMOLOGATION.md#j-final-artifacts)
+
 | Gate | Result | Evidence |
 |---|---|---|
 | Source transfer and clean checkout | PASS | Complete Git bundle cloned to Windows `codex/w10val-native-validation` at `64bf3a6c92702368a0cb4fe8dc66b9385536d3a4`. Windows and Linux bundle SHA-256 matched `2bc90fc6393c908066b12005d9e6295b1e27acf37fbecc6719a9282bd421f066`. |

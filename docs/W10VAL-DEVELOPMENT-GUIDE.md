@@ -1,5 +1,7 @@
 # W10Val development guide
 
+The corrective run reused the installed W10Val toolchain and transferred a verified bundle from the local corrective branch. It records the additional live checkpoint and the elevated interactive task used to run the ISO build. [Corrective homologation](qa/P0-CORRECTIVE-HOMOLOGATION.md)
+
 Use W10Val for native Windows builds. Use a separate network-disconnected UEFI VM for boot acceptance. The [baseline](evidence/windows/W10VAL-BASELINE.md) records the guest configuration and [provisioning](evidence/windows/W10VAL-PROVISIONING.md) records the recovery snapshot and installed components.
 
 ## Transfer the source revision

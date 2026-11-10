@@ -1,5 +1,7 @@
 # VirtualBox QA
 
+A separate corrective VirtualBox VM booted the new ISO and exercised the actual WinPE recovery controls. QEMU provided strict source write protection. The results below describe the earlier run. [Corrective homologation](../../qa/P0-CORRECTIVE-HOMOLOGATION.md#g-virtualbox)
+
 ## VM and media
 
 | Item | Verified value |

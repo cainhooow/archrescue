@@ -1,5 +1,7 @@
 # P0 negative test results
 
+The matrix below records the historical run. The [corrective regression](P0-CORRECTIVE-HOMOLOGATION.md#c-native-windows-failure-reproduction-and-correction) replaces the in-flight rename fixture and reports live media removal separately.
+
 All PASS entries below are executed controlled-fixture tests from [Rust gate output](../evidence/raw/rust-gates.txt), not Windows VM acceptance. Run `scripts/test.sh` with an explicit different-filesystem test destination. Tests fail if that prerequisite is absent; they are not silently skipped.
 
 | Required scenario | Executed test / observation | Result | Scope limitation |

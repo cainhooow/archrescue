@@ -1,4 +1,6 @@
-# P0 VM acceptance procedure — not yet executed
+# P0 VM acceptance procedure
+
+The [corrective homologation](../../docs/qa/P0-CORRECTIVE-HOMOLOGATION.md) records the completed machine observations and the outstanding independent human review.
 
 Required platforms: QEMU + OVMF x64 UEFI and Hyper-V Generation 2 or VirtualBox x64 EFI. Record actual versions, CPU/RAM/display, firmware hash, Secure Boot keys/settings, executable SHA-256, ISO SHA-256, build-info.json and source commit. Keep the virtual NIC disconnected.
 
