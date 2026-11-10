@@ -207,7 +207,19 @@ pub fn identity(path: &Path) -> Result<VolumeIdentity> {
     })
 }
 
-pub fn recovery_location(path: &Path) -> Result<RecoveryLocation> {
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MountedPartition {
+    pub disk_number: u32,
+    pub disk_id: String,
+    pub style: String,
+    pub partition: Partition,
+    pub mount_path: PathBuf,
+    pub volume_guid: String,
+    pub filesystem: String,
+    pub serial: u32,
+}
+
+pub fn mounted_partition(path: &Path) -> Result<MountedPartition> {
     let (mount_path, volume) = mount_and_volume(path)?;
     let extents = volume_extents(&volume)?;
     let [extent] = extents.as_slice() else {
@@ -252,8 +264,22 @@ pub fn recovery_location(path: &Path) -> Result<RecoveryLocation> {
         return Err(error("Read filesystem serial for recovery"));
     }
 
-    let mount_path = safe_existing(&mount_path)?;
-    let directory = path.strip_prefix(mount_path).map_err(|_| {
+    Ok(MountedPartition {
+        disk_number: extent.DiskNumber,
+        disk_id,
+        style: layout.style,
+        partition: partition.clone(),
+        mount_path: safe_existing(&mount_path)?,
+        volume_guid: volume,
+        filesystem: string(&filesystem),
+        serial,
+    })
+}
+
+pub fn recovery_location(path: &Path) -> Result<RecoveryLocation> {
+    let mounted = mounted_partition(path)?;
+    let partition = mounted.partition;
+    let directory = path.strip_prefix(mounted.mount_path).map_err(|_| {
         Error::new(
             ErrorKind::Validation,
             "Cannot identify path relative to volume",
@@ -262,15 +288,31 @@ pub fn recovery_location(path: &Path) -> Result<RecoveryLocation> {
 
     Ok(RecoveryLocation {
         filesystem_id: format!(
-            "{disk_id};{};{};{};{:08x};{}",
+            "{};{};{};{};{:08x};{}",
+            mounted.disk_id,
             partition.id.as_deref().unwrap_or(&partition.kind),
             partition.offset,
             partition.length,
-            serial,
-            string(&filesystem)
+            mounted.serial,
+            mounted.filesystem
         ),
         directory: directory.into(),
     })
+}
+
+/// Read the filesystem dirty flags without opening the device for write access.
+pub fn require_clean_volume(path: &Path) -> Result<()> {
+    let (_, volume) = mount_and_volume(path)?;
+    let handle = open(volume.trim_end_matches('\\'))?;
+    let data = query(&handle, FSCTL_IS_VOLUME_DIRTY, &[])?;
+    if value::<u32>(&data, 0)? != 0 {
+        return Err(Error::new(
+            ErrorKind::Unsupported,
+            "Filesystem dirty flags require independent investigation",
+        ));
+    }
+
+    Ok(())
 }
 
 pub fn space(path: &Path) -> Result<Space> {
@@ -287,6 +329,7 @@ pub fn space(path: &Path) -> Result<Space> {
 
 fn disk(path: String) -> Disk {
     let mut disk = Disk {
+        number: None,
         identity: path.clone(),
         device_path: path.clone(),
         capacity: None,
@@ -304,6 +347,13 @@ fn disk(path: String) -> Disk {
             return disk;
         }
     };
+    match query(&handle, IOCTL_STORAGE_GET_DEVICE_NUMBER, &[])
+        .and_then(|data| value::<STORAGE_DEVICE_NUMBER>(&data, 0))
+    {
+        Ok(number) => disk.number = Some(number.DeviceNumber),
+        Err(error) => disk.errors.push(error),
+    }
+
     let length =
         query(&handle, IOCTL_DISK_GET_LENGTH_INFO, &[]).and_then(|bytes| value::<i64>(&bytes, 0));
 

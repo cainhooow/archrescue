@@ -90,6 +90,7 @@ pub struct Progress {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TransactionReport {
     pub directory: PathBuf,
+    pub source_root: PathBuf,
     pub manifest: BackupManifest,
     pub status: TransactionStatus,
     pub progress: Progress,
@@ -160,6 +161,25 @@ fn location_changed() -> Error {
         ErrorKind::Validation,
         "Identidade da origem ou do destino mudou",
     )
+}
+
+pub fn preview(
+    source: &Path,
+    selections: &[PathBuf],
+    destination: &Path,
+    cancel: &AtomicBool,
+) -> Result<(usize, u64)> {
+    let plan = scan(source, selections, destination, cancel, false)?;
+    recovery_location(&plan.root)?;
+    recovery_location(&plan.destination)?;
+    if plan.bytes > space(&plan.destination)?.available {
+        return Err(Error::new(
+            ErrorKind::Validation,
+            "Espaço insuficiente no destino",
+        ));
+    }
+
+    Ok((plan.files.len(), plan.bytes))
 }
 
 /// Hash the complete selection before creating a transaction on the independent destination.
@@ -522,6 +542,7 @@ fn run(
         .collect::<Result<Vec<_>>>()?;
     let mut report = TransactionReport {
         directory,
+        source_root: plan.root.clone(),
         status: TransactionStatus {
             operation_id: manifest.operation_id.clone(),
             plan_fingerprint: manifest.plan_fingerprint.clone(),

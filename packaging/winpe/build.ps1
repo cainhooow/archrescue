@@ -57,6 +57,7 @@ try {
         schema_version = 1; version = '0.0.1'; target = 'x86_64-pc-windows-msvc'
         git_head = (& git rev-parse HEAD); rustc = (& rustc -V); cargo = (& cargo -V)
         executable_sha256 = (Get-FileHash -Algorithm SHA256 $exe).Hash
+        lab_fixture = $env:ARCHRESCUE_LAB_FIXTURE
         dism_version = (Get-Item (Get-Command dism.exe).Source).VersionInfo.FileVersion
         bootex = [bool]$BootEx; boot_status = 'NOT TESTED'; secure_boot_status = 'NOT TESTED'
         api_set_resolution = 'Runtime execution required; file presence is insufficient'

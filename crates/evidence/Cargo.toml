@@ -7,8 +7,12 @@ publish.workspace = true
 [dependencies]
 serde.workspace = true
 serde_json.workspace = true
+sha2.workspace = true
 archrescue-core.workspace = true
 archrescue-storage.workspace = true
 archrescue-windows-detection.workspace = true
 archrescue-diagnostics.workspace = true
 archrescue-backup.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { workspace = true, features = ["Win32_System_SystemInformation"] }

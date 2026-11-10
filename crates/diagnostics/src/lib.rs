@@ -8,6 +8,8 @@ use std::{
 
 use archrescue_core::{Error, ErrorKind};
 use archrescue_storage::safe_existing;
+
+pub mod recovery;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -15,6 +17,8 @@ pub struct Observation {
     pub path: PathBuf,
     pub status: String,
     pub detail: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<Error>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -25,6 +29,10 @@ pub struct BootReport {
 }
 
 pub fn inspect(roots: &[PathBuf]) -> BootReport {
+    inspect_with_scratch(roots, None)
+}
+
+pub fn inspect_with_scratch(roots: &[PathBuf], scratch: Option<&Path>) -> BootReport {
     let mut report = BootReport {
         limitations: vec![
             "Only supplied accessible roots are examined. \
@@ -58,19 +66,22 @@ pub fn inspect(roots: &[PathBuf]) -> BootReport {
                     path,
                     status: "missing".into(),
                     detail: "Expected path is absent from this root".into(),
+                    error: None,
                 }),
                 Err(error) => report.errors.push(Error::io("Probe boot path", error)),
-                Ok(true) => match inspect_boot_file(&path, relative.ends_with("BCD")) {
+                Ok(true) => match inspect_boot_file(&path, relative.ends_with("BCD"), scratch) {
                     Ok(detail) => report.observations.push(Observation {
                         path,
                         status: "readable".into(),
                         detail,
+                        error: None,
                     }),
                     Err(error) => {
                         report.observations.push(Observation {
                             path,
                             status: "unavailable".into(),
                             detail: error.to_string(),
+                            error: Some(error.clone()),
                         });
                         report.errors.push(error);
                     }
@@ -82,7 +93,11 @@ pub fn inspect(roots: &[PathBuf]) -> BootReport {
     report
 }
 
-fn inspect_boot_file(path: &Path, is_bcd: bool) -> std::result::Result<String, Error> {
+fn inspect_boot_file(
+    path: &Path,
+    is_bcd: bool,
+    scratch: Option<&Path>,
+) -> std::result::Result<String, Error> {
     let path = safe_existing(path)?;
     let mut file = File::open(&path).map_err(|error| Error::io("Open boot file", error))?;
 
@@ -100,11 +115,12 @@ fn inspect_boot_file(path: &Path, is_bcd: bool) -> std::result::Result<String, E
 
         #[cfg(windows)]
         {
-            enumerate_bcd_snapshot(&path, file)
+            enumerate_bcd_snapshot(&path, file, scratch)
         }
 
         #[cfg(not(windows))]
         {
+            let _ = scratch;
             Ok(
                 "Registry signature present; BCD semantic enumeration unavailable outside Windows"
                     .into(),
@@ -133,6 +149,7 @@ fn inspect_boot_file(path: &Path, is_bcd: bool) -> std::result::Result<String, E
 fn enumerate_bcd_snapshot(
     path: &Path,
     mut source_file: File,
+    scratch: Option<&Path>,
 ) -> std::result::Result<String, Error> {
     use std::{
         fs,
@@ -153,7 +170,8 @@ fn enumerate_bcd_snapshot(
         return Ok("Registry signature present; BCD exceeds the 64 MiB snapshot limit".into());
     }
 
-    let temporary_root = match safe_existing(&std::env::temp_dir()).and_then(|root| {
+    let default_scratch = std::env::temp_dir();
+    let temporary_root = match safe_existing(scratch.unwrap_or(&default_scratch)).and_then(|root| {
         require_separate(&identity(path)?, &identity(&root)?)?;
         Ok(root)
     }) {
@@ -210,7 +228,11 @@ fn enumerate_bcd_snapshot(
     if !output.status.success() || output.stdout.is_empty() {
         return Err(Error::new(
             ErrorKind::Incomplete,
-            format!("BCD enumeration failed: {}", output.status),
+            format!(
+                "BCD enumeration failed: {}: {}",
+                output.status,
+                String::from_utf8_lossy(&output.stderr)
+            ),
         ));
     }
 

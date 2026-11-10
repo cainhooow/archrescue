@@ -101,6 +101,8 @@ pub struct Partition {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Disk {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub number: Option<u32>,
     pub identity: String,
     pub device_path: String,
     pub capacity: Option<u64>,

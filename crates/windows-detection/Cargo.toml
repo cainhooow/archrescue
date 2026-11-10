@@ -8,3 +8,5 @@ publish.workspace = true
 serde.workspace = true
 archrescue-core.workspace = true
 archrescue-storage.workspace = true
+[target.'cfg(windows)'.dependencies]
+windows-sys.workspace = true

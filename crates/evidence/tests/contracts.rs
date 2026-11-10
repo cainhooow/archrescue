@@ -208,3 +208,50 @@ fn report_export_roundtrips_and_preserves_source() {
 
     assert_ne!(path, second);
 }
+
+#[test]
+fn diagnosis_classifies_candidates_loader_mismatch_windows_old_and_invalid_bcd() {
+    let first = Fixture::new();
+    let second = Fixture::new();
+    let incomplete = Fixture::new();
+    let absent = Fixture::new();
+    write_windows_markers(&first);
+    write_windows_markers(&second);
+    fs::create_dir(first.root.join("Windows.old")).unwrap();
+    fs::create_dir(incomplete.root.join("Windows")).unwrap();
+
+    let mut loader = fs::read(first.root.join("Windows/System32/ntoskrnl.exe")).unwrap();
+    loader[132..134].copy_from_slice(&0xaa64u16.to_le_bytes());
+    first.put("Windows/System32/winload.efi", &loader);
+    first.put("Windows/System32/Recovery/ReAgent.xml", b"<WindowsRE />");
+    first.put("EFI/Microsoft/Boot/BCD", b"invalid");
+
+    let report = archrescue_evidence::Report::collect(&[
+        first.root.clone(),
+        second.root.clone(),
+        incomplete.root.clone(),
+        absent.root.clone(),
+        absent.root.join("unavailable-volume"),
+    ]);
+    assert_eq!(report.installations.installations.len(), 2);
+    for expected in [
+        "WINDOWS_LOADER_ARCH_MISMATCH",
+        "WINDOWS_OLD_PRESENT",
+        "WINDOWS_RE_FILES_PRESENT",
+        "WINDOWS_MARKERS_INCOMPLETE",
+        "WINDOWS_ABSENT",
+        "WINDOWS_VOLUME_UNAVAILABLE",
+        "EFI_IMAGE_PATH_MISSING",
+        "BCD_INVALID_SIGNATURE",
+        "MULTIPLE_WINDOWS",
+    ] {
+        assert!(
+            report
+                .diagnosis
+                .findings
+                .iter()
+                .any(|finding| finding.id == expected),
+            "{expected}"
+        );
+    }
+}

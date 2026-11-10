@@ -8,3 +8,4 @@ publish.workspace = true
 serde.workspace = true
 archrescue-core.workspace = true
 archrescue-storage.workspace = true
+archrescue-windows-detection.workspace = true

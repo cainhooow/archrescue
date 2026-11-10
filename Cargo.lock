@@ -43,6 +43,7 @@ version = "0.0.1"
 dependencies = [
  "archrescue-core",
  "archrescue-storage",
+ "archrescue-windows-detection",
  "serde",
 ]
 
@@ -57,6 +58,8 @@ dependencies = [
  "archrescue-windows-detection",
  "serde",
  "serde_json",
+ "sha2",
+ "windows-sys",
 ]
 
 [[package]]
@@ -76,6 +79,7 @@ dependencies = [
  "archrescue-core",
  "archrescue-storage",
  "serde",
+ "windows-sys",
 ]
 
 [[package]]

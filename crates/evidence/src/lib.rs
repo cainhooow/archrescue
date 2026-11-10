@@ -7,12 +7,15 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
+use archrescue_backup::transaction::TransactionReport;
 use archrescue_backup::BackupResult;
 use archrescue_core::{Error, ErrorKind, Operation, Result, BUILD_ID, VERSION};
 use archrescue_diagnostics::BootReport;
 use archrescue_storage::{safe_existing, Inventory};
 use archrescue_windows_detection::Discovery;
 use serde::{Deserialize, Serialize};
+
+pub mod repair;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Report {
@@ -26,11 +29,32 @@ pub struct Report {
     pub installations: Discovery,
     pub boot: BootReport,
     pub operations: Vec<BackupResult>,
+    #[serde(default)]
+    pub diagnosis: archrescue_diagnostics::recovery::Diagnosis,
+    #[serde(default)]
+    pub transactions: Vec<TransactionReport>,
+    #[serde(default)]
+    pub repair_plans: Vec<repair::RepairPlan>,
+    #[serde(default)]
+    pub repair_attempts: Vec<repair::RepairAttempt>,
+    #[serde(default)]
+    pub decisions: Vec<String>,
+    #[serde(default)]
+    pub session_errors: Vec<Error>,
     pub limitations: Vec<String>,
 }
 
 impl Report {
     pub fn collect(roots: &[PathBuf]) -> Self {
+        Self::collect_with_inventory(roots, archrescue_storage::inventory())
+    }
+
+    pub fn collect_with_inventory(roots: &[PathBuf], inventory: Inventory) -> Self {
+        let installations = archrescue_windows_detection::discover(roots);
+        let boot = archrescue_diagnostics::inspect(roots);
+        let diagnosis =
+            archrescue_diagnostics::recovery::diagnose(&installations, &boot, &inventory);
+
         Self {
             schema_version: 1,
             version: VERSION.into(),
@@ -41,10 +65,16 @@ impl Report {
                 .duration_since(UNIX_EPOCH)
                 .unwrap_or_default()
                 .as_secs(),
-            inventory: archrescue_storage::inventory(),
-            installations: archrescue_windows_detection::discover(roots),
-            boot: archrescue_diagnostics::inspect(roots),
+            inventory,
+            installations,
+            boot,
+            diagnosis,
             operations: vec![],
+            transactions: vec![],
+            repair_plans: vec![],
+            repair_attempts: vec![],
+            decisions: vec![],
+            session_errors: vec![],
             limitations: vec![
                 "No hardware health or bootability verdict is inferred from enumeration".into(),
                 "WinPE RAM-disk exports are volatile; choose a persistent authorized destination"
@@ -81,6 +111,18 @@ impl Report {
                 backup.planned_bytes,
                 verified_files,
                 backup.files.len()
+            ));
+        }
+
+        for backup in &self.transactions {
+            text.push_str(&format!(
+                "Operation {}: {:?}\nAcknowledged {} / {} bytes; verified {} bytes / {} files\n",
+                backup.status.operation_id,
+                backup.status.state,
+                backup.progress.acknowledged_bytes,
+                backup.progress.planned_bytes,
+                backup.progress.verified_bytes,
+                backup.progress.verified_files,
             ));
         }
 

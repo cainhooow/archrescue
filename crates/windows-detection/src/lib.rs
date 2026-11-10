@@ -16,6 +16,10 @@ pub struct Installation {
     pub volume: PathBuf,
     pub architecture: Option<String>,
     pub version: Option<String>,
+    #[serde(default)]
+    pub loader_architecture: Option<String>,
+    #[serde(default)]
+    pub recovery_files: Vec<PathBuf>,
     pub confidence: String,
     pub evidence: Vec<String>,
     pub limitations: Vec<String>,
@@ -24,7 +28,95 @@ pub struct Installation {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Discovery {
     pub installations: Vec<Installation>,
+    #[serde(default)]
+    pub probes: Vec<RootProbe>,
     pub errors: Vec<Error>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ProbeState {
+    Inaccessible,
+    Absent,
+    Incomplete,
+    RunningEnvironment,
+    Candidate,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RootProbe {
+    pub root: PathBuf,
+    pub state: ProbeState,
+    pub windows_old: bool,
+}
+
+fn probe(result: &mut Discovery, root: &Path, state: ProbeState) {
+    result.probes.push(RootProbe {
+        root: root.to_owned(),
+        state,
+        windows_old: safe_existing(&root.join("Windows.old")).is_ok_and(|path| path.is_dir()),
+    });
+}
+
+#[cfg(windows)]
+fn kernel_version(path: &Path) -> Option<String> {
+    use std::{mem::size_of, os::windows::ffi::OsStrExt, ptr};
+
+    use windows_sys::Win32::Storage::FileSystem::{
+        GetFileVersionInfoSizeW, GetFileVersionInfoW, VerQueryValueW, VS_FIXEDFILEINFO,
+    };
+
+    let path = safe_existing(path).ok()?;
+    let path: Vec<_> = path.as_os_str().encode_wide().chain(Some(0)).collect();
+    let mut handle = 0;
+    // SAFETY: the filename is NUL-terminated and the handle output is writable.
+    let length = unsafe { GetFileVersionInfoSizeW(path.as_ptr(), &mut handle) };
+    if !(1..=1024 * 1024).contains(&length) {
+        return None;
+    }
+
+    let mut data = vec![0u8; length as usize];
+    let mut info = ptr::null_mut();
+    let mut info_length = 0;
+    let root = [b'\\' as u16, 0];
+    // SAFETY: the buffer covers the queried resource and both query outputs are writable.
+    let version = unsafe {
+        if GetFileVersionInfoW(path.as_ptr(), 0, length, data.as_mut_ptr().cast()) == 0
+            || VerQueryValueW(
+                data.as_ptr().cast(),
+                root.as_ptr(),
+                &mut info,
+                &mut info_length,
+            ) == 0
+            || info.is_null()
+            || info_length < size_of::<VS_FIXEDFILEINFO>() as u32
+        {
+            return None;
+        }
+
+        let offset = (info as usize).checked_sub(data.as_ptr() as usize)?;
+        if offset.checked_add(size_of::<VS_FIXEDFILEINFO>())? > data.len() {
+            return None;
+        }
+
+        ptr::read_unaligned(info.cast::<VS_FIXEDFILEINFO>())
+    };
+    if version.dwSignature != 0xfeef04bd {
+        return None;
+    }
+
+    Some(format!(
+        "{}.{}.{}.{}",
+        version.dwFileVersionMS >> 16,
+        version.dwFileVersionMS & 0xffff,
+        version.dwFileVersionLS >> 16,
+        version.dwFileVersionLS & 0xffff
+    ))
+}
+
+#[cfg(not(windows))]
+fn kernel_version(_: &Path) -> Option<String> {
+    None
 }
 
 fn marker(path: &Path, signature: &[u8]) -> std::result::Result<bool, Error> {
@@ -76,22 +168,31 @@ pub fn pe_architecture(path: &Path) -> std::result::Result<String, Error> {
 pub fn discover(roots: &[PathBuf]) -> Discovery {
     let mut result = Discovery::default();
 
+    let mut seen = std::collections::HashSet::new();
     for root in roots {
         let root = match safe_existing(root) {
             Ok(path) => path,
             Err(error) => {
                 result.errors.push(error);
+                probe(&mut result, root, ProbeState::Inaccessible);
                 continue;
             }
         };
+        if !seen.insert(root.clone()) {
+            continue;
+        }
 
         let windows = root.join("Windows");
         match windows.try_exists() {
-            Ok(false) => continue,
+            Ok(false) => {
+                probe(&mut result, &root, ProbeState::Absent);
+                continue;
+            }
             Err(error) => {
                 result
                     .errors
                     .push(Error::io("Probe Windows directory", error));
+                probe(&mut result, &root, ProbeState::Inaccessible);
                 continue;
             }
             _ => {}
@@ -106,6 +207,7 @@ pub fn discover(roots: &[PathBuf]) -> Discovery {
                 ErrorKind::Unsupported,
                 "Running Windows/WinPE environment excluded from offline discovery",
             ));
+            probe(&mut result, &root, ProbeState::RunningEnvironment);
             continue;
         }
 
@@ -139,11 +241,25 @@ pub fn discover(roots: &[PathBuf]) -> Discovery {
         };
 
         if valid {
+            probe(&mut result, &root, ProbeState::Candidate);
+            let version = kernel_version(&system.join("ntoskrnl.exe"));
+            let loader_architecture = pe_architecture(&system.join("winload.efi")).ok();
+            let recovery_files = [
+                system.join("Recovery/ReAgent.xml"),
+                system.join("Recovery/Winre.wim"),
+                root.join("Recovery/WindowsRE/Winre.wim"),
+            ]
+            .into_iter()
+            .filter(|path| safe_existing(path).is_ok_and(|path| path.is_file()))
+            .collect();
+
             result.installations.push(Installation {
                 path: windows,
                 volume: root,
                 architecture,
-                version: None,
+                version,
+                loader_architecture,
+                recovery_files,
                 confidence: "candidate: corroborated filesystem markers".into(),
                 evidence: vec![
                     "SYSTEM and SOFTWARE have regf signatures".into(),
@@ -153,10 +269,11 @@ pub fn discover(roots: &[PathBuf]) -> Discovery {
                     "Registry hive contents and kernel signatures are not authenticated; \
                      this is not proof of a healthy or bootable installation"
                         .into(),
-                    "Version/build is unavailable in P0; no running-OS version is substituted"
-                        .into(),
+                    "Version, when present, is the offline kernel file version; registry edition, activation and servicing state are unresolved".into(),
                 ],
             });
+        } else {
+            probe(&mut result, &root, ProbeState::Incomplete);
         }
     }
 

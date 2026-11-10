@@ -10,6 +10,7 @@ use std::{ffi::OsString, path::PathBuf, sync::atomic::AtomicBool};
 
 use archrescue_backup::transaction::{self, TransactionReport};
 use archrescue_core::{Error, ErrorKind, Result, State, BUILD_ID, VERSION};
+use archrescue_evidence::repair;
 
 fn print_json<T: serde::Serialize>(value: &T) -> Result<()> {
     let json = serde_json::to_string_pretty(value)
@@ -75,6 +76,36 @@ fn run() -> Result<()> {
         "boot" if args.len() > 1 => {
             let report = archrescue_diagnostics::inspect(&paths(&args[1..]));
             print_json(&report)?;
+        }
+        "diagnose" if args.len() > 1 => {
+            print_json(&archrescue_evidence::Report::collect(&paths(&args[1..])))?;
+        }
+        "repair-plan" if matches!(args.len(), 4 | 6) => {
+            let paths = paths(&args[1..]);
+            let plan = repair::plan(
+                &paths[0],
+                &paths[1],
+                &paths[2],
+                paths.get(3).map(PathBuf::as_path),
+                paths.get(4).map(PathBuf::as_path),
+            )?;
+            print_json(&plan)?;
+        }
+        "repair-lab" if args.len() == 3 => {
+            let path = archrescue_storage::safe_existing(&PathBuf::from(&args[1]))?;
+            let bytes =
+                std::fs::read(path).map_err(|error| Error::io("Read repair plan", error))?;
+            let plan = serde_json::from_slice(&bytes)
+                .map_err(|error| Error::new(ErrorKind::Validation, error.to_string()))?;
+            let authorization = args[2].to_str().unwrap_or_default();
+            let result = repair::execute(&plan, authorization)?;
+            print_json(&result)?;
+            if !result.postconditions_met {
+                return Err(Error::new(
+                    ErrorKind::Incomplete,
+                    "Verificação após o reparo falhou",
+                ));
+            }
         }
         "browse" if args.len() == 2 => {
             let directory = PathBuf::from(&args[1]);
