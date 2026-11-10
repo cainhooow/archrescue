@@ -98,34 +98,9 @@ fn inspect_boot_file(path: &Path, is_bcd: bool) -> std::result::Result<String, E
             ));
         }
 
-        // P0 deliberately does not mount offline registry hives. bcdedit /enum is read-only.
         #[cfg(windows)]
         {
-            let executable = std::env::var_os("SystemRoot")
-                .map(PathBuf::from)
-                .ok_or_else(|| Error::new(ErrorKind::Environment, "SystemRoot unavailable"))?
-                .join("System32/bcdedit.exe");
-
-            let output = std::process::Command::new(executable)
-                .arg("/store")
-                .arg(&path)
-                .args(["/enum", "all"])
-                .output()
-                .map_err(|error| Error::io("Run read-only BCD inspection", error))?;
-
-            if !output.status.success() || output.stdout.is_empty() {
-                return Err(Error::new(
-                    ErrorKind::Incomplete,
-                    format!("BCD enumeration failed: {}", output.status),
-                ));
-            }
-
-            // Preserve supporting evidence, without interpreting localized strings as health.
-            Ok(format!(
-                "BCD enumeration output (lossy decoding may affect the OEM code page):\n{}\n\
-                 Reference consistency remains unverified.",
-                String::from_utf8_lossy(&output.stdout)
-            ))
+            enumerate_bcd_snapshot(&path, file)
         }
 
         #[cfg(not(windows))]
@@ -152,4 +127,97 @@ fn inspect_boot_file(path: &Path, is_bcd: bool) -> std::result::Result<String, E
                 .into(),
         )
     }
+}
+
+#[cfg(windows)]
+fn enumerate_bcd_snapshot(
+    path: &Path,
+    mut source_file: File,
+) -> std::result::Result<String, Error> {
+    use std::{
+        fs,
+        io::{self, Seek},
+        process::Command,
+    };
+
+    use archrescue_core::Operation;
+    use archrescue_storage::{identity, require_separate};
+
+    const MAX_SNAPSHOT_BYTES: u64 = 64 * 1024 * 1024;
+
+    let source_size = source_file
+        .metadata()
+        .map_err(|error| Error::io("Read source BCD size", error))?
+        .len();
+    if source_size > MAX_SNAPSHOT_BYTES {
+        return Ok("Registry signature present; BCD exceeds the 64 MiB snapshot limit".into());
+    }
+
+    let temporary_root = match safe_existing(&std::env::temp_dir()).and_then(|root| {
+        require_separate(&identity(path)?, &identity(&root)?)?;
+        Ok(root)
+    }) {
+        Ok(root) => root,
+        Err(error) => {
+            return Ok(format!(
+                "Registry signature present; BCD enumeration requires temporary storage on a \
+                 verified separate disk: {error}"
+            ));
+        }
+    };
+
+    let executable = std::env::var_os("SystemRoot")
+        .map(PathBuf::from)
+        .ok_or_else(|| Error::new(ErrorKind::Environment, "SystemRoot unavailable"))?
+        .join("System32/bcdedit.exe");
+
+    let working_directory = temporary_root.join(format!("archrescue-bcd-{}", Operation::new().id));
+    fs::create_dir(&working_directory)
+        .map_err(|error| Error::io("Create isolated BCD workspace", error))?;
+
+    // Even /enum can update the store through registry recovery. Give bcdedit only the copy.
+    let enumeration = (|| {
+        let snapshot_path = working_directory.join("BCD");
+        let mut snapshot_file = File::create_new(&snapshot_path)
+            .map_err(|error| Error::io("Create temporary BCD copy", error))?;
+        source_file
+            .rewind()
+            .map_err(|error| Error::io("Rewind source BCD", error))?;
+        let copied_bytes = io::copy(&mut source_file.take(source_size + 1), &mut snapshot_file)
+            .map_err(|error| Error::io("Copy source BCD for enumeration", error))?;
+        if copied_bytes != source_size {
+            return Err(Error::new(
+                ErrorKind::Integrity,
+                "Source BCD size changed while copying",
+            ));
+        }
+
+        drop(snapshot_file);
+
+        Command::new(executable)
+            .arg("/store")
+            .arg(snapshot_path)
+            .args(["/enum", "all"])
+            .output()
+            .map_err(|error| Error::io("Enumerate temporary BCD copy", error))
+    })();
+
+    let cleanup = fs::remove_dir_all(&working_directory)
+        .map_err(|error| Error::io("Remove isolated BCD workspace", error));
+
+    let output = enumeration?;
+    cleanup?;
+    if !output.status.success() || output.stdout.is_empty() {
+        return Err(Error::new(
+            ErrorKind::Incomplete,
+            format!("BCD enumeration failed: {}", output.status),
+        ));
+    }
+
+    // Preserve supporting evidence without interpreting localized strings as boot health.
+    Ok(format!(
+        "BCD enumeration output from an isolated copy (lossy decoding may affect the OEM code \
+         page):\n{}\nReference consistency remains unverified.",
+        String::from_utf8_lossy(&output.stdout)
+    ))
 }
