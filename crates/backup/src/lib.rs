@@ -4,7 +4,7 @@
 use std::{
     collections::HashSet,
     fs::{self, File, OpenOptions},
-    io::{Read, Write},
+    io::{self, Read, Write},
     path::{Component, Path, PathBuf},
     sync::atomic::{AtomicBool, Ordering},
     time::UNIX_EPOCH,
@@ -400,7 +400,18 @@ pub fn recover(
     selections: &[PathBuf],
     destination: &Path,
     cancel: &AtomicBool,
+    progress: impl FnMut(u64, u64),
+) -> BackupResult {
+    recover_with_writer(root, selections, destination, cancel, progress, File::write)
+}
+
+fn recover_with_writer(
+    root: &Path,
+    selections: &[PathBuf],
+    destination: &Path,
+    cancel: &AtomicBool,
     mut progress: impl FnMut(u64, u64),
+    mut write_destination: impl FnMut(&mut File, &[u8]) -> io::Result<usize>,
 ) -> BackupResult {
     let mut result = BackupResult::default();
     result
@@ -413,7 +424,13 @@ pub fn recover(
         result.planned_bytes = backup_plan.bytes;
 
         result.operation.transition(State::Running)?;
-        execute(&backup_plan, &mut result, cancel, &mut progress)?;
+        execute(
+            &backup_plan,
+            &mut result,
+            cancel,
+            &mut progress,
+            &mut write_destination,
+        )?;
 
         result.operation.transition(State::Verifying)?;
         verify(&backup_plan, &mut result, cancel)?;
@@ -467,6 +484,7 @@ fn execute(
     result: &mut BackupResult,
     cancel: &AtomicBool,
     progress: &mut impl FnMut(u64, u64),
+    write_destination: &mut impl FnMut(&mut File, &[u8]) -> io::Result<usize>,
 ) -> Result<()> {
     revalidate(backup_plan)?;
 
@@ -540,8 +558,7 @@ fn execute(
             let mut offset = 0;
             while offset < bytes_read {
                 check_cancel(cancel)?;
-                let bytes_written = output
-                    .write(&buffer[offset..bytes_read])
+                let bytes_written = write_destination(&mut output, &buffer[offset..bytes_read])
                     .map_err(|error| Error::io("Write destination bytes", error))?;
                 if bytes_written == 0 {
                     return Err(Error::new(

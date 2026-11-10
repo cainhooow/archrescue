@@ -286,25 +286,79 @@ fn partway_conflict_reports_partial_result() {
 }
 
 #[test]
-fn unavailable_destination_never_completes() {
+fn destination_write_error_after_progress_leaves_unverified_partial() {
     let fixture = Fixture::new();
-    fixture.put("a", b"first");
+    let source_data = vec![42; 200_000];
+    fixture.put("a", &source_data);
     fixture.put("b", b"second");
-    let offline = fixture.destination.with_extension("offline");
+    let existing_file = fixture.destination.join("unrelated");
+    fs::write(&existing_file, b"existing destination content").unwrap();
+    let source_path = fixture.root.join("a");
+    let source_hash = Sha256::digest(fs::read(&source_path).unwrap());
+    let first_chunk = 65_536;
+    let mut actual_bytes_written = 0;
+    let mut injected_errors = 0;
+    let mut progress = Vec::new();
 
-    let result = recover(
+    let result = recover_with_writer(
         &fixture.root,
         &["a".into(), "b".into()],
         &fixture.destination,
         &AtomicBool::new(false),
-        |_, _| fs::rename(&fixture.destination, &offline).unwrap(),
-    );
-    fs::rename(offline, &fixture.destination).unwrap();
+        |copied_bytes, planned_bytes| progress.push((copied_bytes, planned_bytes)),
+        |output, buffer| {
+            if actual_bytes_written == first_chunk {
+                injected_errors += 1;
+                return Err(io::Error::other("injected destination write failure"));
+            }
 
+            let bytes_written = output.write(buffer)?;
+            actual_bytes_written += bytes_written;
+
+            Ok(bytes_written)
+        },
+    );
+
+    assert_eq!(injected_errors, 1);
+    assert_eq!(actual_bytes_written, first_chunk);
+    assert_eq!(progress.last(), Some(&(first_chunk as u64, 200_006)));
     assert_eq!(result.operation.state, State::Failed);
-    assert_eq!(result.copied_bytes, 5);
+    assert_eq!(
+        result.operation.transitions,
+        [
+            State::Pending,
+            State::Validating,
+            State::Running,
+            State::Failed
+        ]
+    );
+    assert_eq!(result.operation.errors.len(), 1);
+    let error = &result.operation.errors[0];
+    assert_eq!(error.kind, ErrorKind::Io);
+    assert_eq!(
+        error.context,
+        "Write destination bytes: injected destination write failure"
+    );
+    assert_eq!(result.planned_bytes, 200_006);
+    assert_eq!(result.copied_bytes, first_chunk as u64);
+    assert_eq!(result.files.len(), 1);
+    let partial = &result.files[0];
+    assert_eq!(partial.relative, Path::new("a"));
+    assert_eq!(partial.bytes, first_chunk as u64);
+    assert!(!partial.verified);
+    assert!(partial.sha256.is_none());
+
+    assert_eq!(
+        fs::read(fixture.destination.join("a")).unwrap(),
+        source_data[..first_chunk]
+    );
     assert!(!fixture.destination.join("b").exists());
+    assert_eq!(Sha256::digest(fs::read(source_path).unwrap()), source_hash);
     assert_eq!(fs::read(fixture.root.join("b")).unwrap(), b"second");
+    assert_eq!(
+        fs::read(existing_file).unwrap(),
+        b"existing destination content"
+    );
 }
 
 #[test]
