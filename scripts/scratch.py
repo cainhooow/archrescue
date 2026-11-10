@@ -46,7 +46,7 @@ def check_space(root, budget, reserve):
 
 def write_manifest(root, manifest):
     path = root / (manifest["id"] + ".json")
-    temporary = path.with_suffix(".new")
+    temporary = path.with_suffix(f".{uuid.uuid4().hex}.new")
     with temporary.open("x", encoding="utf-8") as stream:
         json.dump(manifest, stream, indent=2)
         stream.flush()
@@ -64,7 +64,7 @@ def create(root, args):
         if path.is_symlink():
             raise ValueError(f"Manifest is a symbolic link: {path}")
         current = json.loads(path.read_text(encoding="utf-8"))
-        if current["state"] == "active":
+        if current["state"] in ("active", "cleaning"):
             raise ValueError(f"An earlier run still owns its scratch: {path}")
 
     run_id = uuid.uuid4().hex
@@ -117,13 +117,18 @@ def close(root, args):
         return
 
     directory = root / run_id
-    metadata = directory.lstat()
-    if (
-        manifest["scratch"] != str(directory)
-        or manifest["owner_uid"] != os.getuid()
-        or (metadata.st_dev, metadata.st_ino) != (manifest["device"], manifest["inode"])
-        or not stat.S_ISDIR(metadata.st_mode)
-    ):
+    if manifest["scratch"] != str(directory) or manifest["owner_uid"] != os.getuid():
+        raise ValueError("Scratch path identity changed")
+    try:
+        metadata = directory.lstat()
+    except FileNotFoundError:
+        if manifest["state"] != "cleaning" or not args.cleanup:
+            raise
+        manifest.update(state="cleaned", allocated_bytes=0)
+        write_manifest(manifests, manifest)
+        return
+
+    if (metadata.st_dev, metadata.st_ino) != (manifest["device"], manifest["inode"]) or not stat.S_ISDIR(metadata.st_mode):
         raise ValueError("Scratch path identity changed")
 
     paths = list(directory.rglob("*"))
@@ -150,9 +155,15 @@ def close(root, args):
         if not retained.is_absolute() or retained.is_relative_to(directory) or not retained.exists():
             raise ValueError(f"Required evidence has not been promoted: {output}")
     verify_inactive(directory, paths)
-    manifest["created_paths"] = [str(item.relative_to(directory)) for item in paths]
+    if manifest["state"] != "cleaning":
+        manifest.update(
+            state="cleaning",
+            created_paths=[str(item.relative_to(directory)) for item in paths],
+            allocated_before_cleanup=size,
+        )
+        write_manifest(manifests, manifest)
     shutil.rmtree(directory)
-    manifest.update(state="cleaned", allocated_before_cleanup=size, allocated_bytes=0)
+    manifest.update(state="cleaned", allocated_bytes=0)
     write_manifest(manifests, manifest)
 
 
