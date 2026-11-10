@@ -26,6 +26,10 @@ pub const HELP: &str = "Comandos (caminhos absolutos):
   boot RAIZ...
   browse DIRETÓRIO
   backup ORIGEM DESTINO SELEÇÃO_RELATIVA...
+  backup-start ORIGEM DESTINO SELEÇÃO_RELATIVA...
+  backup-list DESTINO
+  backup-resume ORIGEM DIRETÓRIO_DA_OPERAÇÃO
+  backup-verify ORIGEM DIRETÓRIO_DA_OPERAÇÃO
   report DESTINO [RAIZ...]
 
 Backup: rejeita o mesmo volume/disco, links e conflitos; copia apenas conteúdo e verifica SHA-256.

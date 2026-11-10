@@ -492,3 +492,131 @@ fn overlapping_selections_are_rejected_without_a_collision() {
     assert_eq!(result.copied_bytes, 0);
     assert_eq!(fs::read_dir(&fixture.destination).unwrap().count(), 0);
 }
+
+#[test]
+fn transaction_restarts_partial_and_rechecks_published_files() {
+    let fixture = Fixture::new();
+    fixture.put("a-empty", b"");
+    fixture.put("b-ação", &vec![13; 300_000]);
+    fs::create_dir(fixture.root.join("empty-directory")).unwrap();
+    let cancel = AtomicBool::new(false);
+    let selections = ["a-empty".into(), "b-ação".into(), "empty-directory".into()];
+    let directory =
+        transaction::prepare(&fixture.root, &selections, &fixture.destination, &cancel).unwrap();
+
+    let stopped = transaction::resume(&fixture.root, &directory, &cancel, |progress| {
+        if progress.acknowledged_bytes >= 65_536 {
+            cancel.store(true, Ordering::Relaxed);
+        }
+    })
+    .unwrap();
+
+    assert_eq!(stopped.status.state, State::Cancelled);
+    assert_eq!(stopped.progress.verified_files, 1);
+    assert!(directory.join("payload/a-empty").is_file());
+    assert!(!directory.join("payload/b-ação").exists());
+    assert_eq!(
+        fs::metadata(directory.join("journal/1.part"))
+            .unwrap()
+            .len(),
+        65_536
+    );
+
+    cancel.store(false, Ordering::Relaxed);
+    let resumed = transaction::resume(&fixture.root, &directory, &cancel, |_| {}).unwrap();
+
+    assert!(resumed.status.resumed);
+    assert_eq!(resumed.status.state, State::Completed);
+    assert_eq!(resumed.progress.skipped_files, 1);
+    assert_eq!(resumed.progress.verified_bytes, 300_000);
+    assert!(directory.join("payload/empty-directory").is_dir());
+    assert_eq!(
+        fs::read(directory.join("payload/b-ação")).unwrap(),
+        vec![13; 300_000]
+    );
+    assert!(!directory.join("journal/1.part").exists());
+
+    transaction::verify(&fixture.root, &directory, &cancel).unwrap();
+    fs::write(directory.join("payload/b-ação"), vec![14; 300_000]).unwrap();
+
+    assert!(transaction::verify(&fixture.root, &directory, &cancel).is_err());
+    let failed = transaction::resume(&fixture.root, &directory, &cancel, |_| {}).unwrap();
+    assert_eq!(failed.status.state, State::Failed);
+    assert_eq!(
+        fs::read(directory.join("payload/b-ação")).unwrap(),
+        vec![14; 300_000]
+    );
+}
+
+#[test]
+fn transaction_refuses_changed_source_destination_conflict_and_corrupt_manifest() {
+    let fixture = Fixture::new();
+    fixture.put("data", b"original");
+    let cancel = AtomicBool::new(false);
+    let directory = transaction::prepare(
+        &fixture.root,
+        &["data".into()],
+        &fixture.destination,
+        &cancel,
+    )
+    .unwrap();
+
+    fixture.put("data", b"modified");
+    let changed = transaction::resume(&fixture.root, &directory, &cancel, |_| {}).unwrap();
+    assert_eq!(changed.status.state, State::Failed);
+    assert_eq!(
+        changed.files[0].state,
+        transaction::FileState::SourceChanged
+    );
+    assert!(!directory.join("payload/data").exists());
+
+    fixture.put("data", b"original");
+    fs::write(directory.join("payload/data"), b"original").unwrap();
+    let conflict = transaction::resume(&fixture.root, &directory, &cancel, |_| {}).unwrap();
+    assert_eq!(conflict.status.state, State::Failed);
+    assert_eq!(
+        conflict.files[0].state,
+        transaction::FileState::DestinationConflict
+    );
+    assert_eq!(
+        fs::read(directory.join("payload/data")).unwrap(),
+        b"original"
+    );
+
+    fs::write(directory.join("manifest.json"), b"{\"sha256\":").unwrap();
+    assert!(transaction::resume(&fixture.root, &directory, &cancel, |_| {}).is_err());
+    assert!(transaction::checkpoints(&fixture.destination).unwrap()[0]
+        .error
+        .is_some());
+}
+
+#[test]
+fn transaction_rejects_duplicate_selection_and_moved_operation() {
+    let fixture = Fixture::new();
+    fixture.put("data", b"original");
+    let cancel = AtomicBool::new(false);
+
+    assert!(transaction::prepare(
+        &fixture.root,
+        &["data".into(), "data".into()],
+        &fixture.destination,
+        &cancel
+    )
+    .is_err());
+    assert!(transaction::prepare(&fixture.root, &["data".into()], &fixture.root, &cancel).is_err());
+
+    let directory = transaction::prepare(
+        &fixture.root,
+        &["data".into()],
+        &fixture.destination,
+        &cancel,
+    )
+    .unwrap();
+    let other_parent = fixture.destination.join("different");
+    fs::create_dir(&other_parent).unwrap();
+    let moved = other_parent.join(directory.file_name().unwrap());
+    fs::rename(directory, &moved).unwrap();
+
+    assert!(transaction::resume(&fixture.root, &moved, &cancel, |_| {}).is_err());
+    assert!(!moved.join("payload/data").exists());
+}

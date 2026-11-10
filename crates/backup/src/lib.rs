@@ -15,6 +15,8 @@ use archrescue_storage::{identity, require_separate, safe_existing, space, Volum
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
+pub mod transaction;
+
 const RESERVED_DEVICE_NAMES: [&str; 22] = [
     "CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8",
     "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
@@ -172,6 +174,25 @@ pub fn plan(
     destination: &Path,
     cancel: &AtomicBool,
 ) -> Result<Plan> {
+    let backup_plan = scan(root, selections, destination, cancel, true)?;
+
+    if backup_plan.bytes > space(&backup_plan.destination)?.available {
+        return Err(Error::new(
+            ErrorKind::Validation,
+            "Insufficient destination free space",
+        ));
+    }
+
+    Ok(backup_plan)
+}
+
+fn scan(
+    root: &Path,
+    selections: &[PathBuf],
+    destination: &Path,
+    cancel: &AtomicBool,
+    check_conflicts: bool,
+) -> Result<Plan> {
     check_cancel(cancel)?;
 
     let root = safe_existing(root)?;
@@ -218,14 +239,14 @@ pub fn plan(
             }
         }
 
-        collect(&mut backup_plan, selection, &mut seen, cancel, 0)?;
-    }
-
-    if backup_plan.bytes > space(&backup_plan.destination)?.available {
-        return Err(Error::new(
-            ErrorKind::Validation,
-            "Insufficient destination free space",
-        ));
+        collect(
+            &mut backup_plan,
+            selection,
+            &mut seen,
+            cancel,
+            0,
+            check_conflicts,
+        )?;
     }
 
     Ok(backup_plan)
@@ -237,6 +258,7 @@ fn collect(
     seen: &mut HashSet<String>,
     cancel: &AtomicBool,
     depth: usize,
+    check_conflicts: bool,
 ) -> Result<()> {
     check_cancel(cancel)?;
     portable_relative(relative)?;
@@ -264,16 +286,18 @@ fn collect(
         ));
     }
 
-    let target = plan.destination.join(relative);
-    match fs::symlink_metadata(&target) {
-        Ok(_) => {
-            return Err(Error::new(
-                ErrorKind::Conflict,
-                "Destination entry already exists",
-            ))
+    if check_conflicts {
+        let target = plan.destination.join(relative);
+        match fs::symlink_metadata(&target) {
+            Ok(_) => {
+                return Err(Error::new(
+                    ErrorKind::Conflict,
+                    "Destination entry already exists",
+                ))
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(Error::io("Check destination conflict", error)),
         }
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-        Err(error) => return Err(Error::io("Check destination conflict", error)),
     }
 
     let metadata =
@@ -291,6 +315,7 @@ fn collect(
                 seen,
                 cancel,
                 depth + 1,
+                check_conflicts,
             )?;
         }
     } else if metadata.is_file() {

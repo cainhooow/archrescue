@@ -44,6 +44,40 @@ pub struct VolumeIdentity {
     pub physical_disks: Vec<u32>,
 }
 
+/// On-disk identity and a directory within the filesystem. Runtime disk numbers and
+/// mount-manager names belong to the current session and are queried separately.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RecoveryLocation {
+    pub filesystem_id: String,
+    pub directory: PathBuf,
+}
+
+pub fn recovery_location(path: &Path) -> Result<RecoveryLocation> {
+    let path = safe_existing(path)?;
+
+    #[cfg(windows)]
+    return windows::recovery_location(&path);
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+
+        let metadata =
+            fs::metadata(&path).map_err(|error| Error::io("Read directory identity", error))?;
+
+        Ok(RecoveryLocation {
+            filesystem_id: format!("unix-dev:{};inode:{}", metadata.dev(), metadata.ino()),
+            directory: path,
+        })
+    }
+
+    #[cfg(not(any(windows, unix)))]
+    Err(Error::new(
+        ErrorKind::Unsupported,
+        format!("Persistent identity unavailable for {}", path.display()),
+    ))
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Volume {
     pub identity: String,
@@ -57,6 +91,8 @@ pub struct Volume {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Partition {
     pub number: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
     pub offset: u64,
     pub length: u64,
     pub kind: String,

@@ -8,6 +8,7 @@ mod views;
 
 use std::{ffi::OsString, path::PathBuf, sync::atomic::AtomicBool};
 
+use archrescue_backup::transaction::{self, TransactionReport};
 use archrescue_core::{Error, ErrorKind, Result, State, BUILD_ID, VERSION};
 
 fn print_json<T: serde::Serialize>(value: &T) -> Result<()> {
@@ -20,6 +21,15 @@ fn print_json<T: serde::Serialize>(value: &T) -> Result<()> {
 
 fn paths(args: &[OsString]) -> Vec<PathBuf> {
     args.iter().map(PathBuf::from).collect()
+}
+
+fn transaction_result(report: &TransactionReport) -> Result<()> {
+    print_json(report)?;
+
+    match &report.status.error {
+        Some(error) => Err(error.clone()),
+        None => Ok(()),
+    }
 }
 
 fn main() {
@@ -96,6 +106,32 @@ fn run() -> Result<()> {
                 ));
             }
         }
+        "backup-start" if args.len() > 3 => {
+            let cancel = AtomicBool::new(false);
+            let source = PathBuf::from(&args[1]);
+            let destination = PathBuf::from(&args[2]);
+            let directory =
+                transaction::prepare(&source, &paths(&args[3..]), &destination, &cancel)?;
+            eprintln!("Checkpoint: {}", directory.display());
+
+            let report = transaction::resume(&source, &directory, &cancel, transaction_progress)?;
+            transaction_result(&report)?;
+        }
+        "backup-list" if args.len() == 2 => {
+            print_json(&transaction::checkpoints(&PathBuf::from(&args[1]))?)?;
+        }
+        "backup-resume" | "backup-verify" if args.len() == 3 => {
+            let cancel = AtomicBool::new(false);
+            let source = PathBuf::from(&args[1]);
+            let directory = PathBuf::from(&args[2]);
+            let report = if command == "backup-resume" {
+                transaction::resume(&source, &directory, &cancel, transaction_progress)?
+            } else {
+                transaction::verify(&source, &directory, &cancel)?
+            };
+
+            transaction_result(&report)?;
+        }
         "report" if args.len() > 1 => {
             let report = archrescue_evidence::Report::collect(&paths(&args[2..]));
             let output = archrescue_evidence::export(&report, &PathBuf::from(&args[1]))?;
@@ -111,4 +147,19 @@ fn run() -> Result<()> {
     }
 
     Ok(())
+}
+
+fn transaction_progress(progress: &transaction::Progress) {
+    if progress.acknowledged_bytes.is_multiple_of(16 * 1024 * 1024)
+        || progress.verified_bytes == progress.planned_bytes
+    {
+        eprintln!(
+            "{} | {} | gravados {}/{} bytes | verificados {} bytes",
+            progress.operation_id,
+            progress.stage,
+            progress.acknowledged_bytes,
+            progress.planned_bytes,
+            progress.verified_bytes
+        );
+    }
 }

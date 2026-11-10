@@ -129,6 +129,17 @@ fn value<T: Copy>(data: &[u8], offset: usize) -> Result<T> {
 }
 
 fn extents(volume: &str) -> Result<Vec<u32>> {
+    let mut disks: Vec<_> = volume_extents(volume)?
+        .into_iter()
+        .map(|extent| extent.DiskNumber)
+        .collect();
+    disks.sort();
+    disks.dedup();
+
+    Ok(disks)
+}
+
+fn volume_extents(volume: &str) -> Result<Vec<DISK_EXTENT>> {
     let handle = open(volume.trim_end_matches('\\'))?;
     let data = query(&handle, IOCTL_VOLUME_GET_VOLUME_DISK_EXTENTS, &[])?;
     let count = value::<u32>(&data, 0)? as usize;
@@ -140,25 +151,22 @@ fn extents(volume: &str) -> Result<Vec<u32>> {
         ));
     }
 
-    let mut disks = Vec::new();
+    let mut extents = Vec::new();
     for index in 0..count {
-        let extent: DISK_EXTENT = value(
+        extents.push(value(
             &data,
             offset_of!(VOLUME_DISK_EXTENTS, Extents) + index * size_of::<DISK_EXTENT>(),
-        )?;
-        disks.push(extent.DiskNumber);
+        )?);
     }
 
-    disks.sort();
-    disks.dedup();
-
-    Ok(disks)
+    Ok(extents)
 }
 
-pub fn identity(path: &Path) -> Result<VolumeIdentity> {
+fn mount_and_volume(path: &Path) -> Result<(PathBuf, String)> {
     let mut mount_path = vec![0u16; 32768];
     let mut volume_name = vec![0u16; 1024];
 
+    // SAFETY: both output buffers are writable and the path is NUL-terminated.
     unsafe {
         if GetVolumePathNameW(
             wide(path).as_ptr(),
@@ -179,12 +187,89 @@ pub fn identity(path: &Path) -> Result<VolumeIdentity> {
         }
     }
 
-    let volume = string(&volume_name);
+    let mount_path = std::ffi::OsString::from_wide(
+        &mount_path[..mount_path
+            .iter()
+            .position(|&unit| unit == 0)
+            .unwrap_or(mount_path.len())],
+    );
+
+    Ok((mount_path.into(), string(&volume_name)))
+}
+
+pub fn identity(path: &Path) -> Result<VolumeIdentity> {
+    let (_, volume) = mount_and_volume(path)?;
     let physical_disks = extents(&volume)?;
 
     Ok(VolumeIdentity {
         volume,
         physical_disks,
+    })
+}
+
+pub fn recovery_location(path: &Path) -> Result<RecoveryLocation> {
+    let (mount_path, volume) = mount_and_volume(path)?;
+    let extents = volume_extents(&volume)?;
+    let [extent] = extents.as_slice() else {
+        return Err(Error::new(
+            ErrorKind::Unsupported,
+            "Persistent recovery requires a single partition extent",
+        ));
+    };
+
+    let disk = open(&format!(r"\\.\PhysicalDrive{}", extent.DiskNumber))?;
+    let layout = query(&disk, IOCTL_DISK_GET_DRIVE_LAYOUT_EX, &[])?;
+    let layout = crate::layout::parse(&layout, None)?;
+    let disk_id = layout
+        .identity
+        .filter(|id| id != "mbr:00000000" && id != "gpt:00000000-0000-0000-0000-000000000000")
+        .ok_or_else(|| Error::new(ErrorKind::Unsupported, "Missing on-disk partition table ID"))?;
+    let partition = layout
+        .partitions
+        .iter()
+        .find(|partition| {
+            i64::try_from(partition.offset) == Ok(extent.StartingOffset)
+                && i64::try_from(partition.length) == Ok(extent.ExtentLength)
+        })
+        .ok_or_else(|| Error::new(ErrorKind::Unsupported, "Volume is not a basic partition"))?;
+
+    let mut serial = 0;
+    let mut filesystem = [0u16; 256];
+    // SAFETY: volume is terminated and both requested outputs are writable.
+    if unsafe {
+        GetVolumeInformationW(
+            wide(&volume).as_ptr(),
+            null_mut(),
+            0,
+            &mut serial,
+            null_mut(),
+            null_mut(),
+            filesystem.as_mut_ptr(),
+            filesystem.len() as u32,
+        )
+    } == 0
+    {
+        return Err(error("Read filesystem serial for recovery"));
+    }
+
+    let mount_path = safe_existing(&mount_path)?;
+    let directory = path.strip_prefix(mount_path).map_err(|_| {
+        Error::new(
+            ErrorKind::Validation,
+            "Cannot identify path relative to volume",
+        )
+    })?;
+
+    Ok(RecoveryLocation {
+        filesystem_id: format!(
+            "{disk_id};{};{};{};{:08x};{}",
+            partition.id.as_deref().unwrap_or(&partition.kind),
+            partition.offset,
+            partition.length,
+            serial,
+            string(&filesystem)
+        ),
+        directory: directory.into(),
     })
 }
 

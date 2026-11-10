@@ -136,6 +136,14 @@ pub fn parse(bytes: &[u8], capacity: Option<u64>) -> Result<Layout> {
 
         result.partitions.push(Partition {
             number: u32_at(entry, offset_of!(PARTITION_INFORMATION_EX, PartitionNumber))?,
+            id: if entry_style == 1 {
+                Some(guid(
+                    entry,
+                    partition_info_offset + offset_of!(PARTITION_INFORMATION_GPT, PartitionId),
+                )?)
+            } else {
+                None
+            },
             offset: offset as u64,
             length: length as u64,
             efi: kind == "c12a7328-f81f-11d2-ba4b-00a0c93ec93b" || kind == "mbr:ef",
