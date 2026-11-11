@@ -21,6 +21,8 @@ const PRESERVATION: usize = 235;
 const PLAN: usize = 236;
 const SAVE: usize = 237;
 const HANDOFF: usize = 238;
+const MEDIA_LABEL: usize = 246;
+const BACKUP_LABEL: usize = 247;
 
 #[derive(Default)]
 pub struct Deployment {
@@ -36,13 +38,21 @@ pub enum Update {
 }
 
 pub unsafe fn controls(hwnd: HWND, font: HFONT) -> Result<()> {
-    for (id, hint) in [
-        (MEDIA, "Imagem WIM/ESD ou raiz da mídia montada"),
+    for (id, label, caption, hint) in [
+        (
+            MEDIA,
+            MEDIA_LABEL,
+            "Mídia",
+            "Imagem WIM/ESD ou raiz da mídia montada",
+        ),
         (
             PRESERVATION,
+            BACKUP_LABEL,
+            "Backup verificado",
             "Backup independente (pasta da operação, opcional para inspeção)",
         ),
     ] {
+        add(hwnd, label, "STATIC", caption, 0, font)?;
         add(
             hwnd,
             id,
@@ -105,6 +115,19 @@ pub unsafe fn reference(hwnd: HWND, app: &App) -> Option<(Media, archrescue_depl
     Some((media.clone(), image.clone()))
 }
 
+pub fn form_label(id: usize) -> bool {
+    matches!(id, MEDIA_LABEL | BACKUP_LABEL)
+}
+
+pub fn empty_choice(id: usize) -> &'static str {
+    match id {
+        IMAGE_INDEX => "Índice da imagem",
+        DISK => "Disco GPT",
+        MODE => "Modo",
+        _ => "Selecione uma opção",
+    }
+}
+
 pub fn primary(id: usize) -> bool {
     matches!(id, INSPECT | PLAN | HANDOFF)
 }
@@ -112,15 +135,18 @@ pub fn primary(id: usize) -> bool {
 pub unsafe fn layout(hwnd: HWND, area: &super::layout::Layout, section: usize) {
     let x = area.left();
     let width = area.body_width();
-    place(hwnd, MEDIA, x, 108, width - 137, 30);
+    place(hwnd, MEDIA_LABEL, x, 113, 62, 22);
+    place(hwnd, MEDIA, x + 62, 108, width - 199, 30);
     place(hwnd, INSPECT, x + width - 129, 108, 129, 30);
     place(hwnd, IMAGE_INDEX, x, 145, 144, 250);
     place(hwnd, DISK, x + 152, 145, width - 152, 250);
     place(hwnd, MODE, x, 184, 211, 180);
     if section == RESTORE {
-        place(hwnd, PRESERVATION, x, 108, width, 30);
+        place(hwnd, BACKUP_LABEL, x, 113, 128, 22);
+        place(hwnd, PRESERVATION, x + 128, 108, width - 128, 30);
     } else {
-        place(hwnd, PRESERVATION, x + 219, 184, width - 219, 30);
+        place(hwnd, BACKUP_LABEL, x + 221, 189, 126, 22);
+        place(hwnd, PRESERVATION, x + 347, 184, width - 347, 30);
     }
     place(hwnd, PLAN, x, area.actions(), 155, 32);
     place(hwnd, SAVE, x + 163, area.actions(), 157, 32);
@@ -130,9 +156,19 @@ pub unsafe fn layout(hwnd: HWND, area: &super::layout::Layout, section: usize) {
 pub unsafe fn render(hwnd: HWND, app: &App) -> bool {
     let deployment = app.section == DEPLOY;
     let handoff = app.section == RESTORE;
-    for id in [MEDIA, INSPECT, IMAGE_INDEX, DISK, MODE, PLAN, SAVE] {
+    for id in [
+        MEDIA,
+        MEDIA_LABEL,
+        INSPECT,
+        IMAGE_INDEX,
+        DISK,
+        MODE,
+        PLAN,
+        SAVE,
+    ] {
         show(hwnd, id, deployment);
     }
+    show(hwnd, BACKUP_LABEL, deployment || handoff);
     show(hwnd, PRESERVATION, deployment || handoff);
     show(hwnd, HANDOFF, handoff);
     for id in [

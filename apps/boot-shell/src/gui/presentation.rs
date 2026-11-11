@@ -139,7 +139,7 @@ pub unsafe fn list_item(item: &DRAWITEMSTRUCT, theme: &Theme) {
     let label = if item.itemID == u32::MAX {
         match item.CtlID as usize {
             pages::ROOT => "Selecione a origem".to_owned(),
-            _ => "Selecione uma opção".to_owned(),
+            id => deployment::empty_choice(id).to_owned(),
         }
     } else {
         let (measure, read) = if combo {

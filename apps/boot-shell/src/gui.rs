@@ -60,6 +60,9 @@ const VERIFY: usize = 218;
 const REPAIR: usize = 219;
 const ESP: usize = 220;
 const BACKUP_RESULTS: usize = 221;
+const SOURCE_LABEL: usize = 222;
+const DESTINATION_LABEL: usize = 223;
+const ESP_LABEL: usize = 224;
 
 const DASHBOARD: usize = 0;
 const DIAGNOSIS: usize = 1;
@@ -212,14 +215,15 @@ unsafe fn render(hwnd: HWND, app: &App) {
     show(hwnd, FILES, files);
     show(hwnd, CONTENT, !files && app.section != DASHBOARD);
     show(hwnd, ESP, repair);
-    show(
-        hwnd,
-        DEST,
-        protect
-            || repair
-            || report_stage
-            || matches!(app.section, deployment::DEPLOY | deployment::RESTORE),
-    );
+    show(hwnd, ESP_LABEL, repair);
+    show(hwnd, SOURCE_LABEL, protect);
+    let destination = protect
+        || repair
+        || report_stage
+        || matches!(app.section, deployment::DEPLOY | deployment::RESTORE);
+    for id in [DESTINATION_LABEL, DEST] {
+        show(hwnd, id, destination);
+    }
     for id in [ADDRESS, OPEN, UP, PREVIEW, COPY, CHECKPOINTS, RESUME] {
         show(hwnd, id, protect);
     }
@@ -1033,7 +1037,21 @@ unsafe extern "system" fn procedure(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM
         msg,
         WM_CTLCOLORSTATIC | WM_CTLCOLOREDIT | WM_CTLCOLORLISTBOX
     ) {
-        SetTextColor(wp as HDC, theme::TEXT);
+        let id = GetDlgCtrlID(lp as HWND) as usize;
+        let is_form_label = matches!(id, SOURCE_LABEL | DESTINATION_LABEL | ESP_LABEL)
+            || deployment::form_label(id);
+        SetTextColor(
+            wp as HDC,
+            if is_form_label {
+                theme::MUTED
+            } else {
+                theme::TEXT
+            },
+        );
+        if is_form_label {
+            SetBkColor(wp as HDC, theme::BACKGROUND);
+            return state.theme.background as isize;
+        }
         SetBkColor(wp as HDC, theme::PANEL);
         return state.theme.panel as isize;
     }
@@ -1230,6 +1248,7 @@ pub fn run() -> Result<()> {
             add(hwnd, id, "BUTTON", label, WS_TABSTOP, font)?;
         }
 
+        add(hwnd, SOURCE_LABEL, "STATIC", "Origem", 0, font)?;
         add(
             hwnd,
             ADDRESS,
@@ -1238,6 +1257,7 @@ pub fn run() -> Result<()> {
             WS_TABSTOP | WS_BORDER | ES_AUTOHSCROLL as u32,
             font,
         )?;
+        add(hwnd, DESTINATION_LABEL, "STATIC", "Destino", 0, font)?;
         add(
             hwnd,
             DEST,
@@ -1246,6 +1266,7 @@ pub fn run() -> Result<()> {
             WS_TABSTOP | WS_BORDER | ES_AUTOHSCROLL as u32,
             font,
         )?;
+        add(hwnd, ESP_LABEL, "STATIC", "Raiz da partição EFI", 0, font)?;
         add(
             hwnd,
             ESP,

@@ -24,6 +24,7 @@ pub struct Theme {
     pub heading: HFONT,
     pub emphasis: HFONT,
     pub panel: HBRUSH,
+    pub background: HBRUSH,
 }
 
 impl Theme {
@@ -41,11 +42,18 @@ impl Theme {
             heading: font(&face, 29, 600),
             emphasis: font(&face, 17, 600),
             panel: CreateSolidBrush(PANEL),
+            background: CreateSolidBrush(BACKGROUND),
         };
 
-        if [theme.body, theme.heading, theme.emphasis, theme.panel]
-            .iter()
-            .any(|handle| handle.is_null())
+        if [
+            theme.body,
+            theme.heading,
+            theme.emphasis,
+            theme.panel,
+            theme.background,
+        ]
+        .iter()
+        .any(|handle| handle.is_null())
         {
             return Err(os_error("Create GDI theme"));
         }
@@ -56,9 +64,15 @@ impl Theme {
 
 impl Drop for Theme {
     fn drop(&mut self) {
-        // SAFETY: all five resources are owned here and no child windows remain.
+        // SAFETY: all resources are owned here and no child windows remain.
         unsafe {
-            for handle in [self.body, self.heading, self.emphasis, self.panel] {
+            for handle in [
+                self.body,
+                self.heading,
+                self.emphasis,
+                self.panel,
+                self.background,
+            ] {
                 if !handle.is_null() {
                     DeleteObject(handle);
                 }

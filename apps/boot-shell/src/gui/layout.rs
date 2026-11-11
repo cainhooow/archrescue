@@ -73,15 +73,18 @@ pub unsafe fn arrange(hwnd: HWND, section: usize) {
     place(hwnd, TECHNICIAN, area.width - 176, 22, 154, 34);
     place(hwnd, CONSOLE, x + 228, area.actions(), 204, 32);
 
-    place(hwnd, ADDRESS, x, 108, width - 277, 30);
+    place(hwnd, SOURCE_LABEL, x, 113, 62, 22);
+    place(hwnd, ADDRESS, x + 62, 108, width - 339, 30);
     place(hwnd, OPEN, x + width - 269, 108, 70, 30);
     place(hwnd, UP, x + width - 191, 108, 70, 30);
     place(hwnd, BACKUP_RESULTS, x + width - 113, 108, 113, 30);
     if section == BACKUP {
         place(hwnd, pages::PAGE_HINT, x, 143, width, 22);
     }
-    place(hwnd, ESP, x, 108, width, 30);
-    place(hwnd, DEST, x, area.destination(), width, 30);
+    place(hwnd, ESP_LABEL, x, 113, 148, 22);
+    place(hwnd, ESP, x + 148, 108, width - 148, 30);
+    place(hwnd, DESTINATION_LABEL, x, area.destination() + 5, 62, 22);
+    place(hwnd, DEST, x + 62, area.destination(), width - 62, 30);
 
     let top = Layout::body_top(section);
     let bottom = area.body_bottom(section);

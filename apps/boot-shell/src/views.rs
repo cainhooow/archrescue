@@ -96,7 +96,7 @@ pub fn session(report: &Report, technician: bool) -> String {
     let mut text = String::from("RELATAR SESSÃO\n\nUse um destino persistente em disco separado para exportar JSON e texto.\n\n");
     let _ = writeln!(
         text,
-        "{} evidências de inicialização · {} análises de integridade
+        "Evidências de inicialização: {} · Análises de integridade: {}
 {} resultados de backup · {} planos de reparo · {} erros na sessão",
         report.diagnosis.findings.len(),
         report.integrity.len(),
