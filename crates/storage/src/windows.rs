@@ -599,3 +599,29 @@ unsafe fn read_volume(volume_name: &[u16]) -> Volume {
 
     volume
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+pub enum DiskHealth {
+    NoFailurePredicted,
+    FailurePredicted,
+    Unknown,
+}
+
+pub fn disk_health(device_path: &str) -> DiskHealth {
+    let prediction = open(device_path)
+        .and_then(|handle| query(&handle, IOCTL_STORAGE_PREDICT_FAILURE, &[]))
+        .and_then(|data| value::<u32>(&data, 0));
+
+    match prediction {
+        Ok(0) => DiskHealth::NoFailurePredicted,
+        Ok(_) => DiskHealth::FailurePredicted,
+        Err(_) => DiskHealth::Unknown,
+    }
+}
+
+pub fn require_writable_disk(device_path: &str) -> Result<()> {
+    let disk = open(device_path)?;
+    query(&disk, IOCTL_DISK_IS_WRITABLE, &[])?;
+
+    Ok(())
+}

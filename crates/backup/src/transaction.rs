@@ -271,6 +271,41 @@ pub fn manifest(directory: &Path) -> Result<BackupManifest> {
     Ok(manifest)
 }
 
+/// Verify the selected payload against its manifest without opening the original source.
+pub fn verify_payload(directory: &Path, cancel: &AtomicBool) -> Result<BackupManifest> {
+    let directory = safe_existing(directory)?;
+    let manifest = manifest(&directory)?;
+    let payload = safe_existing(&directory.join("payload"))?;
+    let volume = identity(&directory)?;
+
+    if !payload.is_dir() || identity(&payload)?.volume != volume.volume {
+        return Err(location_changed());
+    }
+
+    let mut total = 0u64;
+    for entry in &manifest.files {
+        check_cancel(cancel)?;
+        verify_file(&payload.join(&entry.relative), entry, &volume, cancel)?;
+        total = total
+            .checked_add(entry.bytes)
+            .ok_or_else(|| changed("Tamanho do backup excedido"))?;
+    }
+
+    for entry in &manifest.directories {
+        check_cancel(cancel)?;
+        let directory = safe_existing(&payload.join(entry))?;
+        if !directory.is_dir() || identity(&directory)?.volume != volume.volume {
+            return Err(location_changed());
+        }
+    }
+
+    if total != manifest.planned_bytes {
+        return Err(changed("Tamanho do backup diverge do manifesto"));
+    }
+
+    Ok(manifest)
+}
+
 pub fn checkpoints(destination: &Path) -> Result<Vec<CheckpointEntry>> {
     let destination = safe_existing(destination)?;
     let mut entries = Vec::new();

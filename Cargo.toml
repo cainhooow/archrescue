@@ -20,6 +20,7 @@ archrescue-windows-detection = { path = "crates/windows-detection" }
 archrescue-diagnostics = { path = "crates/diagnostics" }
 archrescue-backup = { path = "crates/backup" }
 archrescue-evidence = { path = "crates/evidence" }
+archrescue-deployment = { path = "crates/deployment" }
 
 [profile.release]
 lto = true

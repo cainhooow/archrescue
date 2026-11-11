@@ -14,3 +14,4 @@ archrescue-windows-detection.workspace = true
 archrescue-diagnostics.workspace = true
 archrescue-backup.workspace = true
 archrescue-evidence.workspace = true
+archrescue-deployment.workspace = true

@@ -21,6 +21,7 @@ version = "0.0.1"
 dependencies = [
  "archrescue-backup",
  "archrescue-core",
+ "archrescue-deployment",
  "archrescue-diagnostics",
  "archrescue-evidence",
  "archrescue-storage",
@@ -35,6 +36,20 @@ name = "archrescue-core"
 version = "0.0.1"
 dependencies = [
  "serde",
+]
+
+[[package]]
+name = "archrescue-deployment"
+version = "0.0.1"
+dependencies = [
+ "archrescue-backup",
+ "archrescue-core",
+ "archrescue-storage",
+ "archrescue-windows-detection",
+ "serde",
+ "serde_json",
+ "sha2",
+ "windows-sys",
 ]
 
 [[package]]

@@ -1,5 +1,6 @@
 //! WinPE shell entry point and a portable, executable diagnostic CLI.
 
+mod deployment;
 #[cfg(windows)]
 mod gui;
 mod i18n;
@@ -67,6 +68,9 @@ fn run() -> Result<()> {
         }
         "--help" if args.len() == 1 => {
             println!("ArchRescue {VERSION}\n{}", i18n::HELP);
+        }
+        "deployment-media" | "deployment-plan" | "deployment-authorize" => {
+            deployment::command(command, &args[1..])?;
         }
         "inventory" if args.len() == 1 => print_json(&archrescue_storage::inventory())?,
         "discover" if args.len() > 1 => {

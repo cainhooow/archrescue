@@ -21,6 +21,9 @@ pub const EMPTY: &str =
 
 pub const HELP: &str = "Comandos (caminhos absolutos):
   inventory
+  deployment-media IMAGEM_OU_RAIZ [SHA256_ESPERADO]
+  deployment-plan IMAGEM SHA256 ÍNDICE ID_GPT MODO DESTINO [BACKUP]
+  deployment-authorize PLANO_JSON AUTORIZAR-IMPLANTACAO:SHA256
   discover RAIZ...
   boot RAIZ...
   diagnose RAIZ...
