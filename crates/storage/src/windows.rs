@@ -700,21 +700,15 @@ pub(crate) fn canonicalize_efi_root(path: &Path) -> Result<PathBuf> {
         return Err(error("Open EFI root for GUID normalization"));
     }
     let handle = Handle(raw);
-    let mut attributes = FILE_ATTRIBUTE_TAG_INFO::default();
-    // SAFETY: handle is owned and attributes provides the exact requested structure.
-    if unsafe {
-        GetFileInformationByHandleEx(
-            handle.0,
-            FileAttributeTagInfo,
-            (&mut attributes as *mut FILE_ATTRIBUTE_TAG_INFO).cast(),
-            size_of::<FILE_ATTRIBUTE_TAG_INFO>() as u32,
-        )
-    } == 0
-    {
+    let mut attributes = BY_HANDLE_FILE_INFORMATION::default();
+    // SAFETY: handle is owned and attributes provides writable file information.
+    // WinPE FAT32 can reject FileAttributeTagInfo. Basic handle information
+    // still reports the directory, reparse and encryption attribute bits.
+    if unsafe { GetFileInformationByHandle(handle.0, &mut attributes) } == 0 {
         return Err(error("Recheck EFI root attributes"));
     }
-    if attributes.FileAttributes & FILE_ATTRIBUTE_DIRECTORY == 0
-        || attributes.FileAttributes & (FILE_ATTRIBUTE_REPARSE_POINT | FILE_ATTRIBUTE_ENCRYPTED)
+    if attributes.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY == 0
+        || attributes.dwFileAttributes & (FILE_ATTRIBUTE_REPARSE_POINT | FILE_ATTRIBUTE_ENCRYPTED)
             != 0
     {
         return Err(Error::new(
