@@ -132,7 +132,7 @@ fn check_cancel(cancel: &AtomicBool) -> Result<()> {
     }
 }
 
-fn portable_relative(path: &Path) -> Result<()> {
+pub fn portable_relative(path: &Path) -> Result<()> {
     if path.as_os_str().is_empty()
         || path
             .components()
@@ -399,7 +399,7 @@ pub fn sha256(path: &Path, cancel: &AtomicBool) -> Result<String> {
     hash_reader(&mut file, cancel)
 }
 
-fn hash_reader(file: &mut File, cancel: &AtomicBool) -> Result<String> {
+pub fn hash_reader(file: &mut File, cancel: &AtomicBool) -> Result<String> {
     let mut hasher = Sha256::new();
     let mut buffer = [0u8; 65536];
 

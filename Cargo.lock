@@ -78,6 +78,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "archrescue-restore"
+version = "0.0.1"
+dependencies = [
+ "archrescue-backup",
+ "archrescue-core",
+ "archrescue-storage",
+ "serde",
+ "serde_json",
+ "sha2",
+ "windows-sys",
+]
+
+[[package]]
+name = "archrescue-restore-agent"
+version = "0.0.1"
+dependencies = [
+ "archrescue-core",
+ "archrescue-restore",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "archrescue-storage"
 version = "0.0.1"
 dependencies = [

@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/*", "apps/boot-shell"]
+members = ["crates/*", "apps/boot-shell", "apps/restore-agent"]
 resolver = "2"
 
 [workspace.package]
@@ -21,6 +21,7 @@ archrescue-diagnostics = { path = "crates/diagnostics" }
 archrescue-backup = { path = "crates/backup" }
 archrescue-evidence = { path = "crates/evidence" }
 archrescue-deployment = { path = "crates/deployment" }
+archrescue-restore = { path = "crates/restore" }
 
 [profile.release]
 lto = true
