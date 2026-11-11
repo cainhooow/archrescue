@@ -156,10 +156,14 @@ fn observe_target(
         .collect();
     volumes.sort_by(|left, right| left.identity.cmp(&right.identity));
 
-    if identity(&media.path)?.physical_disks.contains(&number) {
+    let separate_media = match identity(&media.path) {
+        Ok(source) if !source.physical_disks.is_empty() => !source.physical_disks.contains(&number),
+        _ => optical_media(&media.path),
+    };
+    if !separate_media {
         return Err(Error::new(
             ErrorKind::Validation,
-            "A mídia de instalação está no próprio disco alvo",
+            "A mídia de instalação deve estar em armazenamento independente do disco alvo",
         ));
     }
 
@@ -237,6 +241,18 @@ fn observe_target(
         encryption: encryption.into(),
         preservation,
     })
+}
+
+#[cfg(windows)]
+fn optical_media(path: &Path) -> bool {
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::Storage::FileSystem::GetDriveTypeW;
+
+    let root = path.ancestors().last().unwrap_or(path);
+    let wide: Vec<_> = root.as_os_str().encode_wide().chain(Some(0)).collect();
+
+    // SAFETY: root is a terminated UTF-16 string. DRIVE_CDROM is 5.
+    unsafe { GetDriveTypeW(wide.as_ptr()) == 5 }
 }
 
 #[cfg(not(windows))]

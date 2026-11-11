@@ -3,13 +3,15 @@
 pub const FAILED: &str = "Falha";
 
 #[cfg(windows)]
-pub const SECTIONS: [&str; 6] = [
+pub const SECTIONS: [&str; 8] = [
     "Detectar",
     "Diagnosticar",
     "Proteger dados",
     "Reparar",
     "Verificar",
     "Relatar",
+    "Implantar Windows",
+    "Restaurar arquivos",
 ];
 
 #[cfg(windows)]

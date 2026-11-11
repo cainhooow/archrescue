@@ -1,5 +1,7 @@
 //! Native Win32 shell. Long-running filesystem work is performed outside the UI thread.
 
+mod deployment;
+
 use std::{
     cell::RefCell,
     path::PathBuf,
@@ -69,6 +71,8 @@ enum Event {
     Backup(Box<TransactionReport>),
     Repair(Box<repair::RepairPlan>),
     Exported(PathBuf),
+    PlanExported(PathBuf),
+    Deployment(deployment::Update),
     Failure(Error),
 }
 
@@ -82,6 +86,7 @@ struct Preview {
 }
 
 struct App {
+    deployment: deployment::Deployment,
     section: usize,
     technician: bool,
     preview: Option<Preview>,
@@ -165,15 +170,15 @@ unsafe fn layout(hwnd: HWND) {
     let height = client_rect.bottom;
 
     for index in 0..i18n::SECTIONS.len() {
-        place(hwnd, 100 + index, 12, 20 + index as i32 * 42, 192, 35);
+        place(hwnd, 100 + index, 12, 16 + index as i32 * 35, 192, 31);
     }
 
-    place(hwnd, PREVIOUS, 12, 275, 91, 32);
-    place(hwnd, NEXT, 113, 275, 91, 32);
-    place(hwnd, TECHNICIAN, 12, 319, 192, 32);
-    place(hwnd, REFRESH, 12, 361, 192, 32);
-    place(hwnd, CONSOLE, 12, 403, 192, 32);
-    place(hwnd, CANCEL, 12, 445, 192, 32);
+    place(hwnd, PREVIOUS, 12, 301, 91, 32);
+    place(hwnd, NEXT, 113, 301, 91, 32);
+    place(hwnd, TECHNICIAN, 12, 341, 192, 32);
+    place(hwnd, REFRESH, 12, 379, 192, 32);
+    place(hwnd, CONSOLE, 12, 417, 192, 32);
+    place(hwnd, CANCEL, 12, 455, 192, 32);
 
     let content_width = width - 236;
     let button_width = (content_width - 24) / 4;
@@ -200,6 +205,7 @@ unsafe fn layout(hwnd: HWND) {
         place(hwnd, id, 224, height - 93, 220, 32);
     }
     place(hwnd, STATUS, 224, height - 52, content_width, 49);
+    deployment::layout(hwnd, width, height);
 }
 
 unsafe fn show(hwnd: HWND, id: usize, visible: bool) {
@@ -216,7 +222,11 @@ unsafe fn render(hwnd: HWND, app: &App) {
     show(hwnd, FILES, files);
     show(hwnd, CONTENT, !files);
     show(hwnd, ESP, repair);
-    show(hwnd, DEST, protect || repair || report_stage);
+    show(
+        hwnd,
+        DEST,
+        protect || repair || report_stage || app.section >= deployment::DEPLOY,
+    );
     for id in [ADDRESS, OPEN, UP, PREVIEW, COPY, CHECKPOINTS, RESUME] {
         show(hwnd, id, protect);
     }
@@ -273,6 +283,10 @@ unsafe fn render(hwnd: HWND, app: &App) {
             "Modo &técnico"
         },
     );
+
+    if deployment::render(hwnd, app) {
+        return;
+    }
 
     if let Some(preview) = &app.preview {
         if protect {
@@ -407,7 +421,7 @@ unsafe fn stage(hwnd: HWND, app: &mut App, section: usize) {
     } else if section == 3 {
         ESP
     } else {
-        CONTENT
+        deployment::focus(section).unwrap_or(CONTENT)
     };
     SetFocus(control(hwnd, focus));
 }
@@ -441,6 +455,10 @@ unsafe fn action(hwnd: HWND, app: &mut App, id: usize, notification: u32) {
     }
 
     if app.busy {
+        return;
+    }
+
+    if deployment::action(hwnd, app, id, notification) {
         return;
     }
 
@@ -767,7 +785,18 @@ Gravados {}/{} bytes | Verificados {} bytes ({} arquivos)",
                 set(hwnd, STATUS, &message);
                 continue;
             }
+            Event::Deployment(deployment::Update::Progress(read, total)) => {
+                deployment::update(hwnd, app, deployment::Update::Progress(read, total));
+                continue;
+            }
+            Event::Deployment(update) => deployment::update(hwnd, app, update),
+            Event::PlanExported(path) => set(
+                hwnd,
+                STATUS,
+                &format!("Arquivo exportado: {}", path.display()),
+            ),
             Event::Snapshot(mut report) => {
+                deployment::refresh_disks(hwnd, app, &report);
                 if let Some(old) = app.report.take() {
                     report.operations = old.operations;
                     report.transactions = old.transactions;
@@ -1036,6 +1065,7 @@ pub fn run() -> Result<()> {
 
         let app = Box::new(WindowState {
             app: RefCell::new(App {
+                deployment: deployment::Deployment::default(),
                 section: 0,
                 technician: false,
                 preview: None,
@@ -1170,6 +1200,7 @@ pub fn run() -> Result<()> {
         )?;
         add(hwnd, STATUS, "STATIC", i18n::LOADING, 0, font)?;
 
+        deployment::controls(hwnd, font)?;
         layout(hwnd);
         ShowWindow(hwnd, SW_SHOW);
         UpdateWindow(hwnd);
