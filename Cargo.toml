@@ -18,6 +18,7 @@ archrescue-core = { path = "crates/core" }
 archrescue-storage = { path = "crates/storage" }
 archrescue-windows-detection = { path = "crates/windows-detection" }
 archrescue-diagnostics = { path = "crates/diagnostics" }
+archrescue-integrity = { path = "crates/integrity" }
 archrescue-backup = { path = "crates/backup" }
 archrescue-evidence = { path = "crates/evidence" }
 archrescue-deployment = { path = "crates/deployment" }

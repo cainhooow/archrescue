@@ -59,7 +59,7 @@ fn probe(result: &mut Discovery, root: &Path, state: ProbeState) {
 }
 
 #[cfg(windows)]
-fn kernel_version(path: &Path) -> Option<String> {
+pub fn pe_file_version(path: &Path) -> Option<String> {
     use std::{mem::size_of, os::windows::ffi::OsStrExt, ptr};
 
     use windows_sys::Win32::Storage::FileSystem::{
@@ -115,7 +115,7 @@ fn kernel_version(path: &Path) -> Option<String> {
 }
 
 #[cfg(not(windows))]
-fn kernel_version(_: &Path) -> Option<String> {
+pub fn pe_file_version(_: &Path) -> Option<String> {
     None
 }
 
@@ -242,7 +242,7 @@ pub fn discover(roots: &[PathBuf]) -> Discovery {
 
         if valid {
             probe(&mut result, &root, ProbeState::Candidate);
-            let version = kernel_version(&system.join("ntoskrnl.exe"));
+            let version = pe_file_version(&system.join("ntoskrnl.exe"));
             let loader_architecture = pe_architecture(&system.join("winload.efi")).ok();
             let recovery_files = [
                 system.join("Recovery/ReAgent.xml"),
