@@ -3,15 +3,29 @@
 pub const FAILED: &str = "Falha";
 
 #[cfg(windows)]
-pub const SECTIONS: [&str; 8] = [
-    "Detectar",
-    "Diagnosticar",
-    "Proteger dados",
-    "Reparar",
-    "Verificar",
-    "Relatar",
+pub const SECTIONS: [&str; 9] = [
+    "Visão geral",
+    "Diagnóstico",
+    "Integridade do Windows",
+    "Discos e partições",
+    "Backup e recuperação",
+    "Reparar inicialização",
     "Implantar Windows",
     "Restaurar arquivos",
+    "Relatórios",
+];
+
+#[cfg(windows)]
+pub const COMPACT_SECTIONS: [&str; 9] = [
+    "Visão geral",
+    "Diagnóstico",
+    "Integridade",
+    "Discos",
+    "Backup",
+    "Inicialização",
+    "Implantação",
+    "Restauração",
+    "Relatórios",
 ];
 
 #[cfg(windows)]

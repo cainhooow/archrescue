@@ -99,25 +99,22 @@ unsafe fn selection(hwnd: HWND, id: usize) -> usize {
     SendMessageW(control(hwnd, id), CB_GETCURSEL, 0, 0) as usize
 }
 
-pub unsafe fn layout(hwnd: HWND, width: i32, height: i32) {
-    let content_width = width - 236;
-    place(hwnd, MEDIA, 224, 20, content_width - 133, 30);
-    place(hwnd, INSPECT, width - 137, 20, 125, 30);
-    place(hwnd, IMAGE_INDEX, 224, 58, 160, 250);
-    place(hwnd, DISK, 392, 58, content_width - 168, 250);
-    place(hwnd, MODE, 224, 96, 175, 180);
-    place(hwnd, PRESERVATION, 407, 96, content_width - 183, 30);
-    place(hwnd, PLAN, 224, height - 93, 155, 32);
-    place(hwnd, SAVE, 387, height - 93, 157, 32);
-    place(hwnd, HANDOFF, 224, height - 93, 270, 32);
+pub fn primary(id: usize) -> bool {
+    matches!(id, INSPECT | PLAN | HANDOFF)
 }
 
-pub fn focus(section: usize) -> Option<usize> {
-    match section {
-        DEPLOY => Some(MEDIA),
-        RESTORE => Some(PRESERVATION),
-        _ => None,
-    }
+pub unsafe fn layout(hwnd: HWND, area: &super::layout::Layout) {
+    let x = area.left();
+    let width = area.body_width();
+    place(hwnd, MEDIA, x, 108, width - 137, 30);
+    place(hwnd, INSPECT, x + width - 129, 108, 129, 30);
+    place(hwnd, IMAGE_INDEX, x, 145, 144, 250);
+    place(hwnd, DISK, x + 152, 145, width - 152, 250);
+    place(hwnd, MODE, x, 184, 211, 180);
+    place(hwnd, PRESERVATION, x + 219, 184, width - 219, 30);
+    place(hwnd, PLAN, x, area.actions(), 155, 32);
+    place(hwnd, SAVE, x + 163, area.actions(), 157, 32);
+    place(hwnd, HANDOFF, x, area.actions(), 270, 32);
 }
 
 pub unsafe fn render(hwnd: HWND, app: &App) -> bool {
@@ -148,17 +145,10 @@ pub unsafe fn render(hwnd: HWND, app: &App) -> bool {
         (!app.busy && app.deployment.plan.is_some()) as i32,
     );
 
-    let mut area = RECT::default();
-    GetClientRect(hwnd, &mut area);
-    let top = if deployment || handoff { 137 } else { 62 };
-    place(
-        hwnd,
-        CONTENT,
-        224,
-        top,
-        area.right - 236,
-        area.bottom - top - 143,
-    );
+    if handoff {
+        let area = super::layout::Layout::read(hwnd);
+        place(hwnd, PRESERVATION, area.left(), 108, area.body_width(), 30);
+    }
 
     if deployment {
         set(

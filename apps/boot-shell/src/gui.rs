@@ -1,9 +1,12 @@
 //! Native Win32 shell. Long-running filesystem work is performed outside the UI thread.
 
 mod deployment;
+mod layout;
+mod presentation;
+mod theme;
 
 use std::{
-    cell::RefCell,
+    cell::{Cell, RefCell},
     path::PathBuf,
     ptr::{null, null_mut},
     sync::{
@@ -25,6 +28,7 @@ use windows_sys::Win32::{
     Graphics::Gdi::*,
     System::LibraryLoader::GetModuleHandleW,
     UI::{
+        Controls::{DRAWITEMSTRUCT, EM_SETMARGINS},
         Input::KeyboardAndMouse::{EnableWindow, SetFocus},
         WindowsAndMessaging::*,
     },
@@ -47,12 +51,20 @@ const STATUS: usize = 211;
 const PREVIEW: usize = 212;
 const CHECKPOINTS: usize = 213;
 const RESUME: usize = 214;
-const PREVIOUS: usize = 215;
 const NEXT: usize = 216;
 const TECHNICIAN: usize = 217;
 const VERIFY: usize = 218;
 const REPAIR: usize = 219;
 const ESP: usize = 220;
+
+const DASHBOARD: usize = 0;
+const DIAGNOSIS: usize = 1;
+const INTEGRITY_PAGE: usize = 2;
+const DISKS: usize = 3;
+const BACKUP: usize = 4;
+const REPAIR_PAGE: usize = 5;
+const REPORTS: usize = 8;
+const VERIFY_PAGE: usize = 9;
 
 fn wide(text: &str) -> Vec<u16> {
     text.encode_utf16().chain(Some(0)).collect()
@@ -95,6 +107,8 @@ struct App {
     entries: Vec<Entry>,
     directory: PathBuf,
     busy: bool,
+    error_status: bool,
+    progress: Option<Progress>,
     cancellable: bool,
     cancel: Arc<AtomicBool>,
     tx: Sender<Event>,
@@ -103,7 +117,8 @@ struct App {
 
 struct WindowState {
     app: RefCell<App>,
-    brush: HBRUSH,
+    theme: theme::Theme,
+    selected_page: Cell<usize>,
 }
 
 unsafe fn control(hwnd: HWND, id: usize) -> HWND {
@@ -135,6 +150,11 @@ unsafe fn add(
     style: u32,
     font: HFONT,
 ) -> Result<()> {
+    let style = if class == "BUTTON" {
+        style | BS_OWNERDRAW as u32
+    } else {
+        style
+    };
     let child = CreateWindowExW(
         0,
         wide(class).as_ptr(),
@@ -155,6 +175,9 @@ unsafe fn add(
     }
 
     SendMessageW(child, WM_SETFONT, font as usize, 1);
+    if class == "EDIT" {
+        SendMessageW(child, EM_SETMARGINS, 3, (7 << 16) | 7);
+    }
 
     Ok(())
 }
@@ -163,69 +186,27 @@ unsafe fn place(hwnd: HWND, id: usize, x: i32, y: i32, width: i32, height: i32) 
     MoveWindow(control(hwnd, id), x, y, width.max(1), height.max(1), 1);
 }
 
-unsafe fn layout(hwnd: HWND) {
-    let mut client_rect = RECT::default();
-    GetClientRect(hwnd, &mut client_rect);
-    let width = client_rect.right;
-    let height = client_rect.bottom;
-
-    for index in 0..i18n::SECTIONS.len() {
-        place(hwnd, 100 + index, 12, 16 + index as i32 * 35, 192, 31);
-    }
-
-    place(hwnd, PREVIOUS, 12, 301, 91, 32);
-    place(hwnd, NEXT, 113, 301, 91, 32);
-    place(hwnd, TECHNICIAN, 12, 341, 192, 32);
-    place(hwnd, REFRESH, 12, 379, 192, 32);
-    place(hwnd, CONSOLE, 12, 417, 192, 32);
-    place(hwnd, CANCEL, 12, 455, 192, 32);
-
-    let content_width = width - 236;
-    let button_width = (content_width - 24) / 4;
-    place(hwnd, ADDRESS, 224, 20, content_width - 190, 30);
-    place(hwnd, OPEN, width - 194, 20, 90, 30);
-    place(hwnd, UP, width - 98, 20, 86, 30);
-    place(hwnd, ESP, 224, 20, content_width, 30);
-
-    place(hwnd, FILES, 224, 62, content_width, height - 205);
-    place(hwnd, CONTENT, 224, 62, content_width, height - 205);
-
-    place(hwnd, DEST, 224, height - 133, content_width, 30);
-    for (index, id) in [PREVIEW, COPY, CHECKPOINTS, RESUME].into_iter().enumerate() {
-        place(
-            hwnd,
-            id,
-            224 + index as i32 * (button_width + 8),
-            height - 93,
-            button_width,
-            32,
-        );
-    }
-    for id in [EXPORT, VERIFY, REPAIR] {
-        place(hwnd, id, 224, height - 93, 220, 32);
-    }
-    place(hwnd, STATUS, 224, height - 52, content_width, 49);
-    deployment::layout(hwnd, width, height);
-}
-
 unsafe fn show(hwnd: HWND, id: usize, visible: bool) {
     ShowWindow(control(hwnd, id), if visible { SW_SHOW } else { SW_HIDE });
 }
 
 unsafe fn render(hwnd: HWND, app: &App) {
-    let protect = app.section == 2;
-    let repair = app.section == 3;
-    let verify = app.section == 4;
-    let report_stage = app.section == 5;
+    let protect = app.section == BACKUP;
+    let repair = app.section == REPAIR_PAGE;
+    let verify = app.section == VERIFY_PAGE;
+    let report_stage = app.section == REPORTS;
     let files = protect && app.preview.is_none();
 
     show(hwnd, FILES, files);
-    show(hwnd, CONTENT, !files);
+    show(hwnd, CONTENT, !files && app.section != DASHBOARD);
     show(hwnd, ESP, repair);
     show(
         hwnd,
         DEST,
-        protect || repair || report_stage || app.section >= deployment::DEPLOY,
+        protect
+            || repair
+            || report_stage
+            || matches!(app.section, deployment::DEPLOY | deployment::RESTORE),
     );
     for id in [ADDRESS, OPEN, UP, PREVIEW, COPY, CHECKPOINTS, RESUME] {
         show(hwnd, id, protect);
@@ -233,17 +214,31 @@ unsafe fn render(hwnd: HWND, app: &App) {
     show(hwnd, EXPORT, report_stage);
     show(hwnd, VERIFY, verify);
     show(hwnd, REPAIR, repair);
+    show(hwnd, NEXT, app.section == DASHBOARD);
+    show(hwnd, CONSOLE, report_stage && app.technician);
 
+    let area = layout::Layout::read(hwnd);
     for (index, label) in i18n::SECTIONS.iter().enumerate() {
-        let name = if app.section == index {
-            format!("{}  •", label)
+        let name = if area.rail < 200 {
+            i18n::COMPACT_SECTIONS[index]
         } else {
-            (*label).into()
+            label
         };
-        set(hwnd, 100 + index, &name);
+        set(hwnd, 100 + index, name);
+        InvalidateRect(control(hwnd, 100 + index), null(), 0);
     }
 
-    for id in [ADDRESS, DEST, ESP, OPEN, UP, CHECKPOINTS, REFRESH, REPAIR] {
+    for id in [
+        ADDRESS,
+        DEST,
+        ESP,
+        OPEN,
+        UP,
+        CHECKPOINTS,
+        REFRESH,
+        REPAIR,
+        FILES,
+    ] {
         EnableWindow(control(hwnd, id), (!app.busy) as i32);
     }
 
@@ -260,11 +255,6 @@ unsafe fn render(hwnd: HWND, app: &App) {
         (!app.busy && app.checkpoints.is_some()) as i32,
     );
     EnableWindow(control(hwnd, CANCEL), (app.busy && app.cancellable) as i32);
-    EnableWindow(control(hwnd, PREVIOUS), (app.section > 0) as i32);
-    EnableWindow(
-        control(hwnd, NEXT),
-        (app.section + 1 < i18n::SECTIONS.len()) as i32,
-    );
     EnableWindow(
         control(hwnd, EXPORT),
         (!app.busy && app.report.is_some()) as i32,
@@ -278,11 +268,14 @@ unsafe fn render(hwnd: HWND, app: &App) {
         hwnd,
         TECHNICIAN,
         if app.technician {
-            "Visão &assistida"
+            "Visão assistida"
         } else {
-            "Modo &técnico"
+            "Modo técnico"
         },
     );
+
+    layout::arrange(hwnd, app.section);
+    InvalidateRect(hwnd, null(), 0);
 
     if deployment::render(hwnd, app) {
         return;
@@ -320,12 +313,25 @@ O destino receberá uma pasta exclusiva com checkpoint e arquivos verificados. U
         );
         return;
     };
-    let text = crate::views::section(app.section, report, app.technician);
+    let text = crate::views::section(
+        match app.section {
+            DISKS => 0,
+            DIAGNOSIS => 1,
+            REPAIR_PAGE => 3,
+            VERIFY_PAGE => 4,
+            REPORTS => 5,
+            _ => 2,
+        },
+        report,
+        app.technician,
+    );
     set(hwnd, CONTENT, &text);
 }
 
 fn work(app: &mut App, job: impl FnOnce() -> Event + Send + 'static) {
     app.busy = true;
+    app.error_status = false;
+    app.progress = None;
     app.cancellable = false;
     let sender = app.tx.clone();
 
@@ -416,14 +422,8 @@ unsafe fn selected(hwnd: HWND, app: &App) -> Vec<PathBuf> {
 unsafe fn stage(hwnd: HWND, app: &mut App, section: usize) {
     app.section = section;
     render(hwnd, app);
-    let focus = if section == 2 {
-        ADDRESS
-    } else if section == 3 {
-        ESP
-    } else {
-        deployment::focus(section).unwrap_or(CONTENT)
-    };
-    SetFocus(control(hwnd, focus));
+    // Keep focus on the selected navigation button so Tab continues in page order.
+    SetFocus(control(hwnd, 100 + section.min(REPORTS)));
 }
 
 unsafe fn action(hwnd: HWND, app: &mut App, id: usize, notification: u32) {
@@ -433,12 +433,8 @@ unsafe fn action(hwnd: HWND, app: &mut App, id: usize, notification: u32) {
     }
 
     match id {
-        PREVIOUS if app.section > 0 => {
-            stage(hwnd, app, app.section - 1);
-            return;
-        }
-        NEXT if app.section + 1 < i18n::SECTIONS.len() => {
-            stage(hwnd, app, app.section + 1);
+        NEXT => {
+            stage(hwnd, app, DIAGNOSIS);
             return;
         }
         TECHNICIAN => {
@@ -446,7 +442,7 @@ unsafe fn action(hwnd: HWND, app: &mut App, id: usize, notification: u32) {
             render(hwnd, app);
             return;
         }
-        CANCEL => {
+        CANCEL if app.busy && app.cancellable => {
             app.cancel.store(true, Ordering::Relaxed);
             set(hwnd, STATUS, "Cancelamento solicitado.");
             return;
@@ -479,7 +475,11 @@ unsafe fn action(hwnd: HWND, app: &mut App, id: usize, notification: u32) {
             let selection = selected(hwnd, app);
             if selection.len() == 1 {
                 let path = app.directory.join(&selection[0]);
-                if path.is_dir() {
+                if app
+                    .entries
+                    .iter()
+                    .any(|entry| entry.name == selection[0] && entry.directory)
+                {
                     browse(hwnd, app, path);
                 }
             }
@@ -770,6 +770,7 @@ fn error_message(error: &Error) -> String {
 
 unsafe fn events(hwnd: HWND, app: &mut App) {
     while let Ok(event) = app.rx.try_recv() {
+        app.error_status = false;
         match event {
             Event::Progress(progress) => {
                 let message = format!(
@@ -783,6 +784,8 @@ Gravados {}/{} bytes | Verificados {} bytes ({} arquivos)",
                     progress.verified_files,
                 );
                 set(hwnd, STATUS, &message);
+                app.progress = Some(progress);
+                InvalidateRect(hwnd, null(), 0);
                 continue;
             }
             Event::Deployment(deployment::Update::Progress(read, total)) => {
@@ -847,7 +850,8 @@ Gravados {}/{} bytes | Verificados {} bytes ({} arquivos)",
             Event::Checkpoints(entries) => show_checkpoints(hwnd, app, entries),
             Event::Backup(result) => {
                 app.preview = None;
-                app.section = 4;
+                app.section = VERIFY_PAGE;
+                app.error_status = result.status.error.is_some();
                 let message = result.status.error.as_ref().map_or_else(
                     || {
                         format!(
@@ -876,6 +880,7 @@ Gravados {}/{} bytes | Verificados {} bytes ({} arquivos)",
                 &format!("Relatório gravado e verificado: {}", path.display()),
             ),
             Event::Failure(error) => {
+                app.error_status = true;
                 set(hwnd, STATUS, &error_message(&error));
                 if let Some(report) = &mut app.report {
                     report.session_errors.push(error);
@@ -884,6 +889,7 @@ Gravados {}/{} bytes | Verificados {} bytes ({} arquivos)",
         }
 
         app.busy = false;
+        app.progress = None;
         render(hwnd, app);
     }
 }
@@ -982,17 +988,25 @@ unsafe extern "system" fn procedure(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM
         msg,
         WM_CTLCOLORSTATIC | WM_CTLCOLOREDIT | WM_CTLCOLORLISTBOX
     ) {
-        SetTextColor(wp as HDC, 0x00eeeae5);
-        SetBkColor(wp as HDC, 0x0025221d);
-        return state.brush as isize;
+        SetTextColor(wp as HDC, theme::TEXT);
+        SetBkColor(wp as HDC, theme::PANEL);
+        return state.theme.panel as isize;
     }
 
     // Native window operations can send these messages synchronously while
     // application state is borrowed. They only need the window and must still run.
     match msg {
-        WM_SIZE => {
-            layout(hwnd);
+        WM_PAINT => {
+            let app = state.app.try_borrow().ok();
+            presentation::paint(hwnd, &state.theme, app.as_deref());
             return 0;
+        }
+        WM_DRAWITEM if lp != 0 => {
+            // The notification supplies a live DRAWITEMSTRUCT and child paint DC.
+            let item = &*(lp as *const DRAWITEMSTRUCT);
+            let selected = state.selected_page.get();
+            presentation::button(item, &state.theme, selected);
+            return 1;
         }
         WM_GETMINMAXINFO => {
             let info = &mut *(lp as *mut MINMAXINFO);
@@ -1017,12 +1031,27 @@ unsafe extern "system" fn procedure(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM
     let app = &mut *app_borrow;
 
     match msg {
+        WM_SIZE => {
+            if !control(hwnd, STATUS).is_null() {
+                render(hwnd, app);
+            }
+            0
+        }
         WM_COMMAND => {
-            action(hwnd, app, wp & 0xffff, ((wp >> 16) & 0xffff) as u32);
+            let id = wp & 0xffff;
+            action(
+                hwnd,
+                app,
+                if id == IDCANCEL as usize { CANCEL } else { id },
+                ((wp >> 16) & 0xffff) as u32,
+            );
+            state.selected_page.set(app.section);
+            InvalidateRect(hwnd, null(), 0);
             0
         }
         WM_TIMER => {
             events(hwnd, app);
+            state.selected_page.set(app.section);
             0
         }
         WM_CLOSE => {
@@ -1042,31 +1071,28 @@ unsafe extern "system" fn procedure(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM
     }
 }
 
+struct OwnedWindow(HWND);
+
+impl Drop for OwnedWindow {
+    fn drop(&mut self) {
+        // SAFETY: the window belongs to the calling GUI thread and state outlives it.
+        unsafe {
+            if IsWindow(self.0) != 0 {
+                DestroyWindow(self.0);
+            }
+        }
+    }
+}
+
 pub fn run() -> Result<()> {
     unsafe {
         let (tx, rx) = mpsc::channel();
-        let brush = CreateSolidBrush(0x0025221d);
-        let font = CreateFontW(
-            -17,
-            0,
-            0,
-            0,
-            400,
-            0,
-            0,
-            0,
-            DEFAULT_CHARSET as u32,
-            OUT_DEFAULT_PRECIS as u32,
-            CLIP_DEFAULT_PRECIS as u32,
-            DEFAULT_QUALITY as u32,
-            DEFAULT_PITCH as u32,
-            wide("Segoe UI").as_ptr(),
-        );
-
+        let theme = theme::Theme::new()?;
+        let font = theme.body;
         let app = Box::new(WindowState {
             app: RefCell::new(App {
                 deployment: deployment::Deployment::default(),
-                section: 0,
+                section: DASHBOARD,
                 technician: false,
                 preview: None,
                 checkpoints: None,
@@ -1074,21 +1100,24 @@ pub fn run() -> Result<()> {
                 entries: vec![],
                 directory: PathBuf::new(),
                 busy: false,
+                error_status: false,
+                progress: None,
                 cancellable: false,
                 cancel: Arc::new(AtomicBool::new(false)),
                 tx,
                 rx,
             }),
-            brush,
+            theme,
+            selected_page: Cell::new(DASHBOARD),
         });
 
-        let class = wide("ArchRescueP0");
+        let class = wide("ArchRescueRecovery");
         let instance = GetModuleHandleW(null());
         let window_class = WNDCLASSW {
             lpfnWndProc: Some(procedure),
             hInstance: instance,
             hCursor: LoadCursorW(null_mut(), IDC_ARROW),
-            hbrBackground: brush,
+            hbrBackground: null_mut(),
             lpszClassName: class.as_ptr(),
             ..Default::default()
         };
@@ -1105,8 +1134,8 @@ pub fn run() -> Result<()> {
             WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN,
             CW_USEDEFAULT,
             CW_USEDEFAULT,
-            GetSystemMetrics(SM_CXSCREEN).min(1100),
-            GetSystemMetrics(SM_CYSCREEN).min(740),
+            GetSystemMetrics(SM_CXSCREEN).min(1280),
+            GetSystemMetrics(SM_CYSCREEN).min(820),
             null_mut(),
             null_mut(),
             instance,
@@ -1117,24 +1146,24 @@ pub fn run() -> Result<()> {
             return Err(os_error("Create ArchRescue window"));
         }
 
+        let window = OwnedWindow(hwnd);
         for (index, label) in i18n::SECTIONS.iter().enumerate() {
             add(hwnd, 100 + index, "BUTTON", label, WS_TABSTOP, font)?;
         }
 
         for (id, label) in [
-            (REFRESH, "Atualizar diagnóstico"),
+            (REFRESH, "Atualizar"),
             (OPEN, "Abrir"),
             (UP, "Subir"),
             (PREVIEW, "Plane&jar"),
             (COPY, "&Iniciar backup"),
-            (CHECKPOINTS, "&Checkpoints"),
+            (CHECKPOINTS, "Checkpoints"),
             (RESUME, "&Retomar"),
-            (PREVIOUS, "&Voltar"),
-            (NEXT, "A&vançar"),
+            (NEXT, "Revisar diagnóstico"),
             (TECHNICIAN, "Modo &técnico"),
             (VERIFY, "Verificar novamente"),
             (REPAIR, "Gerar prévia do reparo"),
-            (CANCEL, "Cancelar operação"),
+            (CANCEL, "Cancelar"),
             (EXPORT, "Exportar relatório"),
             (CONSOLE, "Console de diagnóstico"),
         ] {
@@ -1201,7 +1230,7 @@ pub fn run() -> Result<()> {
         add(hwnd, STATUS, "STATIC", i18n::LOADING, 0, font)?;
 
         deployment::controls(hwnd, font)?;
-        layout(hwnd);
+        layout::arrange(hwnd, DASHBOARD);
         ShowWindow(hwnd, SW_SHOW);
         UpdateWindow(hwnd);
         SetTimer(hwnd, 1, 100, None);
@@ -1222,8 +1251,7 @@ pub fn run() -> Result<()> {
             }
         }
 
-        DeleteObject(font);
-        DeleteObject(brush);
+        drop(window);
 
         Ok(())
     }
