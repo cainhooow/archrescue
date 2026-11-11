@@ -47,7 +47,7 @@ pub fn repair(report: &Report, technician: bool) -> String {
 }
 
 pub fn verify(report: &Report, technician: bool) -> String {
-    let mut text = String::from("VERIFICAR RESULTADOS\n\n");
+    let mut text = String::from("");
     let Some(backup) = report.transactions.last() else {
         text.push_str("Inicie ou retome um backup para obter um resultado verificável.");
         return text;
@@ -93,20 +93,12 @@ pub fn verify(report: &Report, technician: bool) -> String {
 }
 
 pub fn session(report: &Report, technician: bool) -> String {
-    let mut text = String::from("RELATAR SESSÃO\n\nUse um destino persistente em disco separado para exportar JSON e texto.\n\n");
-    let _ = writeln!(
-        text,
-        "Evidências de inicialização: {} · Análises de integridade: {}
-{} resultados de backup · {} planos de reparo · {} erros na sessão",
-        report.diagnosis.findings.len(),
-        report.integrity.len(),
-        report.transactions.len(),
-        report.repair_plans.len(),
-        report.session_errors.len(),
-    );
-    for decision in &report.decisions {
-        let _ = writeln!(text, "{decision}");
-    }
+    let mut text = if report.decisions.is_empty() {
+        "Nenhuma decisão registrada nesta sessão.".into()
+    } else {
+        report.decisions.join("\n\n")
+    };
+
     if technician {
         text.push_str("\n\n");
         text.push_str(&report.readable());

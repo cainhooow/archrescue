@@ -1,4 +1,4 @@
-//! Client-space geometry. Page bodies scroll independently of the actions.
+//! Client-space geometry. Scrollable native regions stay above the fixed footer.
 
 use super::*;
 
@@ -16,7 +16,7 @@ impl Layout {
         Self {
             width: client.right,
             height: client.bottom,
-            rail: if client.right < 960 { 146 } else { 218 },
+            rail: if client.right < 960 { 150 } else { 218 },
         }
     }
 
@@ -28,93 +28,180 @@ impl Layout {
         self.width - self.left() - 22
     }
 
+    pub fn left_column(&self) -> i32 {
+        (self.body_width() - 12) * 60 / 100
+    }
+
+    pub fn footer(&self) -> i32 {
+        self.height - 51
+    }
+
     pub fn actions(&self) -> i32 {
-        self.height - 100
+        self.footer() - 44
     }
 
     pub fn destination(&self) -> i32 {
-        self.actions() - 37
+        self.actions() - 36
     }
 
     pub fn body_top(section: usize) -> i32 {
         match section {
-            deployment::DEPLOY => 226,
-            BACKUP => 173,
-            deployment::RESTORE | REPAIR_PAGE | INTEGRITY_PAGE => 145,
-            _ => 108,
+            deployment::DEPLOY => 295,
+            BACKUP => 169,
+            INTEGRITY_PAGE => 166,
+            REPORTS => 204,
+            VERIFY_PAGE => 257,
+            _ => 127,
         }
     }
 
     pub fn body_bottom(&self, section: usize) -> i32 {
         match section {
-            DASHBOARD | DIAGNOSIS | DISKS | VERIFY_PAGE | INTEGRITY_PAGE => self.actions() - 8,
-            _ => self.destination() - 8,
+            BACKUP => self.destination() - 18,
+            VERIFY_PAGE | INTEGRITY_PAGE => self.actions() - 8,
+            _ => self.footer() - 12,
         }
     }
 }
 
-pub unsafe fn arrange(hwnd: HWND, section: usize) {
+pub unsafe fn arrange(hwnd: HWND, app: &App) {
     let area = Layout::read(hwnd);
+    let section = app.section;
     let x = area.left();
     let width = area.body_width();
+    let left = area.left_column();
+    let right = x + left + 12;
+    let right_width = width - left - 12;
 
-    for index in 0..i18n::SECTIONS.len() {
+    for (index, page) in navigation::ORDER.into_iter().enumerate() {
+        let group_gap = if index >= 7 { 11 } else { 0 };
         place(
             hwnd,
-            100 + index,
-            9,
-            76 + index as i32 * 37,
-            area.rail - 18,
-            34,
+            100 + page,
+            10,
+            76 + index as i32 * 34 + group_gap,
+            area.rail - 20,
+            31,
         );
     }
-    place(hwnd, REFRESH, 9, area.height - 78, area.rail - 18, 30);
-    place(hwnd, CANCEL, 9, area.height - 40, area.rail - 18, 30);
-    place(hwnd, TECHNICIAN, area.width - 176, 22, 154, 34);
-    place(hwnd, CONSOLE, x + 228, area.actions(), 204, 32);
 
-    place(hwnd, SOURCE_LABEL, x, 113, 62, 22);
-    place(hwnd, ADDRESS, x + 62, 108, width - 339, 30);
-    place(hwnd, OPEN, x + width - 269, 108, 70, 30);
-    place(hwnd, UP, x + width - 191, 108, 70, 30);
-    place(hwnd, BACKUP_RESULTS, x + width - 113, 108, 113, 30);
-    if section == BACKUP {
-        place(hwnd, pages::PAGE_HINT, x, 143, width, 22);
-    }
-    place(hwnd, ESP_LABEL, x, 113, 148, 22);
-    place(hwnd, ESP, x + 148, 108, width - 148, 30);
-    place(hwnd, DESTINATION_LABEL, x, area.destination() + 5, 62, 22);
-    place(hwnd, DEST, x + 62, area.destination(), width - 62, 30);
-
-    let top = Layout::body_top(section);
-    let bottom = area.body_bottom(section);
-    place(hwnd, FILES, x, top, width, bottom - top);
-    place(
-        hwnd,
-        CONTENT,
-        x + 12,
-        top + 10,
-        width - 24,
-        bottom - top - 20,
-    );
-
-    let button_width = (width - 24) / 4;
-    for (index, id) in [PREVIEW, COPY, CHECKPOINTS, RESUME].into_iter().enumerate() {
+    for (index, id) in [TECHNICIAN, REFRESH, CONSOLE, CANCEL]
+        .into_iter()
+        .enumerate()
+    {
         place(
             hwnd,
             id,
-            x + index as i32 * (button_width + 8),
-            area.actions(),
-            button_width,
-            32,
+            10,
+            area.height - 125 + index as i32 * 29,
+            area.rail - 20,
+            26,
         );
     }
-    for id in [EXPORT, VERIFY, REPAIR, NEXT] {
-        place(hwnd, id, x, area.actions(), 220, 32);
+
+    place(hwnd, PREVIOUS, area.width - 194, area.footer() + 10, 80, 30);
+    place(hwnd, NEXT, area.width - 106, area.footer() + 10, 84, 30);
+    place(hwnd, STATUS, x + 20, area.footer() + 8, width - 204, 34);
+
+    place(hwnd, SOURCE_LABEL, x, 135, 58, 22);
+    place(hwnd, ADDRESS, x + 59, 130, width - 215, 29);
+    place(hwnd, OPEN, x + width - 148, 130, 70, 29);
+    place(hwnd, UP, x + width - 70, 130, 70, 29);
+    place(hwnd, DISK_DETAILS, x, area.actions(), 168, 30);
+
+    let top = Layout::body_top(section);
+    let bottom = area.body_bottom(section);
+    place(
+        hwnd,
+        CONTENT,
+        x + 13,
+        top + 41,
+        width - 26,
+        bottom - top - 49,
+    );
+    place(hwnd, FILES, x + 11, top + 62, width - 22, bottom - top - 72);
+
+    match section {
+        BACKUP => {
+            place(
+                hwnd,
+                DESTINATION_LABEL,
+                x + 13,
+                area.destination() + 5,
+                62,
+                22,
+            );
+            place(hwnd, DEST, x + 76, area.destination(), width - 89, 28);
+            let button_width = (width - 50) / 4;
+            for (index, id) in [PREVIEW, COPY, CHECKPOINTS, RESUME].into_iter().enumerate() {
+                place(
+                    hwnd,
+                    id,
+                    x + 13 + index as i32 * (button_width + 8),
+                    area.actions(),
+                    button_width,
+                    30,
+                );
+            }
+            if app.preview.is_some() {
+                place(
+                    hwnd,
+                    CONTENT,
+                    right + 10,
+                    top + 99,
+                    right_width - 20,
+                    bottom - top - 109,
+                );
+            }
+        }
+        REPORTS => {
+            place(
+                hwnd,
+                CONTENT,
+                x + 12,
+                top + 39,
+                left - 24,
+                bottom - top - 50,
+            );
+            place(
+                hwnd,
+                DESTINATION_LABEL,
+                right + 13,
+                top + 42,
+                right_width - 26,
+                20,
+            );
+            place(hwnd, DEST, right + 13, top + 64, right_width - 26, 28);
+            place(hwnd, EXPORT, right + 13, top + 103, right_width - 26, 31);
+        }
+        REPAIR_PAGE => {
+            place(hwnd, ESP_LABEL, x + 13, top + 42, left - 26, 20);
+            place(hwnd, ESP, x + 13, top + 64, left - 26, 28);
+            place(hwnd, DESTINATION_LABEL, x + 13, top + 98, left - 26, 20);
+            place(hwnd, DEST, x + 13, top + 120, left - 26, 28);
+            place(hwnd, REPAIR, x + 13, top + 158, left - 26, 31);
+            place(
+                hwnd,
+                CONTENT,
+                x + 12,
+                top + 236,
+                left - 24,
+                bottom - top - 247,
+            );
+            place(
+                hwnd,
+                REPAIR_UNAVAILABLE,
+                right + 13,
+                top + 121,
+                right_width - 26,
+                30,
+            );
+        }
+        VERIFY_PAGE => place(hwnd, VERIFY, x + width - 184, area.actions(), 184, 30),
+        deployment::DEPLOY | deployment::RESTORE => deployment::layout(hwnd, &area, section),
+        _ => {}
     }
 
-    place(hwnd, STATUS, x + 12, area.height - 51, width - 24, 42);
-    deployment::layout(hwnd, &area, section);
     if pages::structured(section) {
         pages::layout(hwnd, &area, section);
     }

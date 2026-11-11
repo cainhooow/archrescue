@@ -21,6 +21,7 @@ const PRESERVATION: usize = 235;
 const PLAN: usize = 236;
 const SAVE: usize = 237;
 const HANDOFF: usize = 238;
+const INSTALL_UNAVAILABLE: usize = 239;
 const MEDIA_LABEL: usize = 246;
 const BACKUP_LABEL: usize = 247;
 
@@ -89,6 +90,7 @@ pub unsafe fn controls(hwnd: HWND, font: HFONT) -> Result<()> {
         (PLAN, "&Gerar prévia"),
         (SAVE, "Exportar &plano"),
         (HANDOFF, "Verificar e exportar referência"),
+        (INSTALL_UNAVAILABLE, "Instalar Windows"),
     ] {
         add(hwnd, id, "BUTTON", label, WS_TABSTOP, font)?;
     }
@@ -119,6 +121,29 @@ pub fn form_label(id: usize) -> bool {
     matches!(id, MEDIA_LABEL | BACKUP_LABEL)
 }
 
+pub fn form_field(id: usize) -> bool {
+    matches!(id, MEDIA | PRESERVATION)
+}
+
+pub fn qualification(app: &App) -> Option<(&'static str, &str, COLORREF)> {
+    use super::theme::{ACCENT, CRITICAL, WARNING};
+
+    let plan = app.deployment.plan.as_ref()?;
+    let (label, color) = match plan.result {
+        Qualification::Supported => ("Compatível para planejamento", ACCENT),
+        Qualification::RequiresIntervention => ("Requer intervenção", WARNING),
+        Qualification::Unsupported => ("Configuração sem suporte", WARNING),
+        Qualification::Blocked => ("Plano bloqueado", CRITICAL),
+    };
+    let detail = plan
+        .findings
+        .iter()
+        .find(|finding| finding.result == plan.result)
+        .or_else(|| plan.findings.first())
+        .map_or(plan.next_action.as_str(), |finding| finding.reason.as_str());
+    Some((label, detail, color))
+}
+
 pub fn empty_choice(id: usize) -> &'static str {
     match id {
         IMAGE_INDEX => "Índice da imagem",
@@ -129,28 +154,68 @@ pub fn empty_choice(id: usize) -> &'static str {
 }
 
 pub fn primary(id: usize) -> bool {
-    matches!(id, INSPECT | PLAN | HANDOFF)
+    matches!(id, INSPECT | PLAN | SAVE | HANDOFF)
 }
 
 pub unsafe fn layout(hwnd: HWND, area: &super::layout::Layout, section: usize) {
     let x = area.left();
     let width = area.body_width();
-    place(hwnd, MEDIA_LABEL, x, 113, 62, 22);
-    place(hwnd, MEDIA, x + 62, 108, width - 199, 30);
-    place(hwnd, INSPECT, x + width - 129, 108, 129, 30);
-    place(hwnd, IMAGE_INDEX, x, 145, 144, 250);
-    place(hwnd, DISK, x + 152, 145, width - 152, 250);
-    place(hwnd, MODE, x, 184, 211, 180);
+    let left = area.left_column();
+    let right = x + left + 12;
+    let right_width = width - left - 12;
+
     if section == RESTORE {
-        place(hwnd, BACKUP_LABEL, x, 113, 128, 22);
-        place(hwnd, PRESERVATION, x + 128, 108, width - 128, 30);
-    } else {
-        place(hwnd, BACKUP_LABEL, x + 221, 189, 126, 22);
-        place(hwnd, PRESERVATION, x + 347, 184, width - 347, 30);
+        place(hwnd, BACKUP_LABEL, x + 13, 167, left - 26, 20);
+        place(hwnd, PRESERVATION, x + 13, 187, left - 26, 29);
+        place(hwnd, DESTINATION_LABEL, x + 13, 223, left - 26, 20);
+        place(hwnd, DEST, x + 13, 243, left - 26, 29);
+        place(hwnd, HANDOFF, x + 13, 282, left - 26, 29);
+        return;
     }
-    place(hwnd, PLAN, x, area.actions(), 155, 32);
-    place(hwnd, SAVE, x + 163, area.actions(), 157, 32);
-    place(hwnd, HANDOFF, x, area.actions(), 270, 32);
+
+    let form_x = x + 13;
+    let form_width = width - 26;
+    place(hwnd, MEDIA_LABEL, form_x, 141, 54, 20);
+    place(hwnd, MEDIA, form_x + 56, 136, form_width - 185, 29);
+    place(hwnd, INSPECT, form_x + form_width - 121, 136, 121, 29);
+
+    let disk_width = form_width * 43 / 100;
+    place(hwnd, DISK, form_x, 173, disk_width, 250);
+    place(hwnd, IMAGE_INDEX, form_x + disk_width + 8, 173, 106, 250);
+    place(
+        hwnd,
+        MODE,
+        form_x + disk_width + 122,
+        173,
+        form_width - disk_width - 122,
+        180,
+    );
+
+    place(hwnd, BACKUP_LABEL, form_x, 214, 129, 20);
+    place(hwnd, PRESERVATION, form_x + 130, 209, form_width - 130, 29);
+    place(hwnd, DESTINATION_LABEL, form_x, 250, 59, 20);
+    place(hwnd, DEST, form_x + 60, 245, form_width - 325, 29);
+    place(hwnd, PLAN, form_x + form_width - 257, 245, 121, 29);
+    place(hwnd, SAVE, form_x + form_width - 128, 245, 128, 29);
+
+    let top = super::layout::Layout::body_top(DEPLOY);
+    let bottom = area.body_bottom(DEPLOY);
+    place(
+        hwnd,
+        CONTENT,
+        x + 12,
+        top + 40,
+        left - 24,
+        bottom - top - 50,
+    );
+    place(
+        hwnd,
+        INSTALL_UNAVAILABLE,
+        right + 13,
+        bottom - 38,
+        right_width - 26,
+        29,
+    );
 }
 
 pub unsafe fn render(hwnd: HWND, app: &App) -> bool {
@@ -165,12 +230,14 @@ pub unsafe fn render(hwnd: HWND, app: &App) -> bool {
         MODE,
         PLAN,
         SAVE,
+        INSTALL_UNAVAILABLE,
     ] {
         show(hwnd, id, deployment);
     }
     show(hwnd, BACKUP_LABEL, deployment || handoff);
     show(hwnd, PRESERVATION, deployment || handoff);
     show(hwnd, HANDOFF, handoff);
+    EnableWindow(control(hwnd, INSTALL_UNAVAILABLE), 0);
     for id in [
         MEDIA,
         INSPECT,
@@ -184,7 +251,13 @@ pub unsafe fn render(hwnd: HWND, app: &App) -> bool {
     }
     EnableWindow(
         control(hwnd, PLAN),
-        (!app.busy && app.deployment.media.is_some() && !app.deployment.disks.is_empty()) as i32,
+        (!app.busy
+            && app
+                .deployment
+                .media
+                .as_ref()
+                .is_some_and(|media| media.images.get(selection(hwnd, IMAGE_INDEX)).is_some())
+            && app.deployment.disks.get(selection(hwnd, DISK)).is_some()) as i32,
     );
     EnableWindow(
         control(hwnd, SAVE),
@@ -198,30 +271,16 @@ pub unsafe fn render(hwnd: HWND, app: &App) -> bool {
             &preview_text(&app.deployment, app.technician),
         );
     }
-    if handoff {
-        set(hwnd, CONTENT, "RESTAURAR ARQUIVOS APÓS REINSTALAR\n\nInforme a pasta da operação de backup e o diretório para exportar a referência. A verificação recalcula o SHA-256 dos arquivos.\n\nNo Windows instalado, execute archrescue-restore-agent.exe com a conta de destino. Use perfil, revise o mapeamento com previa e confirme com restaurar.\n\nA referência registra o manifesto e a seleção de origem. Ela não contém os arquivos nem concede autorização para restaurar.");
-    }
 
     deployment || handoff
 }
 
 fn preview_text(state: &Deployment, technician: bool) -> String {
-    let mut text = String::from(
-        "PLANEJAR IMPLANTAÇÃO\n\nA execução da instalação está indisponível nesta versão.\n",
-    );
     let Some(media) = &state.media else {
-        text.push_str("\nInforme um WIM, ESD ou a raiz de uma mídia montada. Depois da inspeção, selecione o índice, o disco GPT e o modo.");
-        return text;
+        return "Informe um WIM, ESD ou a raiz de uma mídia montada para inspecionar os índices."
+            .into();
     };
-
-    let _ = writeln!(
-        text,
-        "\n{} | {:?} | {} bytes\nSHA-256: {}",
-        media.path.display(),
-        media.image_type,
-        media.container_bytes,
-        media.sha256
-    );
+    let mut text = String::new();
 
     if let Some(plan) = &state.plan {
         let label = match plan.result {
@@ -266,6 +325,14 @@ fn preview_text(state: &Deployment, technician: bool) -> String {
             }
         }
     }
+
+    let _ = writeln!(
+        text,
+        "\nMídia inspecionada\n{} · {} bytes\nSHA-256: {}",
+        media.path.display(),
+        media.container_bytes,
+        media.sha256,
+    );
 
     for image in &media.images {
         let _ = writeln!(
@@ -434,7 +501,7 @@ pub unsafe fn action(hwnd: HWND, app: &mut App, id: usize, notification: u32) ->
             cancel.store(false, Ordering::Relaxed);
             work(app, move || {
                 match export_handoff(&backup, &directory, &cancel) {
-                    Ok(path) => Event::PlanExported(path),
+                    Ok(path) => Event::HandoffExported(path),
                     Err(error) => Event::Failure(error),
                 }
             });

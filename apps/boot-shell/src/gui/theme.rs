@@ -2,18 +2,23 @@
 
 use super::*;
 
-pub const BACKGROUND: COLORREF = rgb(11, 15, 23);
-pub const SIDEBAR: COLORREF = rgb(16, 23, 34);
-pub const PANEL: COLORREF = rgb(21, 30, 43);
-pub const ELEVATED: COLORREF = rgb(27, 38, 54);
-pub const TEXT: COLORREF = rgb(241, 245, 249);
-pub const MUTED: COLORREF = rgb(160, 177, 198);
-pub const ACCENT: COLORREF = rgb(128, 175, 255);
-pub const PRIMARY: COLORREF = rgb(38, 83, 157);
-pub const BORDER: COLORREF = rgb(45, 60, 80);
-pub const SUCCESS: COLORREF = rgb(107, 222, 151);
-pub const WARNING: COLORREF = rgb(255, 196, 107);
-pub const CRITICAL: COLORREF = rgb(255, 145, 145);
+pub const BACKGROUND: COLORREF = rgb(14, 14, 19);
+pub const SIDEBAR: COLORREF = rgb(19, 19, 27);
+pub const PANEL: COLORREF = rgb(22, 22, 30);
+pub const INPUT: COLORREF = rgb(17, 17, 24);
+pub const ELEVATED: COLORREF = rgb(32, 31, 43);
+pub const SELECTED: COLORREF = rgb(43, 33, 59);
+pub const TEXT: COLORREF = rgb(247, 246, 251);
+pub const MUTED: COLORREF = rgb(180, 174, 194);
+pub const ACCENT: COLORREF = rgb(195, 168, 255);
+pub const ON_ACCENT: COLORREF = rgb(29, 21, 45);
+pub const BORDER: COLORREF = rgb(51, 47, 65);
+pub const SUCCESS: COLORREF = rgb(131, 232, 170);
+pub const WARNING: COLORREF = rgb(255, 204, 128);
+pub const CRITICAL: COLORREF = rgb(255, 160, 166);
+pub const SUCCESS_SURFACE: COLORREF = rgb(23, 45, 34);
+pub const WARNING_SURFACE: COLORREF = rgb(48, 36, 24);
+pub const ERROR_SURFACE: COLORREF = rgb(48, 27, 36);
 
 const fn rgb(red: u32, green: u32, blue: u32) -> COLORREF {
     red | (green << 8) | (blue << 16)
@@ -24,7 +29,7 @@ pub struct Theme {
     pub heading: HFONT,
     pub emphasis: HFONT,
     pub panel: HBRUSH,
-    pub background: HBRUSH,
+    pub input: HBRUSH,
 }
 
 impl Theme {
@@ -42,7 +47,7 @@ impl Theme {
             heading: font(&face, 29, 600),
             emphasis: font(&face, 17, 600),
             panel: CreateSolidBrush(PANEL),
-            background: CreateSolidBrush(BACKGROUND),
+            input: CreateSolidBrush(INPUT),
         };
 
         if [
@@ -50,7 +55,7 @@ impl Theme {
             theme.heading,
             theme.emphasis,
             theme.panel,
-            theme.background,
+            theme.input,
         ]
         .iter()
         .any(|handle| handle.is_null())
@@ -71,7 +76,7 @@ impl Drop for Theme {
                 self.heading,
                 self.emphasis,
                 self.panel,
-                self.background,
+                self.input,
             ] {
                 if !handle.is_null() {
                     DeleteObject(handle);

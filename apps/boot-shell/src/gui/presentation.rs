@@ -4,7 +4,9 @@ use windows_sys::Win32::UI::Controls::{ODS_DISABLED, ODS_FOCUS, ODS_SELECTED};
 
 use super::{layout::Layout, theme::*, *};
 
-pub unsafe fn fill(dc: HDC, rect: RECT, color: COLORREF) {
+mod cards;
+
+unsafe fn fill(dc: HDC, rect: RECT, color: COLORREF) {
     SetDCBrushColor(dc, color);
     FillRect(dc, &rect, GetStockObject(DC_BRUSH));
 }
@@ -14,7 +16,7 @@ unsafe fn outline(dc: HDC, rect: RECT, color: COLORREF) {
     FrameRect(dc, &rect, GetStockObject(DC_BRUSH));
 }
 
-pub fn rect(x: i32, y: i32, width: i32, height: i32) -> RECT {
+fn rect(x: i32, y: i32, width: i32, height: i32) -> RECT {
     RECT {
         left: x,
         top: y,
@@ -23,14 +25,7 @@ pub fn rect(x: i32, y: i32, width: i32, height: i32) -> RECT {
     }
 }
 
-pub unsafe fn text(
-    dc: HDC,
-    font: HFONT,
-    mut bounds: RECT,
-    label: &str,
-    color: COLORREF,
-    flags: u32,
-) {
+unsafe fn text(dc: HDC, font: HFONT, mut bounds: RECT, label: &str, color: COLORREF, flags: u32) {
     let label = wide(label);
     let previous = SelectObject(dc, font);
     SetBkMode(dc, TRANSPARENT as i32);
@@ -41,72 +36,102 @@ pub unsafe fn text(
 
 const LINE: u32 = DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS | DT_NOPREFIX;
 
+unsafe fn surface(dc: HDC, bounds: RECT, background: COLORREF, border: COLORREF, radius: i32) {
+    let previous_pen = SelectObject(dc, GetStockObject(DC_PEN));
+    let previous_brush = SelectObject(dc, GetStockObject(DC_BRUSH));
+    SetDCPenColor(dc, border);
+    SetDCBrushColor(dc, background);
+    RoundRect(
+        dc,
+        bounds.left,
+        bounds.top,
+        bounds.right,
+        bounds.bottom,
+        radius,
+        radius,
+    );
+    SelectObject(dc, previous_brush);
+    SelectObject(dc, previous_pen);
+}
+
 pub unsafe fn button(item: &DRAWITEMSTRUCT, theme: &Theme, selected_page: usize) {
     let id = item.CtlID as usize;
     let bounds = item.rcItem;
-    let nav = (100..100 + i18n::SECTIONS.len()).contains(&id);
-    let selected = nav && id == 100 + selected_page;
-    let primary = matches!(id, NEXT | PREVIEW | EXPORT | pages::SCAN) || deployment::primary(id);
-    let write = id == COPY || id == RESUME;
+    let page = id
+        .checked_sub(100)
+        .filter(|page| navigation::ORDER.contains(page));
+    let utility = matches!(id, TECHNICIAN | REFRESH | CONSOLE | CANCEL);
+    let nav = page.is_some() || utility;
+    let selected = page.is_some_and(|page| page == navigation::owner(selected_page));
+    let primary = matches!(
+        id,
+        PREVIEW | COPY | RESUME | EXPORT | VERIFY | REPAIR | pages::SCAN
+    ) || deployment::primary(id);
     let disabled = item.itemState & ODS_DISABLED != 0;
     let pressed = item.itemState & ODS_SELECTED != 0;
+    let accent = primary && !disabled;
+    let backdrop = if nav { SIDEBAR } else { PANEL };
     let color = if disabled {
-        PANEL
-    } else if pressed || selected {
-        BORDER
-    } else if primary {
-        PRIMARY
+        backdrop
+    } else if selected || pressed && !accent {
+        SELECTED
+    } else if accent {
+        ACCENT
     } else if nav {
         SIDEBAR
     } else {
         ELEVATED
     };
 
-    fill(item.hDC, bounds, color);
-    if !nav {
-        outline(
-            item.hDC,
-            bounds,
-            if write && !disabled { WARNING } else { BORDER },
-        );
+    fill(item.hDC, bounds, backdrop);
+    if !nav || selected || pressed {
+        let border = if accent { ACCENT } else { BORDER };
+        surface(item.hDC, bounds, color, border, 8);
     }
     if selected {
         fill(
             item.hDC,
             rect(
                 bounds.left,
-                bounds.top + 3,
+                bounds.top + 7,
                 3,
-                bounds.bottom - bounds.top - 6,
+                bounds.bottom - bounds.top - 14,
             ),
             ACCENT,
         );
     }
 
     let mut label_area = bounds;
-    label_area.left += if nav { 34 } else { 8 };
-    label_area.right -= 8;
+    label_area.left += if nav { 34 } else { 7 };
+    label_area.right -= 7;
     if nav {
+        let symbol = page.unwrap_or(match id {
+            TECHNICIAN => INTEGRITY_PAGE,
+            REFRESH => deployment::RESTORE,
+            CONSOLE => deployment::DEPLOY,
+            _ => VERIFY_PAGE,
+        });
         icon(
             item.hDC,
-            id - 100,
-            bounds.left + 11,
-            bounds.top + 10,
+            symbol,
+            bounds.left + 10,
+            (bounds.top + bounds.bottom - 14) / 2,
             if selected { ACCENT } else { MUTED },
         );
     }
+    let foreground = if accent {
+        ON_ACCENT
+    } else if disabled || nav && !selected {
+        MUTED
+    } else {
+        TEXT
+    };
     text(
         item.hDC,
-        theme.body,
+        if accent { theme.emphasis } else { theme.body },
         label_area,
         &get(GetParent(item.hwndItem), id).replace('&', ""),
-        if disabled {
-            MUTED
-        } else if write {
-            WARNING
-        } else {
-            TEXT
-        },
+        foreground,
         LINE | if nav { DT_LEFT } else { DT_CENTER },
     );
 
@@ -119,7 +144,7 @@ pub unsafe fn button(item: &DRAWITEMSTRUCT, theme: &Theme, selected_page: usize)
                 bounds.right - bounds.left - 4,
                 bounds.bottom - bounds.top - 4,
             ),
-            ACCENT,
+            if accent { ON_ACCENT } else { ACCENT },
         );
     }
 }
@@ -128,9 +153,11 @@ pub unsafe fn list_item(item: &DRAWITEMSTRUCT, theme: &Theme) {
     let combo = item.CtlType == ODT_COMBOBOX;
     let selected = item.itemState & ODS_SELECTED != 0;
     let background = if selected {
-        BORDER
+        SELECTED
     } else if !combo && item.itemID % 2 == 1 {
         ELEVATED
+    } else if combo {
+        INPUT
     } else {
         PANEL
     };
@@ -173,16 +200,82 @@ pub unsafe fn list_item(item: &DRAWITEMSTRUCT, theme: &Theme) {
     let mut area = item.rcItem;
     area.left += 8;
     area.right -= 8;
-    text(item.hDC, theme.body, area, &label, color, LINE);
+    if item.CtlID as usize == FILES {
+        file_row(item.hDC, theme, area, &label);
+    } else {
+        text(item.hDC, theme.body, area, &label, color, LINE);
+    }
     if item.itemState & ODS_FOCUS != 0 {
         outline(item.hDC, item.rcItem, ACCENT);
+    }
+}
+
+unsafe fn file_row(dc: HDC, theme: &Theme, area: RECT, label: &str) {
+    let width = area.right - area.left;
+    let mut fields = label.splitn(3, '\t');
+    let name = fields.next().unwrap_or_default();
+    let state = fields.next().unwrap_or_default();
+    let size = fields.next();
+    let name_width = width * 57 / 100;
+    let kind_width = if size.is_some() {
+        width / 7
+    } else {
+        width - name_width
+    };
+    let color = if state.contains("corrompido")
+        || size.is_some_and(|value| value.starts_with("Indisponível"))
+    {
+        CRITICAL
+    } else if state.contains("incompleto") || state.contains("execução") {
+        WARNING
+    } else if state == "Conclusão registrada" {
+        theme::SUCCESS
+    } else {
+        MUTED
+    };
+
+    text(
+        dc,
+        theme.body,
+        rect(area.left, area.top, name_width - 8, area.bottom - area.top),
+        name,
+        TEXT,
+        LINE,
+    );
+    text(
+        dc,
+        theme.body,
+        rect(
+            area.left + name_width,
+            area.top,
+            kind_width - 5,
+            area.bottom - area.top,
+        ),
+        state,
+        color,
+        LINE,
+    );
+    if let Some(size) = size {
+        text(
+            dc,
+            theme.body,
+            rect(
+                area.left + name_width + kind_width,
+                area.top,
+                width - name_width - kind_width,
+                area.bottom - area.top,
+            ),
+            size,
+            color,
+            LINE,
+        );
     }
 }
 
 unsafe fn icon(dc: HDC, section: usize, x: i32, y: i32, color: COLORREF) {
     // Stroke coordinates use a 14px grid. The stock pen remains owned by GDI.
     let paths: &[&[(i32, i32)]] = match section {
-        DASHBOARD => &[
+        deployment::DEPLOY => &[
             &[(0, 0), (6, 0), (6, 6), (0, 6), (0, 0)],
             &[(9, 0), (14, 0), (14, 14), (9, 14), (9, 0)],
             &[(0, 9), (6, 9), (6, 14), (0, 14), (0, 9)],
@@ -192,7 +285,7 @@ unsafe fn icon(dc: HDC, section: usize, x: i32, y: i32, color: COLORREF) {
             &[(7, 0), (13, 3), (13, 9), (7, 14), (1, 9), (1, 3), (7, 0)],
             &[(4, 7), (6, 9), (10, 5)],
         ],
-        DISKS => &[
+        DASHBOARD | DISKS => &[
             &[(0, 2), (14, 2), (14, 12), (0, 12), (0, 2)],
             &[(0, 7), (14, 7)],
             &[(10, 9), (12, 9)],
@@ -206,10 +299,19 @@ unsafe fn icon(dc: HDC, section: usize, x: i32, y: i32, color: COLORREF) {
             &[(7, 1), (7, 7), (13, 7)],
             &[(4, 2), (1, 5), (1, 10), (4, 13), (10, 13), (13, 10)],
         ],
-        deployment::DEPLOY => &[
-            &[(1, 1), (13, 1), (13, 10), (1, 10), (1, 1)],
-            &[(7, 10), (7, 14)],
-            &[(4, 14), (10, 14)],
+        VERIFY_PAGE => &[
+            &[
+                (7, 0),
+                (12, 2),
+                (14, 7),
+                (12, 12),
+                (7, 14),
+                (2, 12),
+                (0, 7),
+                (2, 2),
+                (7, 0),
+            ],
+            &[(4, 7), (6, 9), (10, 5)],
         ],
         deployment::RESTORE => &[&[(0, 4), (5, 4), (7, 6), (14, 6), (14, 13), (0, 13), (0, 4)]],
         _ => &[
@@ -239,254 +341,171 @@ pub unsafe fn paint(hwnd: HWND, theme: &Theme, app: Option<&App>) {
     let dc = BeginPaint(hwnd, &mut paint);
     if !dc.is_null() {
         let area = Layout::read(hwnd);
-        fill(dc, rect(0, 0, area.width, area.height), BACKGROUND);
-        fill(dc, rect(0, 0, area.rail, area.height), SIDEBAR);
-        fill(dc, rect(area.rail - 1, 0, 1, area.height), BORDER);
-
-        fill(dc, rect(16, 23, 5, 25), ACCENT);
-        text(
-            dc,
-            theme.emphasis,
-            rect(29, 22, area.rail - 35, 26),
-            "ArchRescue",
-            TEXT,
-            LINE,
-        );
-        text(
-            dc,
-            theme.body,
-            rect(29, 47, area.rail - 35, 19),
-            "Recuperação",
-            MUTED,
-            LINE,
-        );
-
-        if let Some(app) = app {
-            page(dc, theme, &area, app);
+        let width = paint.rcPaint.right - paint.rcPaint.left;
+        let height = paint.rcPaint.bottom - paint.rcPaint.top;
+        if width > 0 && height > 0 {
+            buffered(dc, &area, paint.rcPaint, theme, app);
         }
     }
     EndPaint(hwnd, &paint);
 }
 
-unsafe fn page(dc: HDC, theme: &Theme, area: &Layout, app: &App) {
-    let x = area.left();
-    let width = area.body_width();
-    let title = if app.section == VERIFY_PAGE {
-        "Verificação do backup"
-    } else {
-        i18n::SECTIONS[app.section]
-    };
-    text(
-        dc,
-        theme.heading,
-        rect(x, 18, width - 168, 38),
-        title,
-        TEXT,
-        LINE,
-    );
-
-    let source = app
-        .roots
-        .get(app.root_index)
-        .map(|path| path.display().to_string())
-        .or_else(|| {
-            app.report
-                .as_ref()
-                .and_then(|report| report.installations.installations.first())
-                .map(|installation| installation.path.display().to_string())
-        })
-        .unwrap_or_else(|| "Nenhuma instalação selecionada".into());
-    let subtitle = if app.busy {
-        format!("Operação em andamento   ·   {source}")
-    } else {
-        source
-    };
-    text(
-        dc,
-        theme.body,
-        rect(x, 60, width, 24),
-        &subtitle,
-        MUTED,
-        LINE,
-    );
-    fill(dc, rect(x, 94, width, 1), BORDER);
-
-    if app.section == DASHBOARD {
-        dashboard(dc, theme, area, app);
-    } else {
-        let top = Layout::body_top(app.section);
-        let body = rect(x, top, width, area.body_bottom(app.section) - top);
-        fill(dc, body, PANEL);
-        outline(dc, body, BORDER);
+unsafe fn buffered(dc: HDC, area: &Layout, dirty: RECT, theme: &Theme, app: Option<&App>) {
+    // This DC and bitmap are local to WM_PAINT. The original bitmap is restored before deletion.
+    let buffer = CreateCompatibleDC(dc);
+    if buffer.is_null() {
+        scene(dc, area, theme, app);
+        return;
+    }
+    let width = dirty.right - dirty.left;
+    let height = dirty.bottom - dirty.top;
+    let bitmap = CreateCompatibleBitmap(dc, width, height);
+    if bitmap.is_null() {
+        DeleteDC(buffer);
+        scene(dc, area, theme, app);
+        return;
     }
 
-    let banner = rect(x, area.height - 58, width, 50);
-    fill(dc, banner, PANEL);
-    fill(
-        dc,
-        rect(x, area.height - 58, 3, 50),
-        if app.error_status { CRITICAL } else { ACCENT },
+    let previous = SelectObject(buffer, bitmap);
+    SetViewportOrgEx(buffer, -dirty.left, -dirty.top, null_mut());
+    scene(buffer, area, theme, app);
+    BitBlt(
+        dc, dirty.left, dirty.top, width, height, buffer, dirty.left, dirty.top, SRCCOPY,
     );
-    if let Some(progress) = &app.progress {
-        let percent = |bytes: u64| {
-            ((bytes as u128 * width as u128) / progress.planned_bytes.max(1) as u128)
-                .min(width as u128) as i32
-        };
-        fill(dc, rect(x, area.height - 60, width, 2), BORDER);
-        fill(
-            dc,
-            rect(x, area.height - 60, percent(progress.acknowledged_bytes), 2),
-            ACCENT,
-        );
-        fill(
-            dc,
-            rect(x, area.height - 60, percent(progress.verified_bytes), 2),
-            theme::SUCCESS,
-        );
-    }
+
+    SelectObject(buffer, previous);
+    DeleteObject(bitmap);
+    DeleteDC(buffer);
 }
 
-unsafe fn dashboard(dc: HDC, theme: &Theme, area: &Layout, app: &App) {
-    let cards = summary(app);
-    let x = area.left();
-    let width = (area.body_width() - 12) / 2;
-    for (index, (label, value, detail, color)) in cards.into_iter().enumerate() {
-        let left = x + index as i32 % 2 * (width + 12);
-        let top = 108 + index as i32 / 2 * 102;
-        let bounds = rect(left, top, width, 90);
-        fill(dc, bounds, PANEL);
-        outline(dc, bounds, BORDER);
-        text(
-            dc,
-            theme.body,
-            rect(left + 14, top + 9, width - 28, 19),
-            label,
-            MUTED,
-            LINE,
-        );
-        text(
-            dc,
-            theme.emphasis,
-            rect(left + 14, top + 31, width - 28, 25),
-            &value,
-            color,
-            LINE,
-        );
-        text(
-            dc,
-            theme.body,
-            rect(left + 14, top + 59, width - 28, 20),
-            &detail,
-            MUTED,
-            LINE,
-        );
-    }
+unsafe fn scene(dc: HDC, area: &Layout, theme: &Theme, app: Option<&App>) {
+    fill(dc, rect(0, 0, area.width, area.height), BACKGROUND);
+    fill(dc, rect(0, 0, area.rail, area.height), SIDEBAR);
+    fill(dc, rect(area.rail - 1, 0, 1, area.height), BORDER);
+    fill(dc, rect(14, 309, area.rail - 28, 1), BORDER);
+    fill(dc, rect(14, area.height - 132, area.rail - 28, 1), BORDER);
 
-    let bounds = rect(x, 316, area.body_width(), 87);
-    fill(dc, bounds, ELEVATED);
-    fill(dc, rect(x, 316, 3, 87), ACCENT);
+    surface(dc, rect(15, 20, 30, 30), ACCENT, ACCENT, 9);
+    icon(dc, INTEGRITY_PAGE, 23, 28, ON_ACCENT);
     text(
         dc,
         theme.emphasis,
-        rect(x + 14, 326, area.body_width() - 28, 25),
-        "Próxima ação",
+        rect(53, 16, area.rail - 57, 25),
+        "ArchRescue",
         TEXT,
         LINE,
     );
     text(
         dc,
         theme.body,
-        rect(x + 14, 356, area.body_width() - 28, 39),
-        recommendation(app),
+        rect(54, 42, area.rail - 59, 18),
+        "ArchGTi",
         MUTED,
-        DT_WORDBREAK | DT_NOPREFIX,
+        LINE,
     );
-}
 
-type Card = (&'static str, String, String, COLORREF);
-
-fn summary(app: &App) -> [Card; 4] {
-    let report = app.report.as_ref();
-    let installations = report.map(|report| &report.installations.installations);
-    let disks = report.map(|report| &report.inventory.disks);
-    let count = |count: Option<usize>| {
-        count.map_or_else(|| "Consultando…".into(), |count| count.to_string())
-    };
-    let backup = report.and_then(|report| {
-        report
-            .transactions
-            .iter()
-            .rev()
-            .find(|item| item.status.state == archrescue_core::State::Completed)
-    });
-
-    [
-        (
-            "Windows detectado",
-            count(installations.map(Vec::len)),
-            installations.and_then(|items| items.first()).map_or_else(
-                || "Instalações offline corroboradas".into(),
-                |item| item.path.display().to_string(),
-            ),
+    if let Some(app) = app {
+        let x = area.left();
+        let width = area.body_width();
+        let label = navigation::label(app.section, false);
+        let (title, subtitle) = navigation::heading(app);
+        icon(dc, app.section, x, 16, MUTED);
+        text(
+            dc,
+            theme.body,
+            rect(x + 23, 9, width - 170, 28),
+            label,
             TEXT,
-        ),
-        (
-            "Discos disponíveis",
-            count(disks.map(Vec::len)),
-            disks.and_then(|items| items.first()).map_or_else(
-                || "Inventário de dispositivos".into(),
-                |disk| disk.identity.clone(),
-            ),
-            TEXT,
-        ),
-        (
-            "Integridade do Windows",
-            pages::integrity_status(app).into(),
-            pages::selected_scan(app).map_or_else(
-                || "Componentes do Windows offline".into(),
-                |scan| format!("{} evidências registradas", scan.checks.len()),
-            ),
-            match pages::selected_scan(app).map(|scan| scan.status) {
-                Some(archrescue_integrity::Status::FindingsDetected) => WARNING,
-                Some(archrescue_integrity::Status::Blocked) => CRITICAL,
-                _ => TEXT,
-            },
-        ),
-        (
-            "Backup",
-            if app.progress.is_some() {
-                "Em andamento"
-            } else if backup.is_some() {
-                "Verificado nesta sessão"
-            } else {
-                "Sem backup conhecido"
-            }
-            .into(),
-            backup.map_or_else(
-                || "Selecione os dados e um disco independente".into(),
-                |backup| {
-                    format!(
-                        "{} arquivos · {} bytes verificados",
-                        backup.progress.verified_files, backup.progress.verified_bytes
-                    )
-                },
-            ),
-            if backup.is_some() {
-                theme::SUCCESS
-            } else {
-                TEXT
-            },
-        ),
-    ]
-}
+            LINE,
+        );
+        let source = app
+            .roots
+            .get(app.root_index)
+            .map(|path| path.display().to_string());
+        let context = if app.technician {
+            "Modo técnico".into()
+        } else {
+            source.map_or_else(|| "Windows x64".into(), |path| format!("Origem  ·  {path}"))
+        };
+        surface(dc, rect(x + width - 145, 10, 145, 25), PANEL, BORDER, 7);
+        text(
+            dc,
+            theme.body,
+            rect(x + width - 136, 10, 128, 25),
+            &context,
+            MUTED,
+            LINE | DT_CENTER,
+        );
+        fill(dc, rect(area.rail, 44, area.width - area.rail, 1), BORDER);
+        text(dc, theme.heading, rect(x, 56, width, 38), title, TEXT, LINE);
+        text(
+            dc,
+            theme.body,
+            rect(x, 96, width, 24),
+            subtitle,
+            MUTED,
+            LINE,
+        );
 
-fn recommendation(app: &App) -> &'static str {
-    if let Some(scan) = pages::selected_scan(app) {
-        return scan.recommendation();
+        cards::render(dc, area, theme, app);
+        footer(dc, area, app);
     }
-    match &app.report {
-        None => "Aguarde a identificação dos discos e instalações acessíveis.",
-        Some(report) if report.installations.installations.is_empty() => "Confira os volumes acessíveis e atualize o inventário antes de selecionar uma instalação.",
-        Some(_) => "Selecione a instalação e analise os componentes do Windows antes de preparar a recuperação.",
+}
+
+unsafe fn footer(dc: HDC, area: &Layout, app: &App) {
+    let x = area.left();
+    let width = area.body_width();
+    let top = area.footer();
+    fill(dc, rect(area.rail, top, area.width - area.rail, 51), PANEL);
+    fill(dc, rect(area.rail, top, area.width - area.rail, 1), BORDER);
+    let color = if app.error_status { CRITICAL } else { ACCENT };
+    icon(
+        dc,
+        if app.error_status {
+            CANCEL
+        } else {
+            VERIFY_PAGE
+        },
+        x,
+        top + 13,
+        color,
+    );
+
+    if let Some(progress) = &app.progress {
+        progress_bar(
+            dc,
+            x,
+            top - 5,
+            width,
+            progress.acknowledged_bytes,
+            progress.planned_bytes,
+            ACCENT,
+        );
+        if progress.planned_bytes > 0 {
+            let verified = ((progress.verified_bytes as u128 * width as u128)
+                / progress.planned_bytes as u128)
+                .min(width as u128) as i32;
+            fill(dc, rect(x, top - 5, verified, 4), theme::SUCCESS);
+        }
+    } else if let Some((bytes, total)) = app.media_progress {
+        progress_bar(dc, x, top - 5, width, bytes, total, ACCENT);
+    } else if app.busy {
+        fill(dc, rect(x, top - 5, 32, 4), ACCENT);
+    }
+}
+
+unsafe fn progress_bar(
+    dc: HDC,
+    x: i32,
+    y: i32,
+    width: i32,
+    value: u64,
+    total: u64,
+    color: COLORREF,
+) {
+    fill(dc, rect(x, y, width, 4), BORDER);
+    if total > 0 {
+        let filled = ((value as u128 * width as u128) / total as u128).min(width as u128) as i32;
+        fill(dc, rect(x, y, filled, 4), color);
     }
 }

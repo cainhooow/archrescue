@@ -2,6 +2,7 @@
 
 mod deployment;
 mod layout;
+mod navigation;
 mod pages;
 mod presentation;
 mod theme;
@@ -54,15 +55,17 @@ const STATUS: usize = 211;
 const PREVIEW: usize = 212;
 const CHECKPOINTS: usize = 213;
 const RESUME: usize = 214;
+const PREVIOUS: usize = 215;
 const NEXT: usize = 216;
 const TECHNICIAN: usize = 217;
 const VERIFY: usize = 218;
 const REPAIR: usize = 219;
 const ESP: usize = 220;
-const BACKUP_RESULTS: usize = 221;
+const DISK_DETAILS: usize = 221;
 const SOURCE_LABEL: usize = 222;
 const DESTINATION_LABEL: usize = 223;
 const ESP_LABEL: usize = 224;
+const REPAIR_UNAVAILABLE: usize = 225;
 
 const DASHBOARD: usize = 0;
 const DIAGNOSIS: usize = 1;
@@ -91,6 +94,7 @@ enum Event {
     Repair(Box<repair::RepairPlan>),
     Exported(PathBuf),
     PlanExported(PathBuf),
+    HandoffExported(PathBuf),
     Deployment(deployment::Update),
     Integrity(Box<archrescue_integrity::IntegrityReport>),
     IntegrityProgress(archrescue_integrity::Progress),
@@ -114,10 +118,15 @@ struct App {
     checkpoints: Option<Vec<CheckpointEntry>>,
     report: Option<Report>,
     entries: Vec<Entry>,
+    listing_loaded: bool,
     directory: PathBuf,
     busy: bool,
     error_status: bool,
+    operation_page: usize,
     progress: Option<Progress>,
+    media_progress: Option<(u64, u64)>,
+    report_export: Option<PathBuf>,
+    handoff_export: Option<PathBuf>,
     scanning: bool,
     roots: Vec<PathBuf>,
     root_index: usize,
@@ -210,10 +219,21 @@ unsafe fn render(hwnd: HWND, app: &App) {
     let repair = app.section == REPAIR_PAGE;
     let verify = app.section == VERIFY_PAGE;
     let report_stage = app.section == REPORTS;
-    let files = protect && app.preview.is_none();
-
-    show(hwnd, FILES, files);
-    show(hwnd, CONTENT, !files && app.section != DASHBOARD);
+    let has_entries = app
+        .checkpoints
+        .as_ref()
+        .map_or(!app.entries.is_empty(), |entries| !entries.is_empty());
+    show(hwnd, FILES, protect && app.preview.is_none() && has_entries);
+    show(
+        hwnd,
+        CONTENT,
+        if protect {
+            app.preview.is_some()
+        } else {
+            !matches!(app.section, DASHBOARD | deployment::RESTORE)
+        },
+    );
+    show(hwnd, DISK_DETAILS, app.section == DASHBOARD);
     show(hwnd, ESP, repair);
     show(hwnd, ESP_LABEL, repair);
     show(hwnd, SOURCE_LABEL, protect);
@@ -229,20 +249,30 @@ unsafe fn render(hwnd: HWND, app: &App) {
     }
     show(hwnd, EXPORT, report_stage);
     show(hwnd, VERIFY, verify);
-    show(hwnd, BACKUP_RESULTS, protect);
     show(hwnd, REPAIR, repair);
-    show(hwnd, NEXT, app.section == DASHBOARD);
-    show(hwnd, CONSOLE, report_stage && app.technician);
+    show(hwnd, REPAIR_UNAVAILABLE, repair);
+    EnableWindow(control(hwnd, REPAIR_UNAVAILABLE), 0);
+    EnableWindow(
+        control(hwnd, PREVIOUS),
+        navigation::adjacent(app.section, -1).is_some() as i32,
+    );
+    EnableWindow(
+        control(hwnd, NEXT),
+        navigation::adjacent(app.section, 1).is_some() as i32,
+    );
+    EnableWindow(control(hwnd, CONSOLE), (!app.busy) as i32);
 
     let area = layout::Layout::read(hwnd);
-    for (index, label) in i18n::SECTIONS.iter().enumerate() {
-        let name = if area.rail < 200 {
-            i18n::COMPACT_SECTIONS[index]
-        } else {
-            label
-        };
-        set(hwnd, 100 + index, name);
-        InvalidateRect(control(hwnd, 100 + index), null(), 0);
+    for page in navigation::ORDER {
+        set(hwnd, 100 + page, navigation::label(page, area.rail < 200));
+        InvalidateRect(control(hwnd, 100 + page), null(), 0);
+    }
+    for (id, full, compact) in [
+        (REFRESH, "Atualizar diagnóstico", "Atualizar"),
+        (CONSOLE, "Console de diagnóstico", "Console"),
+        (CANCEL, "Cancelar operação", "Cancelar"),
+    ] {
+        set(hwnd, id, if area.rail < 200 { compact } else { full });
     }
 
     for id in [
@@ -281,7 +311,6 @@ unsafe fn render(hwnd: HWND, app: &App) {
         .as_ref()
         .is_some_and(|report| !report.transactions.is_empty());
     EnableWindow(control(hwnd, VERIFY), (!app.busy && has_backup) as i32);
-    EnableWindow(control(hwnd, BACKUP_RESULTS), has_backup as i32);
     set(
         hwnd,
         TECHNICIAN,
@@ -292,7 +321,7 @@ unsafe fn render(hwnd: HWND, app: &App) {
         },
     );
 
-    layout::arrange(hwnd, app.section);
+    layout::arrange(hwnd, app);
     InvalidateRect(hwnd, null(), 0);
 
     let structured = pages::render_page(hwnd, app);
@@ -300,28 +329,15 @@ unsafe fn render(hwnd: HWND, app: &App) {
         return;
     }
 
-    if let Some(preview) = &app.preview {
-        if protect {
-            let text = format!(
-                "PLANO DE BACKUP
-
-Origem: {}
-Destino independente: {}
-
-{} arquivos | {} bytes
-
-Seleções: {:?}
-
-O destino receberá uma pasta exclusiva com checkpoint e arquivos verificados. Use Iniciar backup para confirmar.",
-                preview.source.display(),
-                preview.destination.display(),
-                preview.files,
-                preview.bytes,
-                preview.selections,
-            );
-            set(hwnd, CONTENT, &text);
-            return;
-        }
+    if let Some(preview) = app.preview.as_ref().filter(|_| protect) {
+        let selection = preview
+            .selections
+            .iter()
+            .map(|path| path.display().to_string())
+            .collect::<Vec<_>>()
+            .join("\n");
+        set(hwnd, CONTENT, &selection);
+        return;
     }
 
     let Some(report) = &app.report else {
@@ -344,7 +360,9 @@ O destino receberá uma pasta exclusiva com checkpoint e arquivos verificados. U
 fn work(app: &mut App, job: impl FnOnce() -> Event + Send + 'static) {
     app.busy = true;
     app.error_status = false;
+    app.operation_page = app.section;
     app.progress = None;
+    app.media_progress = None;
     app.cancellable = false;
     let sender = app.tx.clone();
 
@@ -437,27 +455,28 @@ unsafe fn stage(hwnd: HWND, app: &mut App, section: usize) {
     app.row_index = 0;
     render(hwnd, app);
     // Keep focus on the selected navigation button so Tab continues in page order.
-    SetFocus(control(hwnd, 100 + section.min(REPORTS)));
+    SetFocus(control(hwnd, 100 + navigation::owner(section)));
 }
 
 unsafe fn action(hwnd: HWND, app: &mut App, id: usize, notification: u32) {
-    if (100..100 + i18n::SECTIONS.len()).contains(&id) {
-        stage(hwnd, app, id - 100);
+    if let Some(page) = id
+        .checked_sub(100)
+        .filter(|page| navigation::ORDER.contains(page))
+    {
+        stage(hwnd, app, page);
         return;
     }
 
     match id {
-        NEXT => {
-            let next = if app.roots.is_empty() {
-                DISKS
-            } else {
-                INTEGRITY_PAGE
-            };
-            stage(hwnd, app, next);
+        PREVIOUS | NEXT => {
+            let offset = if id == PREVIOUS { -1 } else { 1 };
+            if let Some(page) = navigation::adjacent(app.section, offset) {
+                stage(hwnd, app, page);
+            }
             return;
         }
-        BACKUP_RESULTS => {
-            stage(hwnd, app, VERIFY_PAGE);
+        DISK_DETAILS => {
+            stage(hwnd, app, DISKS);
             return;
         }
         TECHNICIAN => {
@@ -812,7 +831,9 @@ Gravados {}/{} bytes · Verificados {} bytes · {} arquivos · {} falhas",
                 continue;
             }
             Event::Deployment(deployment::Update::Progress(read, total)) => {
+                app.media_progress = Some((read, total));
                 deployment::update(hwnd, app, deployment::Update::Progress(read, total));
+                InvalidateRect(hwnd, null(), 0);
                 continue;
             }
             Event::Deployment(update) => deployment::update(hwnd, app, update),
@@ -899,11 +920,22 @@ Gravados {}/{} bytes · Verificados {} bytes · {} arquivos · {} falhas",
                 }
                 set(hwnd, STATUS, "Prévia do reparo disponível.");
             }
-            Event::Exported(path) => set(
-                hwnd,
-                STATUS,
-                &format!("Relatório gravado e verificado: {}", path.display()),
-            ),
+            Event::Exported(path) => {
+                set(
+                    hwnd,
+                    STATUS,
+                    &format!("Relatório gravado e verificado: {}", path.display()),
+                );
+                app.report_export = Some(path);
+            }
+            Event::HandoffExported(path) => {
+                set(
+                    hwnd,
+                    STATUS,
+                    &format!("Referência exportada: {}", path.display()),
+                );
+                app.handoff_export = Some(path);
+            }
             Event::IntegrityProgress(progress) => {
                 set(
                     hwnd,
@@ -939,6 +971,7 @@ Gravados {}/{} bytes · Verificados {} bytes · {} arquivos · {} falhas",
 
         app.busy = false;
         app.progress = None;
+        app.media_progress = None;
         render(hwnd, app);
     }
 }
@@ -957,7 +990,7 @@ unsafe fn show_checkpoints(hwnd: HWND, app: &mut App, entries: Vec<CheckpointEnt
             _ => "Planejado",
         };
         let label = format!(
-            "{} | {}",
+            "{}\t{}",
             entry
                 .directory
                 .file_name()
@@ -983,22 +1016,19 @@ unsafe fn show_checkpoints(hwnd: HWND, app: &mut App, entries: Vec<CheckpointEnt
 unsafe fn show_listing(hwnd: HWND, app: &mut App, path: PathBuf, entries: Vec<Entry>) {
     app.directory = path;
     app.entries = entries;
+    app.listing_loaded = true;
 
     set(hwnd, ADDRESS, &app.directory.to_string_lossy());
     SendMessageW(control(hwnd, FILES), LB_RESETCONTENT, 0, 0);
 
     for entry in &app.entries {
-        let kind = if entry.directory {
-            "[Pasta]"
-        } else {
-            "[Arquivo]"
-        };
+        let kind = if entry.directory { "Pasta" } else { "Arquivo" };
         let detail = if let Some(error) = &entry.error {
             format!("Indisponível: {error}")
         } else {
             format!("{} bytes", entry.bytes)
         };
-        let text = format!("{kind}  {}  {detail}", entry.name.display());
+        let text = format!("{}\t{kind}\t{detail}", entry.name.display());
 
         SendMessageW(
             control(hwnd, FILES),
@@ -1048,9 +1078,9 @@ unsafe extern "system" fn procedure(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM
                 theme::TEXT
             },
         );
-        if is_form_label {
-            SetBkColor(wp as HDC, theme::BACKGROUND);
-            return state.theme.background as isize;
+        if matches!(id, ADDRESS | DEST | ESP) || deployment::form_field(id) {
+            SetBkColor(wp as HDC, theme::INPUT);
+            return state.theme.input as isize;
         }
         SetBkColor(wp as HDC, theme::PANEL);
         return state.theme.panel as isize;
@@ -1171,10 +1201,15 @@ pub fn run() -> Result<()> {
                 checkpoints: None,
                 report: None,
                 entries: vec![],
+                listing_loaded: false,
                 directory: PathBuf::new(),
                 busy: false,
                 error_status: false,
+                operation_page: DASHBOARD,
                 progress: None,
+                media_progress: None,
+                report_export: None,
+                handoff_export: None,
                 scanning: false,
                 roots: vec![],
                 root_index: 0,
@@ -1224,23 +1259,32 @@ pub fn run() -> Result<()> {
         }
 
         let window = OwnedWindow(hwnd);
-        for (index, label) in i18n::SECTIONS.iter().enumerate() {
-            add(hwnd, 100 + index, "BUTTON", label, WS_TABSTOP, font)?;
+        for page in navigation::ORDER {
+            add(
+                hwnd,
+                100 + page,
+                "BUTTON",
+                navigation::label(page, false),
+                WS_TABSTOP,
+                font,
+            )?;
         }
 
         for (id, label) in [
             (REFRESH, "Atualizar"),
             (OPEN, "Abrir"),
             (UP, "Subir"),
-            (BACKUP_RESULTS, "Resultados"),
+            (DISK_DETAILS, "Detalhes dos discos"),
             (PREVIEW, "Plane&jar"),
             (COPY, "&Iniciar backup"),
             (CHECKPOINTS, "Checkpoints"),
             (RESUME, "&Retomar"),
-            (NEXT, "Continuar recuperação"),
+            (PREVIOUS, "‹  Voltar"),
+            (NEXT, "Avançar  ›"),
             (TECHNICIAN, "Modo &técnico"),
             (VERIFY, "Verificar novamente"),
             (REPAIR, "Gerar prévia do reparo"),
+            (REPAIR_UNAVAILABLE, "Executar BCDBoot"),
             (CANCEL, "Cancelar"),
             (EXPORT, "Exportar relatório"),
             (CONSOLE, "Console de diagnóstico"),
@@ -1319,7 +1363,7 @@ pub fn run() -> Result<()> {
 
         pages::controls(hwnd, font)?;
         deployment::controls(hwnd, font)?;
-        layout::arrange(hwnd, DASHBOARD);
+        layout::arrange(hwnd, &app.app.borrow());
         ShowWindow(hwnd, SW_SHOW);
         UpdateWindow(hwnd);
         SetTimer(hwnd, 1, 100, None);

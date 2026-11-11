@@ -68,8 +68,8 @@ pub unsafe fn layout(hwnd: HWND, area: &layout::Layout, section: usize) {
     let top = layout::Layout::body_top(section);
     let bottom = area.body_bottom(section);
 
-    place(hwnd, ROOT, x, 108, width - 140, 252);
-    place(hwnd, SCAN, x + width - 130, 108, 130, 30);
+    place(hwnd, ROOT, x, 128, width - 140, 252);
+    place(hwnd, SCAN, x + width - 130, 128, 130, 30);
     place(hwnd, PAGE_HINT, x + 12, top + 8, width - 24, 23);
     place(hwnd, PROTECT, x, area.actions(), 142, 32);
     place(hwnd, REPORT_ACTION, x + 152, area.actions(), 122, 32);
@@ -211,17 +211,7 @@ pub unsafe fn render_page(hwnd: HWND, app: &App) -> bool {
     let integrity = app.section == INTEGRITY_PAGE;
     let structure = structured(app.section);
     show(hwnd, ROWS, structure);
-    show(hwnd, PAGE_HINT, structure || app.section == BACKUP);
-    if app.section == BACKUP {
-        let guidance = if app.preview.is_some() {
-            "Revise a seleção e o destino antes de iniciar a cópia"
-        } else if app.checkpoints.is_some() {
-            "Selecione uma operação para revalidar e retomar"
-        } else {
-            "Abra a origem e selecione os itens. Confira o destino antes de planejar."
-        };
-        set(hwnd, PAGE_HINT, guidance);
-    }
+    show(hwnd, PAGE_HINT, structure);
     for id in [ROOT, SCAN, PROTECT, REPORT_ACTION] {
         show(hwnd, id, integrity);
     }
