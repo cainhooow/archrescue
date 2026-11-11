@@ -33,22 +33,22 @@ fn rejects_truncation_and_wrong_machine_without_reading_payload() {
     bytes[156] = 10;
     fs::write(&image, &bytes).unwrap();
 
-    assert!(files::pe_structure(&image, Some(10)).is_ok());
+    assert!(files::pe_structure(&image, &[10, 16]).is_ok());
     assert_eq!(
-        files::pe_structure(&image, Some(1)).unwrap_err().kind,
+        files::pe_structure(&image, &[1]).unwrap_err().kind,
         ErrorKind::Integrity
     );
 
     fs::write(&image, &bytes[..190]).unwrap();
     assert_eq!(
-        files::pe_structure(&image, None).unwrap_err().kind,
+        files::pe_structure(&image, &[]).unwrap_err().kind,
         ErrorKind::Integrity
     );
 
     bytes[68..70].copy_from_slice(&0xaa64_u16.to_le_bytes());
     fs::write(&image, &bytes).unwrap();
     assert_eq!(
-        files::pe_structure(&image, None).unwrap_err().kind,
+        files::pe_structure(&image, &[]).unwrap_err().kind,
         ErrorKind::Integrity
     );
 }
@@ -143,4 +143,12 @@ fn reparse_like_entries_are_inconclusive_instead_of_missing() {
 
     let error = metadata(&redirected.join("ntoskrnl.exe")).unwrap_err();
     assert_eq!(error.kind, ErrorKind::Unsupported);
+}
+
+#[test]
+fn qualifies_observed_compatibility_version_without_accepting_older_windows() {
+    assert!(files::modern_version("6.2.19041.6456"));
+    assert!(files::modern_version("10.0.26100.1"));
+    assert!(!files::modern_version("6.2.9200.0"));
+    assert!(!files::modern_version("10.0.19041"));
 }

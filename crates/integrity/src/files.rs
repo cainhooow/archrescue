@@ -50,7 +50,7 @@ pub(super) fn profile(windows: &Path) -> Result<Option<WindowsIdentity>> {
         .iter()
         .filter(|path| {
             pe_architecture(path).is_ok_and(|machine| machine == "x64")
-                && pe_structure(path, None).is_ok()
+                && pe_structure(path, &[]).is_ok()
         })
         .collect::<Vec<_>>();
 
@@ -60,12 +60,7 @@ pub(super) fn profile(windows: &Path) -> Result<Option<WindowsIdentity>> {
 
     Ok(valid.into_iter().find_map(|path| {
         let version = pe_file_version(path)?;
-        let mut parts = version.split('.');
-        if parts.next() != Some("10") || parts.next() != Some("0") {
-            return None;
-        }
-        let build = parts.next()?.parse::<u32>().ok()?;
-        if !(10240..30000).contains(&build) {
+        if !modern_version(&version) {
             return None;
         }
         Some(WindowsIdentity {
@@ -76,16 +71,31 @@ pub(super) fn profile(windows: &Path) -> Result<Option<WindowsIdentity>> {
     }))
 }
 
+pub(super) fn modern_version(version: &str) -> bool {
+    let parts = version.split('.').collect::<Vec<_>>();
+    let [major, minor, build, revision] = parts.as_slice() else {
+        return false;
+    };
+    // WinPE can report a 6.2 compatibility prefix on a modern kernel resource.
+    // The older 6.2 builds are outside the accepted Windows build range.
+    matches!((*major, *minor), ("10", "0") | ("6", "2"))
+        && build
+            .parse::<u32>()
+            .is_ok_and(|build| (10240..30000).contains(&build))
+        && revision.parse::<u32>().is_ok()
+}
+
 pub(super) fn inspect(report: &mut IntegrityReport, cancel: &AtomicBool) -> Result<()> {
     let system = report.windows_directory.join("System32");
     for name in CORE {
         check_cancel(cancel)?;
         let path = system.join(name);
-        let result = executable(&path, None);
+        let result = executable(&path, &[]);
         record(report, Category::System, name, path, result);
     }
 
-    let loaders = [("winload.efi", Some(10)), ("winload.exe", None)];
+    // Windows boot applications can use the native boot subsystem, including on UEFI.
+    let loaders: [(&str, &[u16]); 2] = [("winload.efi", &[10, 16]), ("winload.exe", &[16])];
     let results = loaders.map(|(name, subsystem)| executable(&system.join(name), subsystem));
     let both_missing = results
         .iter()
@@ -104,7 +114,7 @@ pub(super) fn inspect(report: &mut IntegrityReport, cancel: &AtomicBool) -> Resu
     Ok(())
 }
 
-fn executable(path: &Path, subsystem: Option<u16>) -> ResultEvidence {
+fn executable(path: &Path, subsystems: &[u16]) -> ResultEvidence {
     match metadata(path) {
         Ok(None) => {
             return evidence(
@@ -122,7 +132,7 @@ fn executable(path: &Path, subsystem: Option<u16>) -> ResultEvidence {
         _ => {}
     }
 
-    match pe_structure(path, subsystem) {
+    match pe_structure(path, subsystems) {
         Ok(()) => evidence(Observation::VerifiedStructure, "Cabeçalhos DOS, COFF, PE32+ e limites de seções verificados. Catálogo e conteúdo não autenticados."),
         Err(error) if error.kind == ErrorKind::Integrity => (
             Observation::ConfirmedCorruption, error.context.clone(), Some(error)
@@ -153,7 +163,7 @@ fn dword(bytes: &[u8], offset: usize) -> u32 {
     u32::from_le_bytes(bytes[offset..offset + 4].try_into().unwrap())
 }
 
-pub(super) fn pe_structure(path: &Path, subsystem: Option<u16>) -> Result<()> {
+pub(super) fn pe_structure(path: &Path, subsystems: &[u16]) -> Result<()> {
     let path = safe_existing(path)?;
     let mut file = File::open(path).map_err(unreadable)?;
     let length = file.metadata().map_err(unreadable)?.len();
@@ -186,7 +196,7 @@ pub(super) fn pe_structure(path: &Path, subsystem: Option<u16>) -> Result<()> {
     let mut optional = [0; 112];
     read_header(&mut file, &mut optional)?;
     if word(&optional, 0) != 0x20b
-        || subsystem.is_some_and(|expected| word(&optional, 68) != expected)
+        || (!subsystems.is_empty() && !subsystems.contains(&word(&optional, 68)))
     {
         return Err(malformed("Formato PE32+ ou subsistema esperado inválido."));
     }

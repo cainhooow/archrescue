@@ -279,7 +279,7 @@ fn inspect(
 
     notify(progress, report, "Identificando a instalação");
     let Some(profile) = files::profile(&windows)? else {
-        report.limitations.push("Não foi possível corroborar a versão 10.0 e a arquitetura x64 pelos binários e hives offline.".into());
+        report.limitations.push("Não foi possível corroborar o build de uma versão recente do Windows e a arquitetura x64 pelos binários e hives offline.".into());
         return Ok(Status::Unsupported);
     };
     report.windows = Some(profile);
