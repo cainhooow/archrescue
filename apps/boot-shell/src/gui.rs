@@ -1,5 +1,6 @@
 //! Native Win32 shell. Long-running filesystem work is performed outside the UI thread.
 
+mod confirmation;
 mod deployment;
 mod layout;
 mod navigation;
@@ -116,6 +117,7 @@ struct App {
     technician: bool,
     preview: Option<Preview>,
     checkpoints: Option<Vec<CheckpointEntry>>,
+    confirmation: Option<confirmation::Confirmation>,
     report: Option<Report>,
     entries: Vec<Entry>,
     listing_loaded: bool,
@@ -141,6 +143,7 @@ struct WindowState {
     app: RefCell<App>,
     theme: theme::Theme,
     selected_page: Cell<usize>,
+    confirming: Cell<bool>,
 }
 
 unsafe fn control(hwnd: HWND, id: usize) -> HWND {
@@ -587,50 +590,9 @@ unsafe fn start_backup(hwnd: HWND, app: &mut App) {
     let Some(preview) = app.preview.clone() else {
         return;
     };
-    if preview.destination != PathBuf::from(get(hwnd, DEST)).as_path()
-        || preview.source != PathBuf::from(get(hwnd, ADDRESS)).as_path()
-    {
-        set(
-            hwnd,
-            STATUS,
-            "Origem ou destino editado. Abra a origem e gere um novo plano.",
-        );
-        return;
+    if confirmation::matches_preview(hwnd, &preview) {
+        app.confirmation = Some(confirmation::Confirmation::Start(preview));
     }
-
-    let prompt = format!(
-        "Iniciar backup de {} arquivos de {} para {}?",
-        preview.files,
-        preview.source.display(),
-        preview.destination.display()
-    );
-    if MessageBoxW(
-        hwnd,
-        wide(&prompt).as_ptr(),
-        wide("Confirmar backup").as_ptr(),
-        MB_YESNO | MB_ICONQUESTION | MB_DEFBUTTON2,
-    ) != IDYES
-    {
-        if let Some(report) = &mut app.report {
-            report.decisions.push(format!("Backup recusado. {prompt}"));
-        }
-        return;
-    }
-
-    if let Some(report) = &mut app.report {
-        report
-            .decisions
-            .push(format!("Backup autorizado. {prompt}"));
-    }
-    begin_backup(hwnd, app, move |cancel, progress| {
-        let checkpoint = transaction::prepare(
-            &preview.source,
-            &preview.selections,
-            &preview.destination,
-            cancel,
-        )?;
-        transaction::resume(&preview.source, &checkpoint, cancel, progress)
-    });
 }
 
 unsafe fn list_checkpoints(hwnd: HWND, app: &mut App) {
@@ -661,33 +623,9 @@ unsafe fn resume_backup(hwnd: HWND, app: &mut App) {
 
     let source = PathBuf::from(get(hwnd, ADDRESS));
     let checkpoint = entry.directory.clone();
-    let prompt = format!(
-        "Retomar {} usando a origem {}?",
-        checkpoint.display(),
-        source.display()
-    );
-    if MessageBoxW(
-        hwnd,
-        wide(&prompt).as_ptr(),
-        wide("Confirmar retomada").as_ptr(),
-        MB_YESNO | MB_ICONQUESTION | MB_DEFBUTTON2,
-    ) != IDYES
-    {
-        if let Some(report) = &mut app.report {
-            report
-                .decisions
-                .push(format!("Retomada recusada. {prompt}"));
-        }
-        return;
-    }
-
-    if let Some(report) = &mut app.report {
-        report
-            .decisions
-            .push(format!("Retomada autorizada. {prompt}"));
-    }
-    begin_backup(hwnd, app, move |cancel, progress| {
-        transaction::resume(&source, &checkpoint, cancel, progress)
+    app.confirmation = Some(confirmation::Confirmation::Resume {
+        source,
+        checkpoint,
     });
 }
 
@@ -1134,6 +1072,10 @@ unsafe extern "system" fn procedure(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM
         _ => {}
     }
 
+    if state.confirming.get() && matches!(msg, WM_COMMAND | WM_CLOSE) {
+        return 0;
+    }
+
     // RefCell prevents overlapping mutable access when native controls reenter.
     let Ok(mut app_borrow) = state.app.try_borrow_mut() else {
         return DefWindowProcW(hwnd, msg, wp, lp);
@@ -1156,6 +1098,11 @@ unsafe extern "system" fn procedure(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM
                 ((wp >> 16) & 0xffff) as u32,
             );
             state.selected_page.set(app.section);
+            let confirmation = app.confirmation.take();
+            drop(app_borrow);
+            if let Some(confirmation) = confirmation {
+                confirmation.ask(hwnd, state);
+            }
             InvalidateRect(hwnd, null(), 0);
             0
         }
@@ -1206,6 +1153,7 @@ pub fn run() -> Result<()> {
                 technician: false,
                 preview: None,
                 checkpoints: None,
+                confirmation: None,
                 report: None,
                 entries: vec![],
                 listing_loaded: false,
@@ -1228,6 +1176,7 @@ pub fn run() -> Result<()> {
             }),
             theme,
             selected_page: Cell::new(DASHBOARD),
+            confirming: Cell::new(false),
         });
 
         let class = wide("ArchRescueRecovery");
