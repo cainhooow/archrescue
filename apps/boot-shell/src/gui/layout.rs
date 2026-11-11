@@ -150,7 +150,7 @@ pub unsafe fn arrange(hwnd: HWND, app: &App) {
                     right + 10,
                     top + 99,
                     right_width - 20,
-                    bottom - top - 109,
+                    (bottom - top - 109).min(113),
                 );
             }
         }

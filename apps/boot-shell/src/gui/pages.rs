@@ -70,18 +70,18 @@ pub unsafe fn layout(hwnd: HWND, area: &layout::Layout, section: usize) {
 
     place(hwnd, ROOT, x, 128, width - 140, 252);
     place(hwnd, SCAN, x + width - 130, 128, 130, 30);
-    place(hwnd, PAGE_HINT, x + 12, top + 8, width - 24, 23);
     place(hwnd, PROTECT, x, area.actions(), 142, 32);
     place(hwnd, REPORT_ACTION, x + 152, area.actions(), 122, 32);
 
     if width >= 880 {
         let list_width = width * 43 / 100;
+        place(hwnd, PAGE_HINT, x + 12, top + 8, list_width - 24, 23);
         place(
             hwnd,
             ROWS,
             x + 9,
             top + 38,
-            list_width - 10,
+            list_width - 18,
             bottom - top - 46,
         );
         place(
@@ -93,6 +93,7 @@ pub unsafe fn layout(hwnd: HWND, area: &layout::Layout, section: usize) {
             bottom - top - 46,
         );
     } else {
+        place(hwnd, PAGE_HINT, x + 12, top + 8, width - 24, 23);
         let rows_height = ((bottom - top - 48) * 43 / 100).clamp(50, 190);
         place(hwnd, ROWS, x + 9, top + 35, width - 18, rows_height);
         let details_top = top + 44 + rows_height;

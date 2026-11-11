@@ -241,6 +241,13 @@ unsafe fn render(hwnd: HWND, app: &App) {
         || repair
         || report_stage
         || matches!(app.section, deployment::DEPLOY | deployment::RESTORE);
+    let destination_label = match app.section {
+        REPORTS => "Pasta em disco separado",
+        REPAIR_PAGE => "Destino de preservação",
+        deployment::RESTORE => "Pasta para exportação",
+        _ => "Destino",
+    };
+    set(hwnd, DESTINATION_LABEL, destination_label);
     for id in [DESTINATION_LABEL, DEST] {
         show(hwnd, id, destination);
     }

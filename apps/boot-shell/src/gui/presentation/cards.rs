@@ -318,8 +318,11 @@ impl Cards<'_> {
             "Sem extensões de partição observadas".into()
         } else {
             format!(
-                "{} partições observadas{}",
-                disk.partitions.len(),
+                "{}{}",
+                match disk.partitions.len() {
+                    1 => "1 partição observada".into(),
+                    count => format!("{count} partições observadas"),
+                },
                 if disk.read_only == Some(true) {
                     "  ·  Somente leitura"
                 } else {
@@ -341,7 +344,7 @@ impl Cards<'_> {
         if let Some(preview) = &app.preview {
             surface(
                 self.dc,
-                rect(x, top, left, bottom - top),
+                rect(x, top, left, (bottom - top).min(192)),
                 SELECTED,
                 BORDER,
                 12,
@@ -368,7 +371,7 @@ impl Cards<'_> {
                 &preview.destination.display().to_string(),
                 TEXT,
             );
-            self.paragraph(rect(x + 13, top + 149, left - 26, bottom - top - 153), "O destino receberá o manifesto, o checkpoint e os arquivos verificados em uma pasta exclusiva.", MUTED);
+            self.paragraph(rect(x + 13, top + 149, left - 26, (bottom - top).min(192) - 153), "O destino receberá o manifesto, o checkpoint e os arquivos verificados em uma pasta exclusiva.", MUTED);
 
             let count_width = (right_width - 6) / 3;
             self.metric(
@@ -387,7 +390,12 @@ impl Cards<'_> {
                 &bytes(preview.bytes),
                 TEXT,
             );
-            self.panel(rect(right, top + 68, right_width, bottom - top - 68));
+            self.panel(rect(
+                right,
+                top + 68,
+                right_width,
+                (bottom - top - 68).min(154),
+            ));
             self.heading(rect(right + 11, top + 72, right_width - 22, 25), "Seleção");
         } else {
             self.panel(rect(x, top, width, bottom - top));
