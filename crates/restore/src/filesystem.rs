@@ -210,11 +210,20 @@ mod windows {
         ptr,
     };
 
-    use windows_sys::Win32::Storage::FileSystem::{
-        FileRenameInfo, GetFileInformationByHandle, SetFileInformationByHandle,
-        BY_HANDLE_FILE_INFORMATION, FILE_ATTRIBUTE_DIRECTORY, FILE_ATTRIBUTE_ENCRYPTED,
-        FILE_ATTRIBUTE_REPARSE_POINT, FILE_FLAG_BACKUP_SEMANTICS, FILE_FLAG_OPEN_REPARSE_POINT,
-        FILE_LIST_DIRECTORY, FILE_READ_ATTRIBUTES, FILE_RENAME_INFO, FILE_SHARE_READ,
+    use windows_sys::{
+        Wdk::Storage::FileSystem::{
+            FileRenameInformation, NtSetInformationFile, FILE_RENAME_INFORMATION,
+        },
+        Win32::{
+            Foundation::RtlNtStatusToDosError,
+            Storage::FileSystem::{
+                GetFileInformationByHandle, BY_HANDLE_FILE_INFORMATION, FILE_ATTRIBUTE_DIRECTORY,
+                FILE_ATTRIBUTE_ENCRYPTED, FILE_ATTRIBUTE_REPARSE_POINT, FILE_FLAG_BACKUP_SEMANTICS,
+                FILE_FLAG_OPEN_REPARSE_POINT, FILE_LIST_DIRECTORY, FILE_READ_ATTRIBUTES,
+                FILE_SHARE_READ,
+            },
+            System::IO::IO_STATUS_BLOCK,
+        },
     };
 
     use super::*;
@@ -259,10 +268,13 @@ mod windows {
     }
 
     pub fn publish(file: &File, _: &Path, target: &Path) -> Result<()> {
-        let name: Vec<_> = target.as_os_str().encode_wide().collect();
+        let basename = target
+            .file_name()
+            .ok_or_else(|| Error::new(ErrorKind::Validation, "Nome de destino obrigatório"))?;
+        let name: Vec<_> = basename.encode_wide().collect();
         let name_bytes = name.len() * size_of::<u16>();
-        let bytes = (offset_of!(FILE_RENAME_INFO, FileName) + name_bytes)
-            .max(size_of::<FILE_RENAME_INFO>());
+        let bytes = (offset_of!(FILE_RENAME_INFORMATION, FileName) + name_bytes)
+            .max(size_of::<FILE_RENAME_INFORMATION>());
         let length = u32::try_from(bytes).map_err(|_| {
             Error::new(
                 ErrorKind::Validation,
@@ -270,23 +282,33 @@ mod windows {
             )
         })?;
         let mut buffer = vec![0usize; bytes.div_ceil(size_of::<usize>())];
-        let info = buffer.as_mut_ptr().cast::<FILE_RENAME_INFO>();
+        let info = buffer.as_mut_ptr().cast::<FILE_RENAME_INFORMATION>();
 
         // SAFETY: the aligned, zeroed buffer holds the structure and all name bytes.
-        // Zeroed ReplaceIfExists and RootDirectory request exclusive publication to an absolute path.
-        let renamed = unsafe {
+        // A basename with no RootDirectory requests a same-directory rename. The zeroed
+        // ReplaceIfExists flag requires exclusive publication.
+        let mut io_status = IO_STATUS_BLOCK::default();
+        let status = unsafe {
             (*info).FileNameLength = name_bytes as u32;
             ptr::copy_nonoverlapping(
                 name.as_ptr(),
                 ptr::addr_of_mut!((*info).FileName).cast::<u16>(),
                 name.len(),
             );
-            SetFileInformationByHandle(file.as_raw_handle(), FileRenameInfo, info.cast(), length)
+            NtSetInformationFile(
+                file.as_raw_handle(),
+                &mut io_status,
+                info.cast(),
+                length,
+                FileRenameInformation,
+            )
         };
-        if renamed == 0 {
+        if status != 0 {
+            // SAFETY: this function maps a status value and takes no pointers.
+            let code = unsafe { RtlNtStatusToDosError(status) };
             return Err(Error::io(
                 "Publicar arquivo verificado sem substituir",
-                io::Error::last_os_error(),
+                io::Error::from_raw_os_error(code as i32),
             ));
         }
 

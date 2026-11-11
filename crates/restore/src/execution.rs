@@ -303,6 +303,55 @@ mod tests {
     use super::*;
 
     #[test]
+    fn partial_write_failure_retains_the_actual_written_count() {
+        struct FailingWriter {
+            written: bool,
+        }
+        impl Write for FailingWriter {
+            fn write(&mut self, data: &[u8]) -> std::io::Result<usize> {
+                if self.written {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::PermissionDenied,
+                        "Injected after progress",
+                    ));
+                }
+                self.written = true;
+                Ok(data.len().min(2))
+            }
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+        }
+        let planned = PlannedFile {
+            source: archrescue_backup::transaction::ExpectedFile {
+                relative: "file.txt".into(),
+                bytes: 4,
+                sha256: "expected".into(),
+            },
+            target_relative: Some("Documents/file.txt".into()),
+            action: Action::Copy,
+        };
+        let mut report = initial_file_report(&planned);
+        let mut writer = FailingWriter {
+            written: false,
+        };
+
+        let error = copy_expected(
+            &mut &b"data"[..],
+            &mut writer,
+            4,
+            &mut report,
+            &AtomicBool::new(false),
+        )
+        .unwrap_err();
+
+        assert_eq!(error.kind, ErrorKind::Permission);
+        assert_eq!(report.bytes_copied, 2);
+        assert!(!report.published);
+        assert_ne!(report.outcome, FileOutcome::Verified);
+    }
+
+    #[test]
     fn short_copy_records_actual_bytes_without_verification() {
         let planned = PlannedFile {
             source: archrescue_backup::transaction::ExpectedFile {

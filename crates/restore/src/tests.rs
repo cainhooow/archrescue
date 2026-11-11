@@ -284,3 +284,67 @@ fn cancellation_stops_before_the_next_file() {
     assert_eq!(report.files[0].outcome, FileOutcome::Verified);
     assert_eq!(report.files[1].outcome, FileOutcome::NotAttempted);
 }
+
+fn rewrite_manifest(fixture: &Fixture, change: impl FnOnce(&mut transaction::BackupManifest)) {
+    let path = fixture.request.backup.join("manifest.json");
+    let mut manifest = transaction::manifest(&fixture.request.backup).unwrap();
+    change(&mut manifest);
+    manifest.plan_fingerprint.clear();
+    manifest.plan_fingerprint = format!(
+        "{:x}",
+        Sha256::digest(serde_json::to_vec(&manifest).unwrap())
+    );
+    let data = serde_json::to_value(&manifest).unwrap();
+    let record = serde_json::json!({
+        "sha256": format!("{:x}", Sha256::digest(serde_json::to_vec(&data).unwrap())),
+        "data": data,
+    });
+    fs::write(path, serde_json::to_vec(&record).unwrap()).unwrap();
+}
+
+#[test]
+fn checksummed_manifest_still_rejects_traversal_and_unknown_versions() {
+    let fixture = Fixture::new();
+    rewrite_manifest(&fixture, |manifest| {
+        manifest.files[0].relative = "../outside.txt".into()
+    });
+    assert!(fixture.preview().is_err());
+
+    let fixture = Fixture::new();
+    rewrite_manifest(&fixture, |manifest| manifest.schema_version = 2);
+    assert_eq!(fixture.preview().unwrap_err().kind, ErrorKind::Integrity);
+}
+
+#[test]
+fn late_destination_conflict_is_never_overwritten() {
+    let fixture = Fixture::new();
+    let plan = fixture.preview().unwrap();
+    let target = fixture.target().join("b-ação.bin");
+
+    let report = fixture
+        .run(&plan, &AtomicBool::new(false), |done, _, _| {
+            if done == 1 {
+                fs::write(&target, b"late file").unwrap();
+            }
+        })
+        .unwrap();
+
+    assert_eq!(report.error.unwrap().kind, ErrorKind::Conflict);
+    assert_eq!(report.files[1].outcome, FileOutcome::Conflicted);
+    assert_eq!(fs::read(target).unwrap(), b"late file");
+}
+
+#[cfg(windows)]
+#[test]
+fn rejects_windows_directory_junction_escape() {
+    let fixture = Fixture::new();
+    let status = std::process::Command::new("cmd.exe")
+        .args(["/d", "/c", "mklink", "/J"])
+        .arg(fixture.target().join("empty folder"))
+        .arg(&fixture.source)
+        .status()
+        .unwrap();
+    assert!(status.success());
+
+    assert_eq!(fixture.preview().unwrap_err().kind, ErrorKind::Unsupported);
+}

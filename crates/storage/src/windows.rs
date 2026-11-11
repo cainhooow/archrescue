@@ -197,6 +197,10 @@ fn mount_and_volume(path: &Path) -> Result<(PathBuf, String)> {
     Ok((mount_path.into(), string(&volume_name)))
 }
 
+pub(crate) fn filesystem_name(path: &Path) -> Result<String> {
+    mount_and_volume(path).map(|(_, volume)| volume)
+}
+
 pub fn identity(path: &Path) -> Result<VolumeIdentity> {
     let (_, volume) = mount_and_volume(path)?;
     let physical_disks = extents(&volume)?;
@@ -624,4 +628,147 @@ pub fn require_writable_disk(device_path: &str) -> Result<()> {
     query(&disk, IOCTL_DISK_IS_WRITABLE, &[])?;
 
     Ok(())
+}
+
+/// WinPE FAT32 roots can fail DOS-name normalization while GUID normalization succeeds.
+/// Every path component was already inspected by safe_existing before this narrow recovery.
+pub(crate) fn canonicalize_efi_root(path: &Path) -> Result<PathBuf> {
+    let (mount, volume) = mount_and_volume(path)?;
+    let extents_before = volume_extents(&volume)?;
+    let [extent] = extents_before.as_slice() else {
+        return Err(Error::new(
+            ErrorKind::Unsupported,
+            "EFI root requires one disk extent",
+        ));
+    };
+    let disk = open(&format!(r"\\.\PhysicalDrive{}", extent.DiskNumber))?;
+    let layout = crate::layout::parse(&query(&disk, IOCTL_DISK_GET_DRIVE_LAYOUT_EX, &[])?, None)?;
+    if layout.style != "GPT"
+        || layout
+            .identity
+            .as_deref()
+            .is_none_or(|id| id == "gpt:00000000-0000-0000-0000-000000000000")
+        || !layout.partitions.iter().any(|partition| {
+            partition.efi
+                && i64::try_from(partition.offset) == Ok(extent.StartingOffset)
+                && i64::try_from(partition.length) == Ok(extent.ExtentLength)
+        })
+    {
+        return Err(Error::new(
+            ErrorKind::Unsupported,
+            "Normalization recovery requires an identified GPT ESP",
+        ));
+    }
+
+    let mut filesystem = [0u16; 256];
+    // SAFETY: volume is terminated and filesystem has the supplied writable capacity.
+    if unsafe {
+        GetVolumeInformationW(
+            wide(&volume).as_ptr(),
+            null_mut(),
+            0,
+            null_mut(),
+            null_mut(),
+            null_mut(),
+            filesystem.as_mut_ptr(),
+            filesystem.len() as u32,
+        )
+    } == 0
+    {
+        return Err(error("Inspect EFI filesystem for root normalization"));
+    }
+    if string(&filesystem) != "FAT32" {
+        return Err(Error::new(
+            ErrorKind::Unsupported,
+            "Normalization recovery requires FAT32",
+        ));
+    }
+
+    // SAFETY: path is terminated. This opens the directory itself with read-only access.
+    let raw = unsafe {
+        CreateFileW(
+            wide(path).as_ptr(),
+            FILE_READ_ATTRIBUTES,
+            FILE_SHARE_READ | FILE_SHARE_WRITE,
+            null(),
+            OPEN_EXISTING,
+            FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT,
+            null_mut(),
+        )
+    };
+    if raw == INVALID_HANDLE_VALUE {
+        return Err(error("Open EFI root for GUID normalization"));
+    }
+    let handle = Handle(raw);
+    let mut attributes = FILE_ATTRIBUTE_TAG_INFO::default();
+    // SAFETY: handle is owned and attributes provides the exact requested structure.
+    if unsafe {
+        GetFileInformationByHandleEx(
+            handle.0,
+            FileAttributeTagInfo,
+            (&mut attributes as *mut FILE_ATTRIBUTE_TAG_INFO).cast(),
+            size_of::<FILE_ATTRIBUTE_TAG_INFO>() as u32,
+        )
+    } == 0
+    {
+        return Err(error("Recheck EFI root attributes"));
+    }
+    if attributes.FileAttributes & FILE_ATTRIBUTE_DIRECTORY == 0
+        || attributes.FileAttributes & (FILE_ATTRIBUTE_REPARSE_POINT | FILE_ATTRIBUTE_ENCRYPTED)
+            != 0
+    {
+        return Err(Error::new(
+            ErrorKind::Unsupported,
+            "EFI root attributes changed",
+        ));
+    }
+
+    let mut normalized = vec![0u16; 32768];
+    // SAFETY: handle remains live and normalized holds the supplied capacity.
+    // VOLUME_NAME_GUID preserves volume identity when WinPE cannot normalize a DOS root.
+    let length = unsafe {
+        GetFinalPathNameByHandleW(
+            handle.0,
+            normalized.as_mut_ptr(),
+            normalized.len() as u32,
+            VOLUME_NAME_GUID,
+        )
+    };
+    if length == 0 || length as usize >= normalized.len() {
+        return Err(error("Normalize EFI root by volume GUID"));
+    }
+    let normalized = String::from_utf16_lossy(&normalized[..length as usize]);
+    let extents_after = volume_extents(&volume)?;
+    let same_extent = extents_after.as_slice().first().is_some_and(|after| {
+        extents_after.len() == 1
+            && after.DiskNumber == extent.DiskNumber
+            && after.StartingOffset == extent.StartingOffset
+            && after.ExtentLength == extent.ExtentLength
+    });
+    if !normalized
+        .trim_end_matches('\\')
+        .eq_ignore_ascii_case(volume.trim_end_matches('\\'))
+        || !same_extent
+        || mount_and_volume(path)?.1 != volume
+    {
+        return Err(Error::new(
+            ErrorKind::Integrity,
+            "EFI root volume identity changed",
+        ));
+    }
+
+    let mount = mount.to_string_lossy();
+    let canonical = if mount.starts_with(r"\\?\") {
+        PathBuf::from(mount.as_ref())
+    } else {
+        PathBuf::from(format!(r"\\?\{mount}"))
+    };
+    if canonical.components().count() != 2 {
+        return Err(Error::new(
+            ErrorKind::Unsupported,
+            "EFI root path is not a volume root",
+        ));
+    }
+
+    Ok(canonical)
 }

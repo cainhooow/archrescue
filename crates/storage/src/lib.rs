@@ -180,7 +180,23 @@ pub fn safe_existing(path: &Path) -> Result<PathBuf> {
         }
     }
 
-    fs::canonicalize(path).map_err(|error| Error::io("Canonicalize path", error))
+    match fs::canonicalize(path) {
+        Ok(path) => Ok(path),
+        #[cfg(windows)]
+        Err(error) if error.raw_os_error() == Some(3) && path.components().count() == 2 => {
+            windows::canonicalize_efi_root(path)
+        }
+        Err(error) => Err(Error::io("Canonicalize path", error)),
+    }
+}
+
+/// Return the mounted filesystem name without querying a physical device.
+pub fn filesystem_name(path: &Path) -> Result<String> {
+    #[cfg(windows)]
+    return windows::filesystem_name(path);
+
+    #[cfg(not(windows))]
+    identity(path).map(|identity| identity.volume)
 }
 
 pub fn identity(path: &Path) -> Result<VolumeIdentity> {

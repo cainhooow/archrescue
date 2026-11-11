@@ -13,4 +13,4 @@ serde_json.workspace = true
 sha2.workspace = true
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { workspace = true, features = ["Win32_UI_Shell", "Win32_System_Com", "Win32_Security_Authorization"] }
+windows-sys = { workspace = true, features = ["Win32_UI_Shell", "Win32_System_Com", "Win32_Security_Authorization", "Wdk_Storage_FileSystem"] }

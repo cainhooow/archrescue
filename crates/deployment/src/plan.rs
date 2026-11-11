@@ -1,7 +1,7 @@
 //! Evidence and authorization for a read-only deployment preview.
 
 use std::{
-    fs::OpenOptions,
+    fs::{self, OpenOptions},
     io::Write,
     path::{Path, PathBuf},
     sync::atomic::AtomicBool,
@@ -493,6 +493,14 @@ pub fn export(plan: &Plan, destination: &Path) -> Result<PathBuf> {
     file.write_all(&bytes)
         .and_then(|_| file.sync_all())
         .map_err(|error| Error::io("Gravar plano de implantação", error))?;
+
+    drop(file);
+    if fs::read(&path).map_err(|error| Error::io("Reler plano exportado", error))? != bytes {
+        return Err(Error::new(
+            ErrorKind::Integrity,
+            "Plano exportado diverge da prévia",
+        ));
+    }
 
     Ok(path)
 }

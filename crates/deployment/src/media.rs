@@ -239,7 +239,7 @@ fn image_metadata(path: &Path, count: u32, cancel: &AtomicBool) -> Result<Vec<Im
         check_cancel(cancel)?;
         let output = Command::new(&executable)
             .creation_flags(0x08000000) // CREATE_NO_WINDOW
-            .args(["/English", "/Get-WimInfo"])
+            .args(["/English", "/Get-ImageInfo"])
             .arg(&image_argument)
             .arg(format!("/Index:{index}"))
             .output()

@@ -7,7 +7,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use archrescue_storage::{recovery_location, RecoveryLocation};
+use archrescue_storage::{filesystem_name, recovery_location, RecoveryLocation};
 
 use super::*;
 
@@ -276,16 +276,23 @@ pub fn verify_payload(directory: &Path, cancel: &AtomicBool) -> Result<BackupMan
     let directory = safe_existing(directory)?;
     let manifest = manifest(&directory)?;
     let payload = safe_existing(&directory.join("payload"))?;
-    let volume = identity(&directory)?;
+    let volume = filesystem_name(&directory)?;
 
-    if !payload.is_dir() || identity(&payload)?.volume != volume.volume {
+    if !payload.is_dir() || filesystem_name(&payload)? != volume {
         return Err(location_changed());
     }
 
     let mut total = 0u64;
     for entry in &manifest.files {
         check_cancel(cancel)?;
-        verify_file(&payload.join(&entry.relative), entry, &volume, cancel)?;
+        let path = safe_existing(&payload.join(&entry.relative))?;
+        if filesystem_name(&path)? != volume
+            || hash_file(&path, entry.bytes, cancel)? != entry.sha256
+        {
+            return Err(changed(
+                "O arquivo de backup diverge do manifesto ou volume",
+            ));
+        }
         total = total
             .checked_add(entry.bytes)
             .ok_or_else(|| changed("Tamanho do backup excedido"))?;
@@ -294,7 +301,7 @@ pub fn verify_payload(directory: &Path, cancel: &AtomicBool) -> Result<BackupMan
     for entry in &manifest.directories {
         check_cancel(cancel)?;
         let directory = safe_existing(&payload.join(entry))?;
-        if !directory.is_dir() || identity(&directory)?.volume != volume.volume {
+        if !directory.is_dir() || filesystem_name(&directory)? != volume {
             return Err(location_changed());
         }
     }
