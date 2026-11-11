@@ -568,7 +568,9 @@ Estabelecer cadeia compatível com Secure Boot e certificados atuais, sem desabi
 
 - **Fase:** `M1` • **Prioridade de importação:** Alta • **ID CSV do épico:** `21` • **Subtarefas:** 9
 
-- **Status local:** `BACKLOG` • **ClickUp:** `to do` verificado em 09/11/2026
+- **Status local:** `EM_ANDAMENTO` • **ClickUp:** `to do` verificado em 09/11/2026
+
+- **Wave 2:** A interface guiada oferece inspeção de mídia, seleção de disco GPT, prévia de implantação e exportação de referência de restauração. [Relatório da Wave 2](docs/qa/M4-M5-DEVELOPMENT-WAVE.md)
 
 - [ ] **Épico concluído e validado** (marcar apenas quando subtarefas, critérios e evidências estiverem completos)
 
@@ -745,7 +747,9 @@ Garantir foco por teclado, escala de UI, navegação sem mouse e legibilidade em
 
 - **Fase:** `M1` • **Prioridade de importação:** Alta • **ID CSV do épico:** `31` • **Subtarefas:** 9
 
-- **Status local:** `BACKLOG` • **ClickUp:** `to do` verificado em 09/11/2026
+- **Status local:** `EM_ANDAMENTO` • **ClickUp:** `to do` verificado em 09/11/2026
+
+- **Wave 2:** O planejador coleta identidade GPT, firmware, capacidade, partições, volumes e estado de proteção. A matriz completa de diagnóstico segue aberta. [Relatório da Wave 2](docs/qa/M4-M5-DEVELOPMENT-WAVE.md)
 
 - [ ] **Épico concluído e validado** (marcar apenas quando subtarefas, critérios e evidências estiverem completos)
 
@@ -922,7 +926,9 @@ Exibir layout físico e destacar volume de origem, destino de backup e alvo de i
 
 - **Fase:** `M2` • **Prioridade de importação:** Alta • **ID CSV do épico:** `41` • **Subtarefas:** 11
 
-- **Status local:** `BACKLOG` • **ClickUp:** `to do` verificado em 09/11/2026
+- **Status local:** `EM_ANDAMENTO` • **ClickUp:** `to do` verificado em 09/11/2026
+
+- **Wave 2:** A normalização da raiz da ESP FAT32 foi exercitada em WinPE descartável. A execução do reparo e a inicialização do Windows reparado seguem abertas. [Relatório da Wave 2](docs/qa/M4-M5-DEVELOPMENT-WAVE.md)
 
 - [ ] **Épico concluído e validado** (marcar apenas quando subtarefas, critérios e evidências estiverem completos)
 
@@ -969,7 +975,7 @@ Inspecionar BCD e EFI, localizar entradas órfãs, incorretas ou conflitantes.
 
 #### AR-04-03 — Implementar reparo controlado de BCD e EFI
 
-- [ ] **Concluída** | **Status:** `BACKLOG` | **Prioridade:** Alta | **ID CSV:** `44` | **ClickUp:** [`1dfqjx6uw60`](https://app.clickup.com/t/1dfqjx6uw60)
+- [ ] **Concluída** | **Status:** `EM_ANDAMENTO` | **Prioridade:** Alta | **ID CSV:** `44` | **ClickUp:** [`1dfqjx6uw60`](https://app.clickup.com/t/1dfqjx6uw60)
 
 **Objetivo e escopo**
 Usar bcdboot/bcdedit e procedimentos específicos; sempre preservar configuração anterior quando possível.
@@ -979,6 +985,7 @@ Usar bcdboot/bcdedit e procedimentos específicos; sempre preservar configuraç�
 - Registrar testes, logs/evidências e limitações de compatibilidade relevantes.
 
 **Notas de implementação**
+- Wave 2: a raiz GPT/FAT32 abriu no WinPE descartável. O erro 3 nos caminhos internos ainda bloqueia o backup verificado e, por consequência, a execução do reparo. [Reprodução e próximos passos](docs/qa/M4-M5-DEVELOPMENT-WAVE.md#f-safety-validation)
 - Tratar falhas e pré-condições explicitamente.
 - Reaproveitar contratos e componentes compartilhados do ArchRescue Core.
 
@@ -1135,7 +1142,9 @@ Matriz de falhas induzidas e restauração por snapshot após teste.
 
 - **Fase:** `M3` • **Prioridade de importação:** Alta • **ID CSV do épico:** `53` • **Subtarefas:** 10
 
-- **Status local:** `BACKLOG` • **ClickUp:** `to do` verificado em 09/11/2026
+- **Status local:** `EM_ANDAMENTO` • **ClickUp:** `to do` verificado em 09/11/2026
+
+- **Wave 2:** A verificação do conteúdo de backup passou a atender o Restore Agent sem depender da instalação de origem. [Relatório da Wave 2](docs/qa/M4-M5-DEVELOPMENT-WAVE.md)
 
 - [ ] **Épico concluído e validado** (marcar apenas quando subtarefas, critérios e evidências estiverem completos)
 
@@ -1330,7 +1339,9 @@ Quando SMART e I/O indicarem risco, interromper reparos e recomendar imagem/leit
 
 - **Fase:** `M4` • **Prioridade de importação:** Alta • **ID CSV do épico:** `64` • **Subtarefas:** 10
 
-- **Status local:** `BACKLOG` • **ClickUp:** `to do` verificado em 09/11/2026
+- **Status local:** `EM_ANDAMENTO` • **ClickUp:** `to do` verificado em 09/11/2026
+
+- **Wave 2:** Inspeção de WIM, seleção do índice e do disco GPT, qualificação, plano com SHA-256 e exportação foram implementados. A execução da instalação segue desabilitada. [Relatório da Wave 2](docs/qa/M4-M5-DEVELOPMENT-WAVE.md)
 
 - [ ] **Épico concluído e validado** (marcar apenas quando subtarefas, critérios e evidências estiverem completos)
 
@@ -1341,7 +1352,7 @@ Quando SMART e I/O indicarem risco, interromper reparos e recomendar imagem/leit
 
 #### AR-06-01 — Inspecionar fontes ISO/WIM/ESD/SWM
 
-- [ ] **Concluída** | **Status:** `BACKLOG` | **Prioridade:** Alta | **ID CSV:** `65` | **ClickUp:** [`1dfqjx6uw6k`](https://app.clickup.com/t/1dfqjx6uw6k)
+- [ ] **Concluída** | **Status:** `EM_ANDAMENTO` | **Prioridade:** Alta | **ID CSV:** `65` | **ClickUp:** [`1dfqjx6uw6k`](https://app.clickup.com/t/1dfqjx6uw6k)
 
 **Objetivo e escopo**
 Ler metadados, edições, arquiteturas, índices e compatibilidade sem confiar em nome do arquivo.
@@ -1359,7 +1370,7 @@ Ler metadados, edições, arquiteturas, índices e compatibilidade sem confiar e
 
 #### AR-06-02 — Criar assistente de instalação limpa
 
-- [ ] **Concluída** | **Status:** `BACKLOG` | **Prioridade:** Alta | **ID CSV:** `66` | **ClickUp:** [`1dfqjx6uw6m`](https://app.clickup.com/t/1dfqjx6uw6m)
+- [ ] **Concluída** | **Status:** `EM_ANDAMENTO` | **Prioridade:** Alta | **ID CSV:** `66` | **ClickUp:** [`1dfqjx6uw6m`](https://app.clickup.com/t/1dfqjx6uw6m)
 
 **Objetivo e escopo**
 Escolher edição, disco, modo de partição, licença, idioma e políticas pós-instalação.
@@ -1377,7 +1388,7 @@ Escolher edição, disco, modo de partição, licença, idioma e políticas pós
 
 #### AR-06-03 — Gerar plano de implantação imutável e revisável
 
-- [ ] **Concluída** | **Status:** `BACKLOG` | **Prioridade:** Alta | **ID CSV:** `67` | **ClickUp:** [`1dfqjx6uw6n`](https://app.clickup.com/t/1dfqjx6uw6n)
+- [ ] **Concluída** | **Status:** `EM_ANDAMENTO` | **Prioridade:** Alta | **ID CSV:** `67` | **ClickUp:** [`1dfqjx6uw6n`](https://app.clickup.com/t/1dfqjx6uw6n)
 
 **Objetivo e escopo**
 Registrar DiskIdentity e operações de criar/apagar/aplicar imagem com hash e confirmação explícita.
@@ -1467,7 +1478,7 @@ Criar BCD de instalação e configurar boot de modo explícito no disco escolhid
 
 #### AR-06-08 — Adicionar validação de requisitos de hardware
 
-- [ ] **Concluída** | **Status:** `BACKLOG` | **Prioridade:** Alta | **ID CSV:** `72` | **ClickUp:** [`1dfqjx6uw6u`](https://app.clickup.com/t/1dfqjx6uw6u)
+- [ ] **Concluída** | **Status:** `EM_ANDAMENTO` | **Prioridade:** Alta | **ID CSV:** `72` | **ClickUp:** [`1dfqjx6uw6u`](https://app.clickup.com/t/1dfqjx6uw6u)
 
 **Objetivo e escopo**
 Checar arquitetura, armazenamento, RAM, TPM/Secure Boot quando exigidos e exibir bloqueios.
@@ -1525,7 +1536,9 @@ Automatizar Windows 11 x64 com discos virtuais distintos, backup e validações 
 
 - **Fase:** `M5` • **Prioridade de importação:** Alta • **ID CSV do épico:** `75` • **Subtarefas:** 10
 
-- **Status local:** `BACKLOG` • **ClickUp:** `to do` verificado em 09/11/2026
+- **Status local:** `EM_ANDAMENTO` • **ClickUp:** `to do` verificado em 09/11/2026
+
+- **Wave 2:** O agente independente restaurou arquivos em um perfil Windows descartável com mapeamento de pastas conhecidas e verificação de SHA-256. A migração mais ampla do perfil segue aberta. [Relatório da Wave 2](docs/qa/M4-M5-DEVELOPMENT-WAVE.md)
 
 - [ ] **Épico concluído e validado** (marcar apenas quando subtarefas, critérios e evidências estiverem completos)
 
@@ -1536,7 +1549,7 @@ Automatizar Windows 11 x64 com discos virtuais distintos, backup e validações 
 
 #### AR-07-01 — Desenhar protocolo seguro entre Boot e Restore Agent
 
-- [ ] **Concluída** | **Status:** `BACKLOG` | **Prioridade:** Alta | **ID CSV:** `76` | **ClickUp:** [`1dfqjx6uw6x`](https://app.clickup.com/t/1dfqjx6uw6x)
+- [ ] **Concluída** | **Status:** `EM_ANDAMENTO` | **Prioridade:** Alta | **ID CSV:** `76` | **ClickUp:** [`1dfqjx6uw6x`](https://app.clickup.com/t/1dfqjx6uw6x)
 
 **Objetivo e escopo**
 Definir handoff de manifesto, estado, hashes e credenciais temporárias sem segredos em texto claro.
@@ -1554,7 +1567,7 @@ Definir handoff de manifesto, estado, hashes e credenciais temporárias sem segr
 
 #### AR-07-02 — Implementar agente temporário no Windows recém-instalado
 
-- [ ] **Concluída** | **Status:** `BACKLOG` | **Prioridade:** Alta | **ID CSV:** `77` | **ClickUp:** [`1dfqjx6uw6y`](https://app.clickup.com/t/1dfqjx6uw6y)
+- [ ] **Concluída** | **Status:** `EM_ANDAMENTO` | **Prioridade:** Alta | **ID CSV:** `77` | **ClickUp:** [`1dfqjx6uw6y`](https://app.clickup.com/t/1dfqjx6uw6y)
 
 **Objetivo e escopo**
 Criar serviço/tarefa de inicialização com permissões mínimas e auto-remoção após conclusão.
@@ -1608,7 +1621,7 @@ Permitir recriar nome de conta sem copiar hashes de senha/segredos; política de
 
 #### AR-07-05 — Restaurar diretórios e permissões de usuários
 
-- [ ] **Concluída** | **Status:** `BACKLOG` | **Prioridade:** Alta | **ID CSV:** `80` | **ClickUp:** [`1dfqjx6uw72`](https://app.clickup.com/t/1dfqjx6uw72)
+- [ ] **Concluída** | **Status:** `EM_ANDAMENTO` | **Prioridade:** Alta | **ID CSV:** `80` | **ClickUp:** [`1dfqjx6uw72`](https://app.clickup.com/t/1dfqjx6uw72)
 
 **Objetivo e escopo**
 Mapear diretórios antigos para perfis novos, aplicar ACLs/SIDs de destino de forma controlada.
@@ -1662,7 +1675,7 @@ Migrar arquivos de configuração explicitamente selecionados com mapeamentos po
 
 #### AR-07-08 — Criar reconciliação de conflitos de arquivos
 
-- [ ] **Concluída** | **Status:** `BACKLOG` | **Prioridade:** Alta | **ID CSV:** `83` | **ClickUp:** [`1dfqjx6uw74`](https://app.clickup.com/t/1dfqjx6uw74)
+- [ ] **Concluída** | **Status:** `EM_ANDAMENTO` | **Prioridade:** Alta | **ID CSV:** `83` | **ClickUp:** [`1dfqjx6uw74`](https://app.clickup.com/t/1dfqjx6uw74)
 
 **Objetivo e escopo**
 Opções substituir/manter ambos/ignorar, com preview e aplicação em lote.
@@ -2800,7 +2813,9 @@ Escolher releases assinados, versionamento, mirrors confiáveis e políticas de 
 
 - **Fase:** `Transversal` • **Prioridade de importação:** Alta • **ID CSV do épico:** `147` • **Subtarefas:** 10
 
-- **Status local:** `BACKLOG` • **ClickUp:** `to do` verificado em 09/11/2026
+- **Status local:** `EM_ANDAMENTO` • **ClickUp:** `to do` verificado em 09/11/2026
+
+- **Wave 2:** A regressão em Linux e Windows e a validação focada em WinPE estão registradas. O W10Val permanece abaixo da reserva de 15 GiB. [Relatório da Wave 2](docs/qa/M4-M5-DEVELOPMENT-WAVE.md)
 
 - [ ] **Épico concluído e validado** (marcar apenas quando subtarefas, critérios e evidências estiverem completos)
 
@@ -3401,6 +3416,7 @@ API, manifests, permissões, assinatura e proibição de acesso irrestrito por p
 | 2026-11-09 | 1.1.0 | MVP v0.1.0 definido; AR-00-02 em `planning`; criado P0 v0.0.1 com 10 capacidades | Decisão de produto + ClickUp | **Concluído para planejamento; implementação pendente** |
 | 2026-11-09 | 1.1.0 | Criadas AR-P0-001, AR-QA-P0 e AR-INPLACE-001 com dependências | ClickUp | **Concluído para cadastro** |
 | 2026-11-09 | 1.1.0 | Snapshot API: 194 itens; 19 épicos, 175 subtarefas; 193 `to do`, 1 `planning`; reconciliados 175 IDs originais | ClickUp + CSV | **Verificado** |
+| 2026-11-11 | 1.1.0 | AR-02 a AR-07 e AR-14: BACKLOG → EM_ANDAMENTO no espelho local. Entrega parcial do planejamento, da restauração seletiva e da validação em VM | [Relatório da Wave 2](docs/qa/M4-M5-DEVELOPMENT-WAVE.md) | **PENDENTE**. Limite diário do conector |
 
 ### 13.2. Fila de sincronização pendente
 
@@ -3412,6 +3428,7 @@ API, manifests, permissões, assinatura e proibição de acesso irrestrito por p
 - [ ] **SYNC-006:** vincular evidências reais de build, ISO, boot em VM e testes quando o agente executar P0.
 - [ ] **SYNC-007:** conciliar status após o primeiro desenvolvimento e QA; não marcar `complete` apenas por geração de arquivos.
 - [ ] **SYNC-008:** revisar licenciamento do WinPE/ADK e decidir o mecanismo de distribuição de binários antes do release.
+- [ ] **SYNC-009:** reler estados no ClickUp e anexar commits e evidências da Wave 2 a AR-02, AR-03, AR-04, AR-05, AR-06, AR-07 e AR-14. Preservar AR-QA-M50 e o gate de redistribuição. [Relatório da Wave 2](docs/qa/M4-M5-DEVELOPMENT-WAVE.md)
 
 ### 13.3. Como atualizar offline (procedimento obrigatório)
 
