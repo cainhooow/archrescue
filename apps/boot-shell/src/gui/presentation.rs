@@ -389,7 +389,11 @@ unsafe fn scene(dc: HDC, area: &Layout, theme: &Theme, app: Option<&App>) {
     icon(dc, INTEGRITY_PAGE, 23, 28, ON_ACCENT);
     text(
         dc,
-        theme.emphasis,
+        if area.rail < 200 {
+            theme.body
+        } else {
+            theme.emphasis
+        },
         rect(53, 16, area.rail - 57, 25),
         "ArchRescue",
         TEXT,
