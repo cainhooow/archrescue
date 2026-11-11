@@ -46,7 +46,7 @@ pub unsafe fn button(item: &DRAWITEMSTRUCT, theme: &Theme, selected_page: usize)
     let bounds = item.rcItem;
     let nav = (100..100 + i18n::SECTIONS.len()).contains(&id);
     let selected = nav && id == 100 + selected_page;
-    let primary = matches!(id, NEXT | PREVIEW | EXPORT) || deployment::primary(id);
+    let primary = matches!(id, NEXT | PREVIEW | EXPORT | pages::SCAN) || deployment::primary(id);
     let write = id == COPY || id == RESUME;
     let disabled = item.itemState & ODS_DISABLED != 0;
     let pressed = item.itemState & ODS_SELECTED != 0;
@@ -121,6 +121,61 @@ pub unsafe fn button(item: &DRAWITEMSTRUCT, theme: &Theme, selected_page: usize)
             ),
             ACCENT,
         );
+    }
+}
+
+pub unsafe fn list_item(item: &DRAWITEMSTRUCT, theme: &Theme) {
+    let combo = item.CtlType == ODT_COMBOBOX;
+    let selected = item.itemState & ODS_SELECTED != 0;
+    let background = if selected {
+        BORDER
+    } else if !combo && item.itemID % 2 == 1 {
+        ELEVATED
+    } else {
+        PANEL
+    };
+    fill(item.hDC, item.rcItem, background);
+
+    let label = if item.itemID == u32::MAX {
+        match item.CtlID as usize {
+            pages::ROOT => "Selecione a origem".to_owned(),
+            _ => "Selecione uma opção".to_owned(),
+        }
+    } else {
+        let (measure, read) = if combo {
+            (CB_GETLBTEXTLEN, CB_GETLBTEXT)
+        } else {
+            (LB_GETTEXTLEN, LB_GETTEXT)
+        };
+        let length = SendMessageW(item.hwndItem, measure, item.itemID as usize, 0);
+        if length < 0 {
+            return;
+        }
+        let mut buffer = vec![0u16; length as usize + 1];
+        SendMessageW(
+            item.hwndItem,
+            read,
+            item.itemID as usize,
+            buffer.as_mut_ptr() as isize,
+        );
+        String::from_utf16_lossy(&buffer[..length as usize])
+    };
+
+    let color = if label.starts_with("CRÍTICO") {
+        CRITICAL
+    } else if label.starts_with("ATENÇÃO") {
+        WARNING
+    } else if item.itemState & ODS_DISABLED != 0 {
+        MUTED
+    } else {
+        TEXT
+    };
+    let mut area = item.rcItem;
+    area.left += 8;
+    area.right -= 8;
+    text(item.hDC, theme.body, area, &label, color, LINE);
+    if item.itemState & ODS_FOCUS != 0 {
+        outline(item.hDC, item.rcItem, ACCENT);
     }
 }
 
@@ -231,13 +286,16 @@ unsafe fn page(dc: HDC, theme: &Theme, area: &Layout, app: &App) {
     );
 
     let source = app
-        .report
-        .as_ref()
-        .and_then(|report| report.installations.installations.first())
-        .map_or_else(
-            || "Nenhuma instalação selecionada".into(),
-            |installation| installation.path.display().to_string(),
-        );
+        .roots
+        .get(app.root_index)
+        .map(|path| path.display().to_string())
+        .or_else(|| {
+            app.report
+                .as_ref()
+                .and_then(|report| report.installations.installations.first())
+                .map(|installation| installation.path.display().to_string())
+        })
+        .unwrap_or_else(|| "Nenhuma instalação selecionada".into());
     let subtitle = if app.busy {
         format!("Operação em andamento   ·   {source}")
     } else {
@@ -383,9 +441,16 @@ fn summary(app: &App) -> [Card; 4] {
         ),
         (
             "Integridade do Windows",
-            "Não analisada".into(),
-            "A análise verifica componentes do Windows offline".into(),
-            MUTED,
+            pages::integrity_status(app).into(),
+            pages::selected_scan(app).map_or_else(
+                || "Componentes do Windows offline".into(),
+                |scan| format!("{} evidências registradas", scan.checks.len()),
+            ),
+            match pages::selected_scan(app).map(|scan| scan.status) {
+                Some(archrescue_integrity::Status::FindingsDetected) => WARNING,
+                Some(archrescue_integrity::Status::Blocked) => CRITICAL,
+                _ => TEXT,
+            },
         ),
         (
             "Backup",
@@ -416,9 +481,12 @@ fn summary(app: &App) -> [Card; 4] {
 }
 
 fn recommendation(app: &App) -> &'static str {
+    if let Some(scan) = pages::selected_scan(app) {
+        return scan.recommendation();
+    }
     match &app.report {
         None => "Aguarde a identificação dos discos e instalações acessíveis.",
         Some(report) if report.installations.installations.is_empty() => "Confira os volumes acessíveis e atualize o inventário antes de selecionar uma instalação.",
-        Some(_) => "Revise a instalação detectada e preserve os arquivos importantes em um disco independente.",
+        Some(_) => "Selecione a instalação e analise os componentes do Windows antes de preparar a recuperação.",
     }
 }

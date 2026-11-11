@@ -16,7 +16,7 @@ impl Layout {
         Self {
             width: client.right,
             height: client.bottom,
-            rail: if client.right < 960 { 146 } else { 208 },
+            rail: if client.right < 960 { 146 } else { 218 },
         }
     }
 
@@ -39,14 +39,15 @@ impl Layout {
     pub fn body_top(section: usize) -> i32 {
         match section {
             deployment::DEPLOY => 226,
-            deployment::RESTORE | BACKUP | REPAIR_PAGE => 145,
+            BACKUP => 173,
+            deployment::RESTORE | REPAIR_PAGE | INTEGRITY_PAGE => 145,
             _ => 108,
         }
     }
 
     pub fn body_bottom(&self, section: usize) -> i32 {
         match section {
-            DASHBOARD | DIAGNOSIS | DISKS | VERIFY_PAGE => self.actions() - 8,
+            DASHBOARD | DIAGNOSIS | DISKS | VERIFY_PAGE | INTEGRITY_PAGE => self.actions() - 8,
             _ => self.destination() - 8,
         }
     }
@@ -72,9 +73,13 @@ pub unsafe fn arrange(hwnd: HWND, section: usize) {
     place(hwnd, TECHNICIAN, area.width - 176, 22, 154, 34);
     place(hwnd, CONSOLE, x + 228, area.actions(), 204, 32);
 
-    place(hwnd, ADDRESS, x, 108, width - 172, 30);
-    place(hwnd, OPEN, x + width - 164, 108, 82, 30);
-    place(hwnd, UP, x + width - 74, 108, 74, 30);
+    place(hwnd, ADDRESS, x, 108, width - 277, 30);
+    place(hwnd, OPEN, x + width - 269, 108, 70, 30);
+    place(hwnd, UP, x + width - 191, 108, 70, 30);
+    place(hwnd, BACKUP_RESULTS, x + width - 113, 108, 113, 30);
+    if section == BACKUP {
+        place(hwnd, pages::PAGE_HINT, x, 143, width, 22);
+    }
     place(hwnd, ESP, x, 108, width, 30);
     place(hwnd, DEST, x, area.destination(), width, 30);
 
@@ -106,5 +111,8 @@ pub unsafe fn arrange(hwnd: HWND, section: usize) {
     }
 
     place(hwnd, STATUS, x + 12, area.height - 51, width - 24, 42);
-    deployment::layout(hwnd, &area);
+    deployment::layout(hwnd, &area, section);
+    if pages::structured(section) {
+        pages::layout(hwnd, &area, section);
+    }
 }

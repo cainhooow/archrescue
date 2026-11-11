@@ -28,10 +28,18 @@ pub struct Theme {
 
 impl Theme {
     pub unsafe fn new() -> Result<Self> {
+        // WinPE can ship italic Segoe variants without the regular face.
+        let face = if std::env::var_os("SystemRoot")
+            .is_some_and(|root| PathBuf::from(root).join("Fonts/segoeui.ttf").is_file())
+        {
+            wide("Segoe UI")
+        } else {
+            wide("Tahoma")
+        };
         let theme = Self {
-            body: font(15, 400),
-            heading: font(29, 600),
-            emphasis: font(17, 600),
+            body: font(&face, 15, 400),
+            heading: font(&face, 29, 600),
+            emphasis: font(&face, 17, 600),
             panel: CreateSolidBrush(PANEL),
         };
 
@@ -59,7 +67,7 @@ impl Drop for Theme {
     }
 }
 
-unsafe fn font(height: i32, weight: i32) -> HFONT {
+unsafe fn font(face: &[u16], height: i32, weight: i32) -> HFONT {
     // The GDI font mapper selects a system fallback if Segoe UI is unavailable.
     CreateFontW(
         -height,
@@ -75,6 +83,6 @@ unsafe fn font(height: i32, weight: i32) -> HFONT {
         CLIP_DEFAULT_PRECIS as u32,
         DEFAULT_QUALITY as u32,
         DEFAULT_PITCH as u32,
-        wide("Segoe UI").as_ptr(),
+        face.as_ptr(),
     )
 }

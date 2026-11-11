@@ -37,6 +37,8 @@ pub const EMPTY: &str =
 
 pub const HELP: &str = "Comandos (caminhos absolutos):
   inventory
+  integrity RAIZ_WINDOWS [--native]
+  integrity-report RAIZ_WINDOWS DESTINO [MÍDIA ÍNDICE]
   deployment-media IMAGEM_OU_RAIZ [SHA256_ESPERADO]
   deployment-plan IMAGEM SHA256 ÍNDICE ID_GPT MODO DESTINO [BACKUP]
   deployment-authorize PLANO_JSON AUTORIZAR-IMPLANTACAO:SHA256

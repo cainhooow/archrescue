@@ -282,9 +282,10 @@ fn decode(bytes: &[u8]) -> Option<String> {
         }
         let little_endian = bytes[0] == 0xff;
         let words = utf16
-            .chunks_exact(2)
-            .map(|pair| {
-                let pair = [pair[0], pair[1]];
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|&pair| {
                 if little_endian {
                     u16::from_le_bytes(pair)
                 } else {

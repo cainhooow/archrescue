@@ -99,11 +99,17 @@ unsafe fn selection(hwnd: HWND, id: usize) -> usize {
     SendMessageW(control(hwnd, id), CB_GETCURSEL, 0, 0) as usize
 }
 
+pub unsafe fn reference(hwnd: HWND, app: &App) -> Option<(Media, archrescue_deployment::Image)> {
+    let media = app.deployment.media.as_ref()?;
+    let image = media.images.get(selection(hwnd, IMAGE_INDEX))?;
+    Some((media.clone(), image.clone()))
+}
+
 pub fn primary(id: usize) -> bool {
     matches!(id, INSPECT | PLAN | HANDOFF)
 }
 
-pub unsafe fn layout(hwnd: HWND, area: &super::layout::Layout) {
+pub unsafe fn layout(hwnd: HWND, area: &super::layout::Layout, section: usize) {
     let x = area.left();
     let width = area.body_width();
     place(hwnd, MEDIA, x, 108, width - 137, 30);
@@ -111,7 +117,11 @@ pub unsafe fn layout(hwnd: HWND, area: &super::layout::Layout) {
     place(hwnd, IMAGE_INDEX, x, 145, 144, 250);
     place(hwnd, DISK, x + 152, 145, width - 152, 250);
     place(hwnd, MODE, x, 184, 211, 180);
-    place(hwnd, PRESERVATION, x + 219, 184, width - 219, 30);
+    if section == RESTORE {
+        place(hwnd, PRESERVATION, x, 108, width, 30);
+    } else {
+        place(hwnd, PRESERVATION, x + 219, 184, width - 219, 30);
+    }
     place(hwnd, PLAN, x, area.actions(), 155, 32);
     place(hwnd, SAVE, x + 163, area.actions(), 157, 32);
     place(hwnd, HANDOFF, x, area.actions(), 270, 32);
@@ -144,11 +154,6 @@ pub unsafe fn render(hwnd: HWND, app: &App) -> bool {
         control(hwnd, SAVE),
         (!app.busy && app.deployment.plan.is_some()) as i32,
     );
-
-    if handoff {
-        let area = super::layout::Layout::read(hwnd);
-        place(hwnd, PRESERVATION, area.left(), 108, area.body_width(), 30);
-    }
 
     if deployment {
         set(

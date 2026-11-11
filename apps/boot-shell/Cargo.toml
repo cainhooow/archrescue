@@ -12,6 +12,7 @@ archrescue-core.workspace = true
 archrescue-storage.workspace = true
 archrescue-windows-detection.workspace = true
 archrescue-diagnostics.workspace = true
+archrescue-integrity.workspace = true
 archrescue-backup.workspace = true
 archrescue-evidence.workspace = true
 archrescue-deployment.workspace = true

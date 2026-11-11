@@ -136,6 +136,25 @@ pub struct WindowsIdentity {
     pub version_source: PathBuf,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ReferenceStatus {
+    Unsupported,
+    Inconclusive,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReferenceAssessment {
+    pub path: PathBuf,
+    pub sha256: String,
+    pub index: u32,
+    pub architecture: Option<String>,
+    pub edition: Option<String>,
+    pub version: Option<String>,
+    pub status: ReferenceStatus,
+    pub reason: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IntegrityReport {
     pub schema_version: u32,
@@ -145,6 +164,8 @@ pub struct IntegrityReport {
     pub volume: Option<VolumeIdentity>,
     pub recovery_location: Option<RecoveryLocation>,
     pub windows: Option<WindowsIdentity>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reference: Option<ReferenceAssessment>,
     pub mode: ScanMode,
     pub started_unix: u64,
     pub completed_unix: u64,
@@ -191,6 +212,7 @@ pub fn scan(
         volume: None,
         recovery_location: None,
         windows: None,
+        reference: None,
         mode,
         started_unix: now(),
         completed_unix: 0,

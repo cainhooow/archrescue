@@ -11,6 +11,7 @@ use archrescue_backup::transaction::TransactionReport;
 use archrescue_backup::BackupResult;
 use archrescue_core::{Error, ErrorKind, Operation, Result, BUILD_ID, VERSION};
 use archrescue_diagnostics::BootReport;
+use archrescue_integrity::IntegrityReport;
 use archrescue_storage::{safe_existing, Inventory};
 use archrescue_windows_detection::Discovery;
 use serde::{Deserialize, Serialize};
@@ -28,6 +29,8 @@ pub struct Report {
     pub inventory: Inventory,
     pub installations: Discovery,
     pub boot: BootReport,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub integrity: Vec<IntegrityReport>,
     pub operations: Vec<BackupResult>,
     #[serde(default)]
     pub diagnosis: archrescue_diagnostics::recovery::Diagnosis,
@@ -68,6 +71,7 @@ impl Report {
             inventory,
             installations,
             boot,
+            integrity: vec![],
             diagnosis,
             operations: vec![],
             transactions: vec![],
@@ -126,6 +130,33 @@ impl Report {
             ));
         }
 
+        for scan in &self.integrity {
+            use std::fmt::Write;
+
+            let _ = writeln!(
+                text,
+                "\nIntegridade do Windows · {}\n{} · {} verificações registradas\n{}",
+                scan.windows_directory.display(),
+                scan.status.label(),
+                scan.checks.len(),
+                scan.recommendation(),
+            );
+            for check in scan.findings() {
+                let _ = writeln!(
+                    text,
+                    "\n{} · {}\n{}\n{}\n{}",
+                    check.category.label(),
+                    check.observation.label(),
+                    check.path.display(),
+                    check.evidence,
+                    check.next_action,
+                );
+            }
+            for item in &scan.not_executed {
+                let _ = writeln!(text, "Não executado: {item}");
+            }
+        }
+
         text.push_str("\nStructured evidence (including errors and limitations):\n");
         match serde_json::to_string_pretty(self) {
             Ok(json) => text.push_str(&json),
@@ -158,6 +189,22 @@ fn write_new(path: &Path, bytes: &[u8]) -> Result<()> {
 
 pub fn export(report: &Report, destination: &Path) -> Result<PathBuf> {
     let destination = safe_existing(destination)?;
+
+    if !report.integrity.is_empty() {
+        let destination_id = archrescue_storage::identity(&destination)?;
+        for scan in &report.integrity {
+            let source_id = archrescue_storage::identity(&scan.root)?;
+            if let Some(location) = &scan.recovery_location {
+                if &archrescue_storage::recovery_location(&scan.root)? != location {
+                    return Err(Error::new(
+                        ErrorKind::Conflict,
+                        "A origem da análise de integridade mudou",
+                    ));
+                }
+            }
+            archrescue_storage::require_separate(&source_id, &destination_id)?;
+        }
+    }
 
     if !destination.is_dir() {
         return Err(Error::new(

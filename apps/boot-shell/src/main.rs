@@ -4,6 +4,7 @@ mod deployment;
 #[cfg(windows)]
 mod gui;
 mod i18n;
+mod integrity;
 #[cfg(windows)]
 mod views;
 
@@ -72,6 +73,7 @@ fn run() -> Result<()> {
         "deployment-media" | "deployment-plan" | "deployment-authorize" => {
             deployment::command(command, &args[1..])?;
         }
+        "integrity" | "integrity-report" => integrity::command(command, &args[1..])?,
         "inventory" if args.len() == 1 => print_json(&archrescue_storage::inventory())?,
         "discover" if args.len() > 1 => {
             let discovery = archrescue_windows_detection::discover(&paths(&args[1..]));

@@ -534,6 +534,7 @@ mod tests {
                 capacity: Some(80 * 1024 * 1024 * 1024),
                 bus: Some(1),
                 removable: Some(false),
+                read_only: None,
                 style: Some("GPT".into()),
                 partitions: vec![],
                 errors: vec![],

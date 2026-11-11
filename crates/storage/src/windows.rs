@@ -339,6 +339,7 @@ fn disk(path: String) -> Disk {
         capacity: None,
         bus: None,
         removable: None,
+        read_only: None,
         style: None,
         partitions: vec![],
         errors: vec![],
@@ -388,6 +389,12 @@ fn disk(path: String) -> Disk {
         }
         Err(error) => disk.errors.push(error),
     }
+
+    disk.read_only = match query(&handle, IOCTL_DISK_IS_WRITABLE, &[]) {
+        Ok(_) => Some(false),
+        Err(error) if error.os_code == Some(ERROR_WRITE_PROTECT as i32) => Some(true),
+        Err(_) => None,
+    };
 
     if let Err(error) = read_layout(&handle, &mut disk) {
         disk.errors.push(error);

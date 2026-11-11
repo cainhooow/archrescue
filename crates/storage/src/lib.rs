@@ -108,6 +108,8 @@ pub struct Disk {
     pub capacity: Option<u64>,
     pub bus: Option<u32>,
     pub removable: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub read_only: Option<bool>,
     pub style: Option<String>,
     pub partitions: Vec<Partition>,
     pub errors: Vec<Error>,

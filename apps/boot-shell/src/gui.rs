@@ -2,6 +2,7 @@
 
 mod deployment;
 mod layout;
+mod pages;
 mod presentation;
 mod theme;
 
@@ -28,8 +29,10 @@ use windows_sys::Win32::{
     Graphics::Gdi::*,
     System::LibraryLoader::GetModuleHandleW,
     UI::{
-        Controls::{DRAWITEMSTRUCT, EM_SETMARGINS},
-        Input::KeyboardAndMouse::{EnableWindow, SetFocus},
+        Controls::{
+            DRAWITEMSTRUCT, EM_SETMARGINS, MEASUREITEMSTRUCT, ODT_BUTTON, ODT_COMBOBOX, ODT_LISTBOX,
+        },
+        Input::KeyboardAndMouse::{EnableWindow, GetFocus, SetFocus, VK_RETURN},
         WindowsAndMessaging::*,
     },
 };
@@ -56,6 +59,7 @@ const TECHNICIAN: usize = 217;
 const VERIFY: usize = 218;
 const REPAIR: usize = 219;
 const ESP: usize = 220;
+const BACKUP_RESULTS: usize = 221;
 
 const DASHBOARD: usize = 0;
 const DIAGNOSIS: usize = 1;
@@ -85,6 +89,8 @@ enum Event {
     Exported(PathBuf),
     PlanExported(PathBuf),
     Deployment(deployment::Update),
+    Integrity(Box<archrescue_integrity::IntegrityReport>),
+    IntegrityProgress(archrescue_integrity::Progress),
     Failure(Error),
 }
 
@@ -109,6 +115,10 @@ struct App {
     busy: bool,
     error_status: bool,
     progress: Option<Progress>,
+    scanning: bool,
+    roots: Vec<PathBuf>,
+    root_index: usize,
+    row_index: usize,
     cancellable: bool,
     cancel: Arc<AtomicBool>,
     tx: Sender<Event>,
@@ -150,11 +160,13 @@ unsafe fn add(
     style: u32,
     font: HFONT,
 ) -> Result<()> {
-    let style = if class == "BUTTON" {
-        style | BS_OWNERDRAW as u32
-    } else {
-        style
-    };
+    let style = style
+        | match class {
+            "BUTTON" => BS_OWNERDRAW as u32,
+            "LISTBOX" => (LBS_OWNERDRAWFIXED | LBS_HASSTRINGS | LBS_NOINTEGRALHEIGHT) as u32,
+            "COMBOBOX" => (CBS_OWNERDRAWFIXED | CBS_HASSTRINGS) as u32,
+            _ => 0,
+        };
     let child = CreateWindowExW(
         0,
         wide(class).as_ptr(),
@@ -213,6 +225,7 @@ unsafe fn render(hwnd: HWND, app: &App) {
     }
     show(hwnd, EXPORT, report_stage);
     show(hwnd, VERIFY, verify);
+    show(hwnd, BACKUP_RESULTS, protect);
     show(hwnd, REPAIR, repair);
     show(hwnd, NEXT, app.section == DASHBOARD);
     show(hwnd, CONSOLE, report_stage && app.technician);
@@ -264,6 +277,7 @@ unsafe fn render(hwnd: HWND, app: &App) {
         .as_ref()
         .is_some_and(|report| !report.transactions.is_empty());
     EnableWindow(control(hwnd, VERIFY), (!app.busy && has_backup) as i32);
+    EnableWindow(control(hwnd, BACKUP_RESULTS), has_backup as i32);
     set(
         hwnd,
         TECHNICIAN,
@@ -277,7 +291,8 @@ unsafe fn render(hwnd: HWND, app: &App) {
     layout::arrange(hwnd, app.section);
     InvalidateRect(hwnd, null(), 0);
 
-    if deployment::render(hwnd, app) {
+    let structured = pages::render_page(hwnd, app);
+    if deployment::render(hwnd, app) || structured {
         return;
     }
 
@@ -313,18 +328,12 @@ O destino receberá uma pasta exclusiva com checkpoint e arquivos verificados. U
         );
         return;
     };
-    let text = crate::views::section(
-        match app.section {
-            DISKS => 0,
-            DIAGNOSIS => 1,
-            REPAIR_PAGE => 3,
-            VERIFY_PAGE => 4,
-            REPORTS => 5,
-            _ => 2,
-        },
-        report,
-        app.technician,
-    );
+    let text = match app.section {
+        REPAIR_PAGE => crate::views::repair(report, app.technician),
+        VERIFY_PAGE => crate::views::verify(report, app.technician),
+        REPORTS => crate::views::session(report, app.technician),
+        _ => String::new(),
+    };
     set(hwnd, CONTENT, &text);
 }
 
@@ -421,6 +430,7 @@ unsafe fn selected(hwnd: HWND, app: &App) -> Vec<PathBuf> {
 
 unsafe fn stage(hwnd: HWND, app: &mut App, section: usize) {
     app.section = section;
+    app.row_index = 0;
     render(hwnd, app);
     // Keep focus on the selected navigation button so Tab continues in page order.
     SetFocus(control(hwnd, 100 + section.min(REPORTS)));
@@ -434,7 +444,16 @@ unsafe fn action(hwnd: HWND, app: &mut App, id: usize, notification: u32) {
 
     match id {
         NEXT => {
-            stage(hwnd, app, DIAGNOSIS);
+            let next = if app.roots.is_empty() {
+                DISKS
+            } else {
+                INTEGRITY_PAGE
+            };
+            stage(hwnd, app, next);
+            return;
+        }
+        BACKUP_RESULTS => {
+            stage(hwnd, app, VERIFY_PAGE);
             return;
         }
         TECHNICIAN => {
@@ -450,7 +469,7 @@ unsafe fn action(hwnd: HWND, app: &mut App, id: usize, notification: u32) {
         _ => {}
     }
 
-    if app.busy {
+    if pages::action(hwnd, app, id, notification) || app.busy {
         return;
     }
 
@@ -774,14 +793,14 @@ unsafe fn events(hwnd: HWND, app: &mut App) {
         match event {
             Event::Progress(progress) => {
                 let message = format!(
-                    "{} | {}
-Gravados {}/{} bytes | Verificados {} bytes ({} arquivos)",
-                    progress.operation_id,
+                    "{}
+Gravados {}/{} bytes · Verificados {} bytes · {} arquivos · {} falhas",
                     progress.stage,
                     progress.acknowledged_bytes,
                     progress.planned_bytes,
                     progress.verified_bytes,
                     progress.verified_files,
+                    progress.failed_files,
                 );
                 set(hwnd, STATUS, &message);
                 app.progress = Some(progress);
@@ -800,7 +819,9 @@ Gravados {}/{} bytes | Verificados {} bytes ({} arquivos)",
             ),
             Event::Snapshot(mut report) => {
                 deployment::refresh_disks(hwnd, app, &report);
+                pages::refresh_sources(hwnd, app, &report);
                 if let Some(old) = app.report.take() {
+                    report.integrity = old.integrity;
                     report.operations = old.operations;
                     report.transactions = old.transactions;
                     report.decisions = old.decisions;
@@ -879,7 +900,31 @@ Gravados {}/{} bytes | Verificados {} bytes ({} arquivos)",
                 STATUS,
                 &format!("Relatório gravado e verificado: {}", path.display()),
             ),
+            Event::IntegrityProgress(progress) => {
+                set(
+                    hwnd,
+                    STATUS,
+                    &format!(
+                        "{} · {} verificações registradas",
+                        progress.phase, progress.completed_checks
+                    ),
+                );
+                continue;
+            }
+            Event::Integrity(scan) => {
+                app.scanning = false;
+                app.row_index = 0;
+                app.error_status = matches!(scan.status, archrescue_integrity::Status::Blocked);
+                set(hwnd, STATUS, scan.status.label());
+                if let Some(report) = &mut app.report {
+                    report
+                        .integrity
+                        .retain(|previous| previous.root != scan.root);
+                    report.integrity.push(*scan);
+                }
+            }
             Event::Failure(error) => {
+                app.scanning = false;
                 app.error_status = true;
                 set(hwnd, STATUS, &error_message(&error));
                 if let Some(report) = &mut app.report {
@@ -1004,10 +1049,20 @@ unsafe extern "system" fn procedure(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM
         WM_DRAWITEM if lp != 0 => {
             // The notification supplies a live DRAWITEMSTRUCT and child paint DC.
             let item = &*(lp as *const DRAWITEMSTRUCT);
-            let selected = state.selected_page.get();
-            presentation::button(item, &state.theme, selected);
+            match item.CtlType {
+                ODT_BUTTON => presentation::button(item, &state.theme, state.selected_page.get()),
+                ODT_LISTBOX | ODT_COMBOBOX => presentation::list_item(item, &state.theme),
+                _ => return DefWindowProcW(hwnd, msg, wp, lp),
+            }
             return 1;
         }
+        WM_MEASUREITEM if lp != 0 => {
+            // The owner-drawn row height is in client pixels, like the layout.
+            let item = &mut *(lp as *mut MEASUREITEMSTRUCT);
+            item.itemHeight = 27;
+            return 1;
+        }
+        WM_ERASEBKGND => return 1,
         WM_GETMINMAXINFO => {
             let info = &mut *(lp as *mut MINMAXINFO);
             info.ptMinTrackSize = POINT {
@@ -1102,6 +1157,10 @@ pub fn run() -> Result<()> {
                 busy: false,
                 error_status: false,
                 progress: None,
+                scanning: false,
+                roots: vec![],
+                root_index: 0,
+                row_index: 0,
                 cancellable: false,
                 cancel: Arc::new(AtomicBool::new(false)),
                 tx,
@@ -1155,11 +1214,12 @@ pub fn run() -> Result<()> {
             (REFRESH, "Atualizar"),
             (OPEN, "Abrir"),
             (UP, "Subir"),
+            (BACKUP_RESULTS, "Resultados"),
             (PREVIEW, "Plane&jar"),
             (COPY, "&Iniciar backup"),
             (CHECKPOINTS, "Checkpoints"),
             (RESUME, "&Retomar"),
-            (NEXT, "Revisar diagnóstico"),
+            (NEXT, "Continuar recuperação"),
             (TECHNICIAN, "Modo &técnico"),
             (VERIFY, "Verificar novamente"),
             (REPAIR, "Gerar prévia do reparo"),
@@ -1227,8 +1287,16 @@ pub fn run() -> Result<()> {
                 | ES_AUTOVSCROLL as u32,
             font,
         )?;
-        add(hwnd, STATUS, "STATIC", i18n::LOADING, 0, font)?;
+        add(
+            hwnd,
+            STATUS,
+            "EDIT",
+            i18n::LOADING,
+            WS_TABSTOP | ES_MULTILINE as u32 | ES_READONLY as u32,
+            font,
+        )?;
 
+        pages::controls(hwnd, font)?;
         deployment::controls(hwnd, font)?;
         layout::arrange(hwnd, DASHBOARD);
         ShowWindow(hwnd, SW_SHOW);
@@ -1244,6 +1312,25 @@ pub fn run() -> Result<()> {
             }
             if result == -1 {
                 return Err(os_error("Native message loop"));
+            }
+            if msg.message == WM_KEYDOWN && msg.wParam == VK_RETURN as usize {
+                let focused = GetFocus();
+                let id = GetDlgCtrlID(focused);
+                let mut class = [0_u16; 16];
+                let length = GetClassNameW(focused, class.as_mut_ptr(), class.len() as i32);
+                if length > 0 && String::from_utf16_lossy(&class[..length as usize]) == "Button" {
+                    SendMessageW(focused, BM_CLICK, 0, 0);
+                    continue;
+                }
+                if id == FILES as i32 {
+                    SendMessageW(
+                        hwnd,
+                        WM_COMMAND,
+                        FILES | ((LBN_DBLCLK as usize) << 16),
+                        focused as isize,
+                    );
+                    continue;
+                }
             }
             if IsDialogMessageW(hwnd, &msg) == 0 {
                 TranslateMessage(&msg);
