@@ -281,10 +281,7 @@ fn parse_details(text: &str, index: u32) -> Result<Image> {
         ));
     }
 
-    let expanded_bytes = field("Size").and_then(|value| {
-        let digits = value.strip_suffix("bytes")?.trim().replace(',', "");
-        digits.parse().ok()
-    });
+    let expanded_bytes = field("Size").and_then(|value| parse_image_size(&value));
 
     Ok(Image {
         index,
@@ -295,6 +292,37 @@ fn parse_details(text: &str, index: u32) -> Result<Image> {
         expanded_bytes,
         installation: field("Installation"),
     })
+}
+
+#[cfg(any(windows, test))]
+fn parse_image_size(value: &str) -> Option<u64> {
+    let number = value.strip_suffix("bytes")?.trim();
+    if let Ok(bytes) = number.parse() {
+        return Some(bytes);
+    }
+
+    // /English translates the labels. DISM still formats integers using the host locale.
+    let separator = number
+        .chars()
+        .find(|character| !character.is_ascii_digit())?;
+    if !matches!(separator, ',' | '.' | ' ' | '\u{a0}' | '\u{202f}') {
+        return None;
+    }
+    let mut groups = number.split(separator);
+    let first = groups.next()?;
+    if first.is_empty() || first.len() > 3 || !first.bytes().all(|byte| byte.is_ascii_digit()) {
+        return None;
+    }
+
+    let mut digits = first.to_owned();
+    for group in groups {
+        if group.len() != 3 || !group.bytes().all(|byte| byte.is_ascii_digit()) {
+            return None;
+        }
+        digits.push_str(group);
+    }
+
+    digits.parse().ok()
 }
 
 #[cfg(test)]
@@ -322,6 +350,18 @@ mod tests {
             parse_details(without_image_version, 1).unwrap().version,
             None
         );
+    }
+
+    #[test]
+    fn image_sizes_use_the_hosts_number_grouping() {
+        for size in [
+            "15,028,050,819 bytes",
+            "15.028.050.819 bytes",
+            "15 028 050 819 bytes",
+        ] {
+            assert_eq!(parse_image_size(size), Some(15_028_050_819));
+        }
+        assert_eq!(parse_image_size("15.02 bytes"), None);
     }
 
     #[test]
