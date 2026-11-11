@@ -3486,3 +3486,20 @@ Estas três subtarefas foram criadas em 09/11/2026 em épicos existentes, possue
 ---
 
 **Próximo passo deliberado:** o escopo está definido; executar **AR-P0-001 v0.0.1** e homologar **AR-QA-P0**. Preservar a distinção entre **planejado**, **cadastrado**, **implementado**, **testado** e **homologado**. Este documento permanece editável offline.
+
+## 16. Engineering current-state addendum — 2026-11-10
+
+P0 automated technical validation is complete for the recorded lab scope and accepted for continued development. The historical corrective report preserves the observations and the human review status at the time it was written. The owner's first comprehensive human review remains pending until actual product implementation reaches the 50% milestone. Public WinPE distribution remains gated by the separate licensing decision.
+
+| Roadmap area | Evidence-backed state |
+|---|---|
+| AR-01 WinPE | A new local ISO was built from `ae04e7d`. QEMU/OVMF booted and ran the recovery workflow. VirtualBox booted the ISO with Secure Boot enabled. |
+| AR-02 guided interface | Six stages, technician detail, real progress, checkpoint discovery and local reports implemented. The backup and resume flow ran in WinPE at 800×600 and 1280×720. Installation and restoration stages, full keyboard coverage and the new GUI cancellation walkthrough remain pending. |
+| AR-03 inventory and diagnostics | PE architecture and kernel-resource evidence, WinRE file evidence, structured findings and same-disk GPT relationships implemented. An actual offline Windows image and synthetic negative cases were checked. Ambiguous ESP runtime and wider hardware coverage remain pending. |
+| AR-04 controlled repair | Typed planning, exact target and command preview, explicit authorization, preservation requirements and laboratory execution guard implemented. The QEMU repair clone failed to boot before repair. Its ESP could be listed in WinPE, but safe canonicalization failed on both USB and SATA, so the verified EFI backup prerequisite blocked BCDBoot. |
+| AR-05 backup | Durable versioned manifests and safe resume verified through a real WinPE interruption, restart, GUI continuation and independent SHA-256 readback of the backup and restored directory. Rich metadata and power-loss qualification remain open. |
+| AR-14 and AR-15 QA and evidence | Targeted Linux, Windows and WinPE evidence and environment guardrails are recorded. W10Val measured 11.6 GiB free at final closure, below the 15 GiB floor for substantial builds. |
+
+Track implementation against stable roadmap IDs and observable product acceptance criteria. For each entry record its exact source revision, user-facing workflow, acceptance fixture, result and open conditions. Count an entry toward product implementation when its scoped acceptance criteria have evidence. Keep infrastructure, QA, documentation, review and legal gates in the traceability matrix with their own states. Establish a stable weighted product denominator before reporting a global percentage. The existing roadmap and evidence are sufficient to report individual capabilities, and a global percentage has not been assigned.
+
+The [development wave report](docs/qa/M1-M3-DEVELOPMENT-WAVE.md) contains the detailed evidence and ClickUp reconciliation. The [workspace incident report](docs/evidence/ENVIRONMENT-HYGIENE.md) contains the inventory, removals, verified retention and remaining capacity limit.

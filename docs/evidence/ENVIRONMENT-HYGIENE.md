@@ -8,16 +8,16 @@ All values are bytes. Host directory sizes use allocated blocks as reported by `
 
 | Metric | Before | After | Reclaimed |
 |---|---:|---:|---:|
-| Project directory | 113,198,657,536 | 31,236,702,208 | 81,961,955,328 |
-| Repository .agent-tmp | 110,752,718,848 | 29,625,860,096 | 81,126,858,752 |
+| Project directory | 113,198,657,536 | 31,239,278,592 | 81,959,378,944 |
+| Repository .agent-tmp | 110,752,718,848 | 29,625,659,392 | 81,127,059,456 |
 | Repository Cargo output | 1,237,168,128 | 0 | 1,237,168,128 |
-| Retained artifacts | 1,206,198,272 | 1,608,249,344 | -402,051,072 |
-| Host filesystem free space | 264,202,801,152 | 303,913,783,296 | 39,710,982,144 |
-| W10Val C: free space | 5,264,203,776 | 12,767,039,488 | 7,502,835,712 |
+| Retained artifacts | 1,206,198,272 | 1,610,870,784 | -404,672,512 |
+| Host filesystem free space | 264,202,801,152 | 310,274,813,952 | 46,072,012,800 |
+| W10Val C: free space | 5,264,203,776 | 12,405,846,016 | 7,141,642,240 |
 
-The project directory fell from 105.4 GiB to 29.1 GiB. The host filesystem gained 37.0 GiB in the recorded before/after interval. Same-filesystem relocation accounts for some of the repository reduction and contributes zero to filesystem capacity recovery. Compression and shared Btrfs extents also affect the relationship between per-path accounting and filesystem free space. Retained artifacts grew when the matching guest EXE and ISO were promoted.
+The project directory fell from 105.4 GiB to 29.1 GiB. The host filesystem had 42.9 GiB more free space at final measurement. Same-filesystem relocation accounts for some of the repository reduction and contributes zero to filesystem capacity recovery. Compression and shared Btrfs extents also affect the relationship between per-path accounting and filesystem free space. Retained artifacts grew when the matching guest EXE, ISO and compact QA evidence were promoted. Git tracked 552,443 bytes at the start, with 1.57 MiB of loose objects.
 
-W10Val gained 7.0 GiB and now has approximately 11.9 GiB free on C:. The 15 GiB floor still blocks substantial new Windows builds. A WinPE build already in progress when the incident arrived finished with exit 0 and no mounted WIMs. The new ISO and executable were moved to local retention after SHA-256 verification. The recovered host capacity supports QA with that ISO. Guest disk capacity was held at the existing size.
+W10Val rose from 4.9 GiB to 11.9 GiB immediately after bulk cleanup and measured 11.6 GiB after the final native probes and their cleanup. The 15 GiB floor still blocks substantial new Windows builds. A WinPE build already in progress when the incident arrived finished with exit 0 and no mounted WIMs. The new ISO and executable were promoted to local retention after SHA-256 verification. The recovered host capacity supported QA with that ISO. Guest disk capacity was held at the existing size.
 
 ## Ownership and preservation
 
@@ -32,13 +32,16 @@ The Windows plan required a quiet native build and servicing environment, a clea
 - Active W10Val boot disk, snapshots and attached fixture parents under the VirtualBox and `.agent-tmp/w10val/disks` paths. The QEMU host audit did not modify any W10Val disk image.
 - ArchRescue-QA configuration, snapshot, source and destination parents under `.agent-tmp/w10val/qa` and the attached source and destination of ArchRescue-P0-Corrective-QA under `.agent-tmp/p0-corrective/virtualbox`. Their exact paths, medium IDs, parent UUIDs and attachments are in the before/after VirtualBox logs.
 - Local WinPE ISOs under `artifacts/windows/9e624d2`, `64bf3a6`, `513c8de` and `ae04e7d`. The three P0 variants have a registered VM or snapshot dependency. The wave build retains its exact EXE, ISO, import list and build log.
-- Current repair clone, disposable destination and QEMU runtime moved to the run named in `.agent-tmp/hygiene-audit/wave-scratch-location.txt`. These belong to the active wave and are subject to evidence promotion and cleanup. The active Rust cache moved outside the repository and accounts for about 1.3 GiB after the test run.
+- The active Rust cache moved outside the repository and accounts for about 1.3 GiB after the test run. The wave QA evidence was promoted to `artifacts/evidence/m1-m3`.
+- The repair clone, its QCOW2 overlay, the disposable destination and extracted QEMU runtime were retired after the guest was stopped and the compact evidence promoted. The external run accounted for 10,938,540,032 allocated bytes immediately before closure. The measured filesystem gained 6,900,797,440 available bytes during that closure interval. The run manifest and symlink-unlink log enumerate exact removals. The underlying VirtualBox media were preserved.
 
 The before/after VirtualBox snapshot names, UUIDs, VM power states and attached medium UUIDs matched. W10Val was running during the incident checks and the three historical QA VMs were powered off. SSH returned `w10val\archrescue`. MSVC 19.44.35229, Rust 1.99.1, SDK 10.0.26100.0, ADK DISM 10.0.26100.9457 and the amd64 WinPE image and media scripts remained available. DISM reported no mounted images after the cleanup.
 
 ## Guardrails
 
-The [workspace storage policy](../WORKSPACE-STORAGE.md) documents the configurable external scratch root, ownership manifests, capacity checks, one active heavy run per scratch root, cleanup and retention. Linux QA scripts check disk capacity, and Rust tests use an external Cargo cache by default. The WinPE build now checks free space, records its dedicated staging and Cargo paths, and cleans successful staging after artifact promotion and WIM-state checks. Its PowerShell script passed native parsing. An end-to-end build of the new guardrails remains pending while W10Val is below the 15 GiB floor. Linux scratch tests exercised insufficient capacity, concurrent-run refusal, symlink rejection and idempotent cleanup.
+The [workspace storage policy](../WORKSPACE-STORAGE.md) documents the configurable external scratch root, ownership manifests, capacity checks, one active heavy run per scratch root, cleanup and retention. Linux QA scripts check disk capacity, and Rust tests use an external Cargo cache by default. The WinPE build now checks free space, records its dedicated staging and Cargo paths, and cleans successful staging after artifact promotion and WIM-state checks. Native PowerShell parsing, the actual low-space refusal and a bounded scratch inventory passed. An end-to-end build of the new guardrails remains pending while W10Val is below the 15 GiB floor. Linux scratch tests exercised insufficient capacity, concurrent-run refusal, symlink rejection and idempotent cleanup.
+
+The compact audit archive is under `artifacts/evidence/hygiene-2026-11-10`. `wave-cleanup-manifest.json` records the external run closure, and `wave-runtime-links.tsv` records links unlinked without traversal. `windows-wave-closure.log` records six individually verified removals from the later probe staging. The final toolchain/SSH probes and VM mapping checks are preserved there.
 
 ## Exact cleanup record
 
@@ -133,11 +136,11 @@ Paths below are from the verified action logs. Windows sizes are logical file by
 PROJECT WORKSPACE HYGIENE: PASS
 TEMPORARY STORAGE POLICY: PASS
 HOST DISK SPACE: PASS
-W10VAL FREE SPACE: BLOCKED — 11.9 GiB free, 15 GiB minimum
+W10VAL FREE SPACE: BLOCKED — 11.6 GiB free, 15 GiB minimum
 WINDOWS TOOLCHAIN INTEGRITY: PASS
 VIRTUAL MACHINE INTEGRITY: PASS — observed media mappings
 RECOVERY SNAPSHOT INTEGRITY: PASS — snapshot UUID and chain inventory
 EVIDENCE PRESERVATION: PASS
-PERMANENT CLEANUP AUTOMATION: PASS — host behavior and Windows parsing
+PERMANENT CLEANUP AUTOMATION: PASS — host cleanup and Windows guard smoke tests
 DEVELOPMENT RESUMPTION READINESS: PASS — host QA with the promoted ISO
 ```
