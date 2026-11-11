@@ -261,14 +261,17 @@ fn image_metadata(path: &Path, count: u32, cancel: &AtomicBool) -> Result<Vec<Im
 
 #[cfg(any(windows, test))]
 fn parse_details(text: &str, index: u32) -> Result<Image> {
+    // DISM prints its own Version before the indexed image metadata.
+    let details = text
+        .lines()
+        .filter_map(|line| line.split_once(':'))
+        .skip_while(|(key, _)| key.trim() != "Index");
     let field = |name: &str| {
-        text.lines()
-            .filter_map(|line| line.split_once(':'))
-            .find_map(|(key, value)| {
-                let value = value.trim();
-                (key.trim() == name && !value.is_empty() && value != "<undefined>")
-                    .then(|| value.to_owned())
-            })
+        details.clone().find_map(|(key, value)| {
+            let value = value.trim();
+            (key.trim() == name && !value.is_empty() && value != "<undefined>")
+                .then(|| value.to_owned())
+        })
     };
 
     if field("Index").and_then(|value| value.parse::<u32>().ok()) != Some(index) {
@@ -306,6 +309,19 @@ mod tests {
         assert_eq!(image.expanded_bytes, Some(8192));
         assert_eq!(image.version, None);
         assert!(parse_details(text, 1).is_err());
+    }
+
+    #[test]
+    fn inventory_uses_the_indexed_image_version() {
+        let text = "Deployment Image Servicing and Management tool\nVersion: 10.0.26100.1\n\nIndex : 1\nVersion : 10.0.19041\n";
+        let image = parse_details(text, 1).unwrap();
+
+        assert_eq!(image.version.as_deref(), Some("10.0.19041"));
+        let without_image_version = "Version: 10.0.26100.1\nIndex : 1\n";
+        assert_eq!(
+            parse_details(without_image_version, 1).unwrap().version,
+            None
+        );
     }
 
     #[test]
