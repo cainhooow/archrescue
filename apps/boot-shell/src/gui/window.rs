@@ -149,21 +149,24 @@ pub fn launch_console() -> Result<()> {
         .ok_or_else(|| Error::new(ErrorKind::Environment, "Find the Windows system root"))?;
     let command = PathBuf::from(system_root).join("System32/cmd.exe");
     let application: Vec<_> = command.as_os_str().encode_wide().chain(Some(0)).collect();
+    let mut arguments = wide("cmd.exe /D /K");
+    let mut title = wide("ArchRescue - Console de diagnostico");
     let startup = STARTUPINFOW {
         cb: size_of::<STARTUPINFOW>() as u32,
         dwFlags: STARTF_USESHOWWINDOW,
         wShowWindow: SW_SHOWNORMAL as u16,
+        lpTitle: title.as_mut_ptr(),
         ..Default::default()
     };
     let mut process = PROCESS_INFORMATION::default();
 
-    // SAFETY: the application path is terminated and both structures are live.
+    // SAFETY: the UTF-16 strings are terminated and both structures are live.
     // WinPE redirects the shell's output to its startup log. Disabling handle
     // inheritance lets the new console provide its own interactive stdio.
     let created = unsafe {
         CreateProcessW(
             application.as_ptr(),
-            null_mut(),
+            arguments.as_mut_ptr(),
             null(),
             null(),
             0,
@@ -180,6 +183,7 @@ pub fn launch_console() -> Result<()> {
 
     // SAFETY: successful CreateProcessW returns both handles to the caller.
     unsafe {
+        AllowSetForegroundWindow(process.dwProcessId);
         CloseHandle(process.hThread);
         CloseHandle(process.hProcess);
     }
