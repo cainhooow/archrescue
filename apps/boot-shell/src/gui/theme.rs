@@ -63,6 +63,7 @@ struct Fonts {
     emphasis: HFONT,
     mono: HFONT,
     brand: HFONT,
+    compact_brand: HFONT,
 }
 
 impl Fonts {
@@ -75,6 +76,7 @@ impl Fonts {
             emphasis: font(&faces.emphasis, scale(20), faces.emphasis_weight),
             mono: font(&faces.mono, scale(13).max(11), 400),
             brand: font(&faces.body, scale(24), 700),
+            compact_brand: font(&faces.body, scale(21), 700),
         };
 
         if [
@@ -83,6 +85,7 @@ impl Fonts {
             fonts.emphasis,
             fonts.mono,
             fonts.brand,
+            fonts.compact_brand,
         ]
         .iter()
         .any(|handle| handle.is_null())
@@ -101,6 +104,7 @@ impl Fonts {
             self.emphasis,
             self.mono,
             self.brand,
+            self.compact_brand,
         ] {
             if !handle.is_null() {
                 DeleteObject(handle);
@@ -150,6 +154,10 @@ impl Theme {
 
     pub fn brand(&self) -> HFONT {
         self.fonts.get().brand
+    }
+
+    pub fn compact_brand(&self) -> HFONT {
+        self.fonts.get().compact_brand
     }
 
     pub fn mono(&self) -> HFONT {

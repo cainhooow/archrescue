@@ -106,9 +106,9 @@ impl Cards<'_, '_> {
         self.paragraph(
             rect(
                 bounds.left + 35,
-                bounds.top + 32,
+                bounds.top + 29,
                 width - 46,
-                bounds.bottom - bounds.top - 37,
+                bounds.bottom - bounds.top - 33,
             ),
             detail,
             TEXT,
@@ -200,7 +200,14 @@ impl Cards<'_, '_> {
                 let metrics = [
                     ("Discos", inventory.disks.len()),
                     ("Volumes", inventory.volumes.len()),
-                    ("Windows offline", installations.len()),
+                    (
+                        if self.area.width < 960 {
+                            "Windows"
+                        } else {
+                            "Windows offline"
+                        },
+                        installations.len(),
+                    ),
                 ];
                 let metric_gap = px(10);
                 let metric_width = (column - 2 * metric_gap) / 3;
@@ -246,13 +253,14 @@ impl Cards<'_, '_> {
                     .any(|item| !item.efi_partitions.is_empty() && item.mounted_efi.is_empty())
                 {
                     let y = candidate_bottom + px(13);
+                    let notice_height = px(68).max(59);
                     self.notice(
-                        rect(x, y, column, px(68)),
+                        rect(x, y, column, notice_height),
                         "Partição EFI sem caminho de acesso",
                         "Consulte os achados de inicialização em Diagnosticar.",
                         (METRIC, MUTED),
                     );
-                    candidate_bottom = y + px(68);
+                    candidate_bottom = y + notice_height;
                 }
                 body = candidate_bottom.max(volume_top + volume_height) + gap;
             }

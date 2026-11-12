@@ -173,7 +173,14 @@ unsafe fn button(
     }
 
     let mut label_area = bounds;
-    label_area.left += if nav { 35 } else { 7 };
+    let compact_nav = nav && bounds.right - bounds.left < 155;
+    label_area.left += if compact_nav {
+        29
+    } else if nav {
+        35
+    } else {
+        7
+    };
     label_area.right -= 7;
     let foreground = if accent {
         ON_ACCENT
@@ -574,8 +581,12 @@ fn scene(dc: &mut Scene<'_>, area: &Layout, theme: &Theme, app: &App) {
     Icon::Brand.draw(dc, px(32), px(39), px(20), ON_ACCENT);
     text(
         dc,
-        theme.brand(),
-        rect(px(70), px(19), area.rail - px(78), px(36)),
+        if area.width < 960 {
+            theme.compact_brand()
+        } else {
+            theme.brand()
+        },
+        rect(px(69), px(19), area.rail - px(74), px(36)),
         "ArchRescue",
         TEXT,
         LINE,
@@ -622,7 +633,7 @@ fn scene(dc: &mut Scene<'_>, area: &Layout, theme: &Theme, app: &App) {
         );
     }
 
-    let context_width = px(108);
+    let context_width = px(108).max(92);
     let context_x = x + width - context_width;
     surface(
         dc,
