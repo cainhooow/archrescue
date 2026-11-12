@@ -1,9 +1,15 @@
 //! Fullscreen uses monitor bounds and preserves a separate windowed placement.
 
-use std::mem::size_of;
+use std::{mem::size_of, os::windows::ffi::OsStrExt};
 
-use windows_sys::Win32::UI::HiDpi::{
-    SetThreadDpiAwarenessContext, DPI_AWARENESS_CONTEXT, DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2,
+use windows_sys::Win32::{
+    System::Threading::{
+        CreateProcessW, CREATE_NEW_CONSOLE, PROCESS_INFORMATION, STARTF_USESHOWWINDOW, STARTUPINFOW,
+    },
+    UI::HiDpi::{
+        SetThreadDpiAwarenessContext, DPI_AWARENESS_CONTEXT,
+        DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2,
+    },
 };
 
 use super::*;
@@ -136,6 +142,49 @@ fn windowed_bounds(work: RECT) -> RECT {
         right: left + width,
         bottom: top + height,
     }
+}
+
+pub fn launch_console() -> Result<()> {
+    let system_root = std::env::var_os("SystemRoot")
+        .ok_or_else(|| Error::new(ErrorKind::Environment, "Find the Windows system root"))?;
+    let command = PathBuf::from(system_root).join("System32/cmd.exe");
+    let application: Vec<_> = command.as_os_str().encode_wide().chain(Some(0)).collect();
+    let startup = STARTUPINFOW {
+        cb: size_of::<STARTUPINFOW>() as u32,
+        dwFlags: STARTF_USESHOWWINDOW,
+        wShowWindow: SW_SHOWNORMAL as u16,
+        ..Default::default()
+    };
+    let mut process = PROCESS_INFORMATION::default();
+
+    // SAFETY: the application path is terminated and both structures are live.
+    // WinPE redirects the shell's output to its startup log. Disabling handle
+    // inheritance lets the new console provide its own interactive stdio.
+    let created = unsafe {
+        CreateProcessW(
+            application.as_ptr(),
+            null_mut(),
+            null(),
+            null(),
+            0,
+            CREATE_NEW_CONSOLE,
+            null(),
+            null(),
+            &startup,
+            &mut process,
+        )
+    };
+    if created == 0 {
+        return Err(os_error("Open recovery console"));
+    }
+
+    // SAFETY: successful CreateProcessW returns both handles to the caller.
+    unsafe {
+        CloseHandle(process.hThread);
+        CloseHandle(process.hProcess);
+    }
+
+    Ok(())
 }
 
 unsafe fn set_style(hwnd: HWND, style: u32) -> Result<()> {

@@ -12,7 +12,6 @@ mod window;
 
 use std::{
     cell::{Cell, RefCell},
-    os::windows::process::CommandExt,
     path::PathBuf,
     ptr::{null, null_mut},
     sync::{
@@ -32,7 +31,7 @@ use archrescue_evidence::{repair, Report};
 use windows_sys::Win32::{
     Foundation::*,
     Graphics::Gdi::*,
-    System::{LibraryLoader::GetModuleHandleW, Threading::CREATE_NEW_CONSOLE},
+    System::LibraryLoader::GetModuleHandleW,
     UI::{
         Controls::{
             DRAWITEMSTRUCT, EM_SETMARGINS, MEASUREITEMSTRUCT, ODT_BUTTON, ODT_COMBOBOX,
@@ -614,18 +613,13 @@ unsafe fn action(hwnd: HWND, app: &mut App, id: usize, notification: u32) {
         REPAIR => preview_repair(hwnd, app),
         EXPORT => export_report(hwnd, app),
         CONSOLE => {
-            if let Some(system) = std::env::var_os("SystemRoot") {
-                match std::process::Command::new(PathBuf::from(system).join("System32/cmd.exe"))
-                    .creation_flags(CREATE_NEW_CONSOLE)
-                    .spawn()
-                {
-                    Ok(_) => {
-                        set(hwnd, STATUS, "Console de diagnóstico aberto.");
-                        // Fullscreen otherwise obscures the new WinPE console.
-                        ShowWindow(hwnd, SW_MINIMIZE);
-                    }
-                    Err(error) => set(hwnd, STATUS, &format!("Falha ao abrir console: {error}")),
+            match window::launch_console() {
+                Ok(()) => {
+                    set(hwnd, STATUS, "Console de diagnóstico aberto.");
+                    // Fullscreen otherwise obscures the new WinPE console.
+                    ShowWindow(hwnd, SW_MINIMIZE);
                 }
+                Err(error) => set(hwnd, STATUS, &format!("Falha ao abrir console: {error}")),
             }
         }
         _ => {}
