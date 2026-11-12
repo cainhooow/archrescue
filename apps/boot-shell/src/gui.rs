@@ -363,7 +363,8 @@ unsafe fn render(hwnd: HWND, app: &App) {
         (CONSOLE, "Console de diagnóstico", "Console"),
         (CANCEL, "Cancelar operação", "Cancelar"),
     ] {
-        set(hwnd, id, if area.rail < 222 { compact } else { full });
+        let limit = if id == CONSOLE { 218 } else { 176 };
+        set(hwnd, id, if area.rail < limit { compact } else { full });
     }
 
     for id in [

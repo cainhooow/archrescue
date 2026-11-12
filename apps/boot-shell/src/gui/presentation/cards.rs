@@ -501,7 +501,11 @@ impl Cards<'_, '_> {
                 MUTED,
             );
         } else {
-            let columns = if width >= px(540) { 4 } else { 2 };
+            let columns = if width >= px(540) {
+                disk.partitions.len().clamp(1, 4)
+            } else {
+                disk.partitions.len().clamp(1, 2)
+            } as i32;
             let step = span / columns;
             for (index, partition) in disk.partitions.iter().take(columns as usize).enumerate() {
                 let (label, color) = partition_style(partition);

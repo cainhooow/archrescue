@@ -28,7 +28,7 @@ pub fn label(section: usize, compact: bool) -> &'static str {
         (DIAGNOSIS, _) => "Diagnosticar",
         (INTEGRITY_PAGE, true) => "Integridade",
         (INTEGRITY_PAGE, false) => "Integridade do Windows",
-        (BACKUP, false) => "Proteger dados",
+        (BACKUP, _) => "Proteger dados",
         (REPAIR_PAGE, _) => "Reparar",
         (VERIFY_PAGE, _) => "Verificar",
         (REPORTS, _) => "Relatar",
