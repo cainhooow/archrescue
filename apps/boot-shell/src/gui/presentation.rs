@@ -330,7 +330,7 @@ pub fn confirmation(
     let notice_top = top + px(9);
     surface(
         scene,
-        rect(x, notice_top, width, px(67)),
+        rect(x, notice_top, width, px(82)),
         METRIC,
         BORDER,
         px(9),
@@ -347,7 +347,7 @@ pub fn confirmation(
     text(
         scene,
         theme.body(),
-        rect(x + px(42), notice_top + px(37), width - px(55), px(29)),
+        rect(x + px(42), notice_top + px(37), width - px(55), px(40)),
         card.notice.1,
         MUTED,
         DT_WORDBREAK | DT_NOPREFIX,
@@ -603,10 +603,11 @@ fn scene(dc: &mut Scene<'_>, area: &Layout, theme: &Theme, app: &App) {
         LINE,
     );
     if app.technician {
-        let badge_x = x + px(26) + px(navigation::context_offset(app.section));
+        let label_end = x + px(26) + px(navigation::context_offset(app.section));
+        let badge_width = px(110);
         surface(
             dc,
-            rect(badge_x, px(16), px(92), px(23)),
+            rect(label_end, px(16), badge_width, px(23)),
             SELECTED,
             SELECTED_BORDER,
             px(5),
@@ -614,7 +615,7 @@ fn scene(dc: &mut Scene<'_>, area: &Layout, theme: &Theme, app: &App) {
         text(
             dc,
             theme.body(),
-            rect(badge_x, px(16), px(92), px(23)),
+            rect(label_end + 2, px(16), badge_width - 4, px(23)),
             "Modo técnico",
             NAV_TEXT,
             LINE | DT_CENTER,

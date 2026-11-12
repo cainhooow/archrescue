@@ -27,7 +27,7 @@ pub(super) unsafe fn show(owner: HWND, state: &WindowState, prompt: &Prompt) -> 
         words: [u16; 12],
     }
 
-    let style = WS_POPUP;
+    let style = WS_POPUP | WS_CLIPCHILDREN;
     let template = Template {
         words: [
             style as u16,
@@ -157,7 +157,7 @@ unsafe fn initialize(hwnd: HWND, dialog: &Dialog<'_>) -> Result<()> {
     let row = area.px(27);
     let path_height = path_heights(owner, theme.mono(), value_width, row, dialog.prompt);
     let header_height = area.px(112);
-    let notice_height = area.px(67);
+    let notice_height = area.px(82);
     let height = header_height + path_height.iter().sum::<i32>() + notice_height + area.px(92);
     let card = RECT {
         left: (area.width - width) / 2,

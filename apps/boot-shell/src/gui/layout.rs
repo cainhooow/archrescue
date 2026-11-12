@@ -209,6 +209,16 @@ pub unsafe fn arrange(hwnd: HWND, app: &App) {
             let form = area.backup_form(app);
             let bottom = form - area.gap();
             place(hwnd, FILES, x + 11, top + 62, left - 22, bottom - top - 72);
+            show(
+                hwnd,
+                BACKUP_SELECTION,
+                app.preview.is_none()
+                    && (app.listing_loaded || app.checkpoints.is_some())
+                    && app
+                        .checkpoints
+                        .as_ref()
+                        .map_or(!app.entries.is_empty(), |entries| !entries.is_empty()),
+            );
             place(
                 hwnd,
                 BACKUP_SELECTION,

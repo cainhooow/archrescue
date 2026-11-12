@@ -546,17 +546,27 @@ unsafe fn selected(hwnd: HWND, app: &App) -> Vec<PathBuf> {
 }
 
 unsafe fn update_backup_selection(hwnd: HWND, app: &App) {
-    let paths = selected(hwnd, app);
-    let summary = if paths.is_empty() {
-        if app.checkpoints.is_some() {
-            "Selecione um checkpoint e use Retomar.".to_owned()
-        } else {
-            "Use Ctrl ou Shift para selecionar vários itens.".to_owned()
+    let indices = selected_indices(hwnd);
+    let summary = if let Some(checkpoints) = &app.checkpoints {
+        match indices.as_slice() {
+            [] => "Selecione um checkpoint e use Retomar.".to_owned(),
+            [index] => checkpoints.get(*index).map_or_else(String::new, |entry| {
+                let path = entry.directory.display();
+                let status = entry
+                    .status
+                    .as_ref()
+                    .map_or("Planejado", |status| state_label(status.state));
+                format!("{status}\n{path}")
+            }),
+            _ => "Selecione um único checkpoint para retomar.".to_owned(),
         }
+    } else if indices.is_empty() {
+        "Use Ctrl ou Shift para selecionar vários itens.".to_owned()
     } else {
-        paths
-            .iter()
-            .map(|path| path.display().to_string())
+        indices
+            .into_iter()
+            .filter_map(|index| app.entries.get(index))
+            .map(|entry| entry.name.display().to_string())
             .collect::<Vec<_>>()
             .join("\n")
     };
@@ -1470,7 +1480,7 @@ pub fn run() -> Result<()> {
             FILES,
             "LISTBOX",
             "",
-            WS_TABSTOP | WS_BORDER | WS_VSCROLL | LBS_EXTENDEDSEL as u32 | LBS_NOTIFY as u32,
+            WS_TABSTOP | WS_VSCROLL | LBS_EXTENDEDSEL as u32 | LBS_NOTIFY as u32,
             font,
         )?;
         add(

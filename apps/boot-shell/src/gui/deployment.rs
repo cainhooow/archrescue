@@ -183,7 +183,7 @@ pub unsafe fn layout(hwnd: HWND, area: &super::layout::Layout, app: &App) {
         form_x + disk_width + 8,
         base + 46,
         106,
-        250,
+        29,
     );
     place(
         hwnd,

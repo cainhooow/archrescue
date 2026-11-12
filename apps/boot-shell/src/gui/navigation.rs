@@ -44,8 +44,8 @@ pub fn context_offset(section: usize) -> i32 {
     match section {
         DASHBOARD | DISKS | REPAIR_PAGE | VERIFY_PAGE | REPORTS => 68,
         DIAGNOSIS | BACKUP => 98,
-        deployment::DEPLOY | deployment::RESTORE => 132,
-        _ => 169,
+        deployment::DEPLOY | deployment::RESTORE => 156,
+        _ => 196,
     }
 }
 
