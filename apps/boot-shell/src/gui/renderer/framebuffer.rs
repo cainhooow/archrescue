@@ -262,4 +262,34 @@ mod tests {
             ]
         );
     }
+
+    #[test]
+    fn software_frames_reuse_gdi_storage_at_smaller_sizes() {
+        // SAFETY: this test creates and inspects its own DIBs on one thread.
+        unsafe {
+            for (width, height) in [(800, 600), (1024, 768), (1280, 720), (1920, 1080)] {
+                let mut frame = Frame::default();
+                assert!(frame.reserve(null_mut(), width, height));
+                let buffer = frame.buffer.as_ref().unwrap();
+                let mut bitmap = BITMAP::default();
+                assert_eq!(
+                    GetObjectW(
+                        buffer.bitmap,
+                        size_of::<BITMAP>() as i32,
+                        (&mut bitmap as *mut BITMAP).cast(),
+                    ),
+                    size_of::<BITMAP>() as i32,
+                );
+                assert!(bitmap.bmWidth >= width && bitmap.bmHeight >= height);
+                assert_eq!(bitmap.bmBitsPixel, 32);
+                let dib_bytes = bitmap.bmWidthBytes as usize * bitmap.bmHeight as usize;
+                let pixmap_bytes = buffer.pixels.data().len();
+                let original_bitmap = buffer.bitmap;
+                println!("{width}x{height}: DIB {dib_bytes} bytes, pixmap {pixmap_bytes} bytes");
+
+                assert!(frame.reserve(null_mut(), width - 16, height - 16));
+                assert_eq!(frame.buffer.as_ref().unwrap().bitmap, original_bitmap);
+            }
+        }
+    }
 }
