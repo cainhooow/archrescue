@@ -1069,7 +1069,10 @@ unsafe extern "system" fn procedure(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM
             PostQuitMessage(0);
             return 0;
         }
-        _ => {}
+        WM_SIZE | WM_COMMAND | WM_TIMER | WM_CLOSE => {}
+        // DefWindowProc sends WM_SIZE synchronously from WM_WINDOWPOSCHANGED.
+        // Forward default messages before taking the application borrow.
+        _ => return DefWindowProcW(hwnd, msg, wp, lp),
     }
 
     if state.confirming.get() && matches!(msg, WM_COMMAND | WM_CLOSE) {
@@ -1084,7 +1087,7 @@ unsafe extern "system" fn procedure(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM
 
     match msg {
         WM_SIZE => {
-            if !control(hwnd, STATUS).is_null() {
+            if wp != SIZE_MINIMIZED as usize && !control(hwnd, STATUS).is_null() {
                 render(hwnd, app);
             }
             0
