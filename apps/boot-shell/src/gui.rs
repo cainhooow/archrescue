@@ -619,7 +619,11 @@ unsafe fn action(hwnd: HWND, app: &mut App, id: usize, notification: u32) {
                     .creation_flags(CREATE_NEW_CONSOLE)
                     .spawn()
                 {
-                    Ok(_) => set(hwnd, STATUS, "Console de diagnóstico aberto."),
+                    Ok(_) => {
+                        set(hwnd, STATUS, "Console de diagnóstico aberto.");
+                        // Fullscreen otherwise obscures the new WinPE console.
+                        ShowWindow(hwnd, SW_MINIMIZE);
+                    }
                     Err(error) => set(hwnd, STATUS, &format!("Falha ao abrir console: {error}")),
                 }
             }
