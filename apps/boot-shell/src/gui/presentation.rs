@@ -6,14 +6,11 @@ use super::{layout::Layout, theme::*, *};
 
 mod cards;
 
-unsafe fn fill(dc: HDC, rect: RECT, color: COLORREF) {
-    SetDCBrushColor(dc, color);
-    FillRect(dc, &rect, GetStockObject(DC_BRUSH));
-}
+use super::renderer::{Frame, Scene};
+use tiny_skia::PathBuilder;
 
-unsafe fn outline(dc: HDC, rect: RECT, color: COLORREF) {
-    SetDCBrushColor(dc, color);
-    FrameRect(dc, &rect, GetStockObject(DC_BRUSH));
+fn fill(scene: &mut Scene<'_>, bounds: RECT, color: COLORREF) {
+    scene.fill(bounds, color);
 }
 
 fn rect(x: i32, y: i32, width: i32, height: i32) -> RECT {
@@ -25,38 +22,61 @@ fn rect(x: i32, y: i32, width: i32, height: i32) -> RECT {
     }
 }
 
-unsafe fn text(dc: HDC, font: HFONT, mut bounds: RECT, label: &str, color: COLORREF, flags: u32) {
-    let label = wide(label);
-    let previous = SelectObject(dc, font);
-    SetBkMode(dc, TRANSPARENT as i32);
-    SetTextColor(dc, color);
-    DrawTextW(dc, label.as_ptr(), -1, &mut bounds, flags);
-    SelectObject(dc, previous);
+fn text(
+    scene: &mut Scene<'_>,
+    font: HFONT,
+    bounds: RECT,
+    label: &str,
+    color: COLORREF,
+    flags: u32,
+) {
+    scene.text(font, bounds, label, color, flags);
 }
 
 const LINE: u32 = DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS | DT_NOPREFIX;
 
-unsafe fn surface(dc: HDC, bounds: RECT, background: COLORREF, border: COLORREF, radius: i32) {
-    let previous_pen = SelectObject(dc, GetStockObject(DC_PEN));
-    let previous_brush = SelectObject(dc, GetStockObject(DC_BRUSH));
-    SetDCPenColor(dc, border);
-    SetDCBrushColor(dc, background);
-    RoundRect(
-        dc,
-        bounds.left,
-        bounds.top,
-        bounds.right,
-        bounds.bottom,
-        radius,
-        radius,
-    );
-    SelectObject(dc, previous_brush);
-    SelectObject(dc, previous_pen);
+fn surface(
+    scene: &mut Scene<'_>,
+    bounds: RECT,
+    background: COLORREF,
+    border: COLORREF,
+    radius: i32,
+) {
+    scene.surface(bounds, background, border, radius);
 }
 
-pub unsafe fn button(item: &DRAWITEMSTRUCT, theme: &Theme, selected_page: usize) {
+pub unsafe fn control_frame(
+    frame: &mut Frame,
+    item: &DRAWITEMSTRUCT,
+    theme: &Theme,
+    selected_page: usize,
+    hovered: bool,
+) {
+    let area = item.rcItem;
+    let width = area.right - area.left;
+    let height = area.bottom - area.top;
+
+    if !frame.reserve(item.hDC, width, height) {
+        return;
+    }
+
+    let bounds = rect(0, 0, width, height);
+    frame.draw(width, height, |scene| match item.CtlType {
+        ODT_BUTTON => button(scene, item, bounds, theme, selected_page, hovered),
+        _ => list_item(scene, item, bounds, theme),
+    });
+    frame.present(item.hDC, area, 0, 0);
+}
+
+unsafe fn button(
+    scene: &mut Scene<'_>,
+    item: &DRAWITEMSTRUCT,
+    bounds: RECT,
+    theme: &Theme,
+    selected_page: usize,
+    hovered: bool,
+) {
     let id = item.CtlID as usize;
-    let bounds = item.rcItem;
     let page = id
         .checked_sub(100)
         .filter(|page| navigation::ORDER.contains(page));
@@ -69,28 +89,56 @@ pub unsafe fn button(item: &DRAWITEMSTRUCT, theme: &Theme, selected_page: usize)
     ) || deployment::primary(id);
     let disabled = item.itemState & ODS_DISABLED != 0;
     let pressed = item.itemState & ODS_SELECTED != 0;
-    let accent = primary && !disabled;
-    let backdrop = if nav { SIDEBAR } else { PANEL };
+    let accent = (primary || id == NEXT && selected_page == DASHBOARD) && !disabled;
+    let focused = item.itemState & ODS_FOCUS != 0;
+    let backdrop = if nav {
+        SIDEBAR
+    } else if matches!(
+        id,
+        OPEN | UP | DISK_DETAILS | VERIFY | pages::SCAN | pages::PROTECT | pages::REPORT_ACTION
+    ) {
+        BACKGROUND
+    } else {
+        PANEL
+    };
     let color = if disabled {
         backdrop
-    } else if selected || pressed && !accent {
+    } else if pressed && !accent {
+        ACCENT_PRESSED_SURFACE
+    } else if selected && hovered {
+        HOVER
+    } else if selected {
         SELECTED
+    } else if accent && pressed {
+        ACCENT_PRESSED
+    } else if accent && hovered {
+        ACCENT_HOVER
     } else if accent {
         ACCENT
+    } else if hovered {
+        HOVER
     } else if nav {
         SIDEBAR
     } else {
         ELEVATED
     };
 
-    fill(item.hDC, bounds, backdrop);
-    if !nav || selected || pressed {
-        let border = if accent { ACCENT } else { BORDER };
-        surface(item.hDC, bounds, color, border, 8);
+    scene.clear(backdrop);
+    if !nav || selected || pressed || hovered || focused {
+        let border = if focused || accent { ACCENT } else { BORDER };
+        let end = if accent && !pressed {
+            ACCENT_END
+        } else {
+            color
+        };
+        scene.gradient(bounds, color, end, border, 8);
+    }
+    if focused && accent {
+        scene.focus_outline(rect(3, 3, bounds.right - 6, bounds.bottom - 6), ON_ACCENT);
     }
     if selected {
         fill(
-            item.hDC,
+            scene,
             rect(
                 bounds.left,
                 bounds.top + 7,
@@ -102,7 +150,7 @@ pub unsafe fn button(item: &DRAWITEMSTRUCT, theme: &Theme, selected_page: usize)
     }
 
     let mut label_area = bounds;
-    label_area.left += if nav { 34 } else { 7 };
+    label_area.left += if nav { 32 } else { 7 };
     label_area.right -= 7;
     if nav {
         let symbol = page.unwrap_or(match id {
@@ -112,7 +160,7 @@ pub unsafe fn button(item: &DRAWITEMSTRUCT, theme: &Theme, selected_page: usize)
             _ => VERIFY_PAGE,
         });
         icon(
-            item.hDC,
+            scene,
             symbol,
             bounds.left + 10,
             (bounds.top + bounds.bottom - 14) / 2,
@@ -127,29 +175,16 @@ pub unsafe fn button(item: &DRAWITEMSTRUCT, theme: &Theme, selected_page: usize)
         TEXT
     };
     text(
-        item.hDC,
-        if accent { theme.emphasis } else { theme.body },
+        scene,
+        theme.body(),
         label_area,
         &get(GetParent(item.hwndItem), id).replace('&', ""),
         foreground,
         LINE | if nav { DT_LEFT } else { DT_CENTER },
     );
-
-    if item.itemState & ODS_FOCUS != 0 {
-        outline(
-            item.hDC,
-            rect(
-                bounds.left + 2,
-                bounds.top + 2,
-                bounds.right - bounds.left - 4,
-                bounds.bottom - bounds.top - 4,
-            ),
-            if accent { ON_ACCENT } else { ACCENT },
-        );
-    }
 }
 
-pub unsafe fn list_item(item: &DRAWITEMSTRUCT, theme: &Theme) {
+unsafe fn list_item(scene: &mut Scene<'_>, item: &DRAWITEMSTRUCT, bounds: RECT, theme: &Theme) {
     let combo = item.CtlType == ODT_COMBOBOX;
     let selected = item.itemState & ODS_SELECTED != 0;
     let background = if selected {
@@ -161,7 +196,10 @@ pub unsafe fn list_item(item: &DRAWITEMSTRUCT, theme: &Theme) {
     } else {
         PANEL
     };
-    fill(item.hDC, item.rcItem, background);
+    scene.clear(if combo { INPUT } else { PANEL });
+    if selected || !combo && item.itemID % 2 == 1 {
+        scene.surface(bounds, background, background, 5);
+    }
 
     let label = if item.itemID == u32::MAX {
         match item.CtlID as usize {
@@ -197,20 +235,20 @@ pub unsafe fn list_item(item: &DRAWITEMSTRUCT, theme: &Theme) {
     } else {
         TEXT
     };
-    let mut area = item.rcItem;
+    let mut area = bounds;
     area.left += 8;
     area.right -= 8;
     if item.CtlID as usize == FILES {
-        file_row(item.hDC, theme, area, &label);
+        file_row(scene, theme, area, &label);
     } else {
-        text(item.hDC, theme.body, area, &label, color, LINE);
+        text(scene, theme.body(), area, &label, color, LINE);
     }
     if item.itemState & ODS_FOCUS != 0 {
-        outline(item.hDC, item.rcItem, ACCENT);
+        scene.focus_outline(bounds, ACCENT);
     }
 }
 
-unsafe fn file_row(dc: HDC, theme: &Theme, area: RECT, label: &str) {
+fn file_row(dc: &mut Scene<'_>, theme: &Theme, area: RECT, label: &str) {
     let width = area.right - area.left;
     let mut fields = label.splitn(3, '\t');
     let name = fields.next().unwrap_or_default();
@@ -236,7 +274,7 @@ unsafe fn file_row(dc: HDC, theme: &Theme, area: RECT, label: &str) {
 
     text(
         dc,
-        theme.body,
+        theme.body(),
         rect(area.left, area.top, name_width - 8, area.bottom - area.top),
         name,
         TEXT,
@@ -244,7 +282,7 @@ unsafe fn file_row(dc: HDC, theme: &Theme, area: RECT, label: &str) {
     );
     text(
         dc,
-        theme.body,
+        theme.body(),
         rect(
             area.left + name_width,
             area.top,
@@ -258,7 +296,7 @@ unsafe fn file_row(dc: HDC, theme: &Theme, area: RECT, label: &str) {
     if let Some(size) = size {
         text(
             dc,
-            theme.body,
+            theme.body(),
             rect(
                 area.left + name_width + kind_width,
                 area.top,
@@ -272,8 +310,8 @@ unsafe fn file_row(dc: HDC, theme: &Theme, area: RECT, label: &str) {
     }
 }
 
-unsafe fn icon(dc: HDC, section: usize, x: i32, y: i32, color: COLORREF) {
-    // Stroke coordinates use a 14px grid. The stock pen remains owned by GDI.
+fn icon(scene: &mut Scene<'_>, section: usize, x: i32, y: i32, color: COLORREF) {
+    // Stroke coordinates use a 14-pixel grid.
     let paths: &[&[(i32, i32)]] = match section {
         deployment::DEPLOY => &[
             &[(0, 0), (6, 0), (6, 6), (0, 6), (0, 0)],
@@ -321,78 +359,74 @@ unsafe fn icon(dc: HDC, section: usize, x: i32, y: i32, color: COLORREF) {
         ],
     };
 
-    let previous = SelectObject(dc, GetStockObject(DC_PEN));
-    SetDCPenColor(dc, color);
+    let mut builder = PathBuilder::new();
     for path in paths {
-        let points = path
-            .iter()
-            .map(|&(px, py)| POINT {
-                x: x + px,
-                y: y + py,
-            })
-            .collect::<Vec<_>>();
-        Polyline(dc, points.as_ptr(), points.len() as i32);
-    }
-    SelectObject(dc, previous);
-}
+        let [(start_x, start_y), rest @ ..] = *path else {
+            continue;
+        };
 
-pub unsafe fn paint(hwnd: HWND, theme: &Theme, app: Option<&App>) {
-    let mut paint = PAINTSTRUCT::default();
-    let dc = BeginPaint(hwnd, &mut paint);
-    if !dc.is_null() {
-        let area = Layout::read(hwnd);
-        let width = paint.rcPaint.right - paint.rcPaint.left;
-        let height = paint.rcPaint.bottom - paint.rcPaint.top;
-        if width > 0 && height > 0 {
-            buffered(dc, &area, paint.rcPaint, theme, app);
+        builder.move_to((x + start_x) as f32 + 0.5, (y + start_y) as f32 + 0.5);
+        for &(px, py) in rest {
+            builder.line_to((x + px) as f32 + 0.5, (y + py) as f32 + 0.5);
         }
     }
+    if let Some(path) = builder.finish() {
+        scene.stroke(&path, color, 1.4);
+    }
+}
+
+pub unsafe fn paint(hwnd: HWND, state: &WindowState) {
+    let mut paint = PAINTSTRUCT::default();
+    let dc = BeginPaint(hwnd, &mut paint);
+    let dirty = paint.rcPaint;
+
+    if !dc.is_null() && dirty.right > dirty.left && dirty.bottom > dirty.top {
+        let area = Layout::read(hwnd);
+        let mut frame = state.frame.borrow_mut();
+        let redraw = state.scene_dirty.get();
+
+        if frame.reserve(dc, area.width, area.height) {
+            if redraw {
+                if let Ok(app) = state.app.try_borrow() {
+                    frame.draw(area.width, area.height, |canvas| {
+                        scene(canvas, &area, &state.theme, &app);
+                    });
+                    state.scene_dirty.set(false);
+                }
+            }
+
+            if !state.scene_dirty.get() && frame.present(dc, dirty, dirty.left, dirty.top) {
+                EndPaint(hwnd, &paint);
+                return;
+            }
+        }
+
+        // Keep the window recoverable if the renderer runs out of resources.
+        SetDCBrushColor(dc, BACKGROUND);
+        FillRect(dc, &dirty, GetStockObject(DC_BRUSH));
+        if state.app.try_borrow().is_ok() && !state.render_failed.replace(true) {
+            PostMessageW(hwnd, RENDER_FAILURE, 0, 0);
+        }
+    }
+
     EndPaint(hwnd, &paint);
 }
 
-unsafe fn buffered(dc: HDC, area: &Layout, dirty: RECT, theme: &Theme, app: Option<&App>) {
-    // This DC and bitmap are local to WM_PAINT. The original bitmap is restored before deletion.
-    let buffer = CreateCompatibleDC(dc);
-    if buffer.is_null() {
-        scene(dc, area, theme, app);
-        return;
-    }
-    let width = dirty.right - dirty.left;
-    let height = dirty.bottom - dirty.top;
-    let bitmap = CreateCompatibleBitmap(dc, width, height);
-    if bitmap.is_null() {
-        DeleteDC(buffer);
-        scene(dc, area, theme, app);
-        return;
-    }
-
-    let previous = SelectObject(buffer, bitmap);
-    SetViewportOrgEx(buffer, -dirty.left, -dirty.top, null_mut());
-    scene(buffer, area, theme, app);
-    BitBlt(
-        dc, dirty.left, dirty.top, width, height, buffer, dirty.left, dirty.top, SRCCOPY,
-    );
-
-    SelectObject(buffer, previous);
-    DeleteObject(bitmap);
-    DeleteDC(buffer);
-}
-
-unsafe fn scene(dc: HDC, area: &Layout, theme: &Theme, app: Option<&App>) {
-    fill(dc, rect(0, 0, area.width, area.height), BACKGROUND);
+fn scene(dc: &mut Scene<'_>, area: &Layout, theme: &Theme, app: &App) {
+    dc.clear(BACKGROUND);
     fill(dc, rect(0, 0, area.rail, area.height), SIDEBAR);
     fill(dc, rect(area.rail - 1, 0, 1, area.height), BORDER);
-    fill(dc, rect(14, 309, area.rail - 28, 1), BORDER);
+    fill(dc, rect(14, 312, area.rail - 28, 1), BORDER);
     fill(dc, rect(14, area.height - 132, area.rail - 28, 1), BORDER);
 
-    surface(dc, rect(15, 20, 30, 30), ACCENT, ACCENT, 9);
+    dc.gradient(rect(15, 20, 30, 30), ACCENT, ACCENT_END, ACCENT, 9);
     icon(dc, INTEGRITY_PAGE, 23, 28, ON_ACCENT);
     text(
         dc,
         if area.rail < 200 {
-            theme.body
+            theme.body()
         } else {
-            theme.emphasis
+            theme.emphasis()
         },
         rect(53, 16, area.rail - 57, 25),
         "ArchRescue",
@@ -401,62 +435,67 @@ unsafe fn scene(dc: HDC, area: &Layout, theme: &Theme, app: Option<&App>) {
     );
     text(
         dc,
-        theme.body,
+        theme.body(),
         rect(54, 42, area.rail - 59, 18),
         "ArchGTi",
         MUTED,
         LINE,
     );
 
-    if let Some(app) = app {
-        let x = area.left();
-        let width = area.body_width();
-        let label = navigation::label(app.section, false);
-        let (title, subtitle) = navigation::heading(app);
-        icon(dc, app.section, x, 16, MUTED);
-        text(
-            dc,
-            theme.body,
-            rect(x + 23, 9, width - 170, 28),
-            label,
-            TEXT,
-            LINE,
-        );
-        let source = app
-            .roots
-            .get(app.root_index)
-            .map(|path| path.display().to_string());
-        let context = if app.technician {
-            "Modo técnico".into()
-        } else {
-            source.map_or_else(|| "Windows x64".into(), |path| format!("Origem  ·  {path}"))
-        };
-        surface(dc, rect(x + width - 145, 10, 145, 25), PANEL, BORDER, 7);
-        text(
-            dc,
-            theme.body,
-            rect(x + width - 136, 10, 128, 25),
-            &context,
-            MUTED,
-            LINE | DT_CENTER,
-        );
-        fill(dc, rect(area.rail, 44, area.width - area.rail, 1), BORDER);
-        text(dc, theme.heading, rect(x, 56, width, 38), title, TEXT, LINE);
-        text(
-            dc,
-            theme.body,
-            rect(x, 96, width, 24),
-            subtitle,
-            MUTED,
-            LINE,
-        );
+    let x = area.left();
+    let width = area.body_width();
+    let label = navigation::label(app.section, false);
+    let (title, subtitle) = navigation::heading(app);
+    icon(dc, app.section, x, 16, MUTED);
+    text(
+        dc,
+        theme.body(),
+        rect(x + 23, 9, width - 170, 28),
+        label,
+        TEXT,
+        LINE,
+    );
+    let source = app
+        .roots
+        .get(app.root_index)
+        .map(|path| path.display().to_string());
+    let context = if app.technician {
+        "Modo técnico".into()
+    } else {
+        source.map_or_else(|| "Windows x64".into(), |path| format!("Origem  ·  {path}"))
+    };
+    surface(dc, rect(x + width - 145, 10, 145, 25), PANEL, BORDER, 7);
+    text(
+        dc,
+        theme.body(),
+        rect(x + width - 136, 10, 128, 25),
+        &context,
+        MUTED,
+        LINE | DT_CENTER,
+    );
+    fill(dc, rect(area.rail, 44, area.width - area.rail, 1), BORDER);
+    text(
+        dc,
+        theme.heading(),
+        rect(x, 56, width, 38),
+        title,
+        TEXT,
+        LINE,
+    );
+    text(
+        dc,
+        theme.body(),
+        rect(x, 96, width, 24),
+        subtitle,
+        MUTED,
+        LINE,
+    );
 
-        cards::render(dc, area, theme, app);
-        footer(dc, area, app);
-    }
+    cards::render(dc, area, theme, app);
+    footer(dc, area, app);
 }
 
-unsafe fn footer(dc: HDC, area: &Layout, app: &App) {
+fn footer(dc: &mut Scene<'_>, area: &Layout, app: &App) {
     let x = area.left();
     let width = area.body_width();
     let top = area.footer();
@@ -498,8 +537,8 @@ unsafe fn footer(dc: HDC, area: &Layout, app: &App) {
     }
 }
 
-unsafe fn progress_bar(
-    dc: HDC,
+fn progress_bar(
+    dc: &mut Scene<'_>,
     x: i32,
     y: i32,
     width: i32,
@@ -507,9 +546,9 @@ unsafe fn progress_bar(
     total: u64,
     color: COLORREF,
 ) {
-    fill(dc, rect(x, y, width, 4), BORDER);
+    surface(dc, rect(x, y, width, 5), ELEVATED, BORDER, 2);
     if total > 0 {
         let filled = ((value as u128 * width as u128) / total as u128).min(width as u128) as i32;
-        fill(dc, rect(x, y, filled, 4), color);
+        dc.gradient(rect(x, y, filled, 5), color, ACCENT_END, color, 2);
     }
 }

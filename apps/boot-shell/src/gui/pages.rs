@@ -73,8 +73,8 @@ pub unsafe fn layout(hwnd: HWND, area: &layout::Layout, section: usize) {
     place(hwnd, PROTECT, x, area.actions(), 142, 32);
     place(hwnd, REPORT_ACTION, x + 152, area.actions(), 122, 32);
 
-    if width >= 880 {
-        let list_width = width * 43 / 100;
+    if area.split_details() {
+        let list_width = (width - 12) * 42 / 100;
         place(hwnd, PAGE_HINT, x + 12, top + 8, list_width - 24, 23);
         place(
             hwnd,
@@ -87,10 +87,10 @@ pub unsafe fn layout(hwnd: HWND, area: &layout::Layout, section: usize) {
         place(
             hwnd,
             CONTENT,
-            x + list_width + 12,
+            x + list_width + 24,
             top + 38,
-            width - list_width - 22,
-            bottom - top - 46,
+            width - list_width - 36,
+            bottom - top - 48,
         );
     } else {
         place(hwnd, PAGE_HINT, x + 12, top + 8, width - 24, 23);

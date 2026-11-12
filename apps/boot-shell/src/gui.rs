@@ -6,10 +6,13 @@ mod layout;
 mod navigation;
 mod pages;
 mod presentation;
+mod renderer;
 mod theme;
+mod window;
 
 use std::{
     cell::{Cell, RefCell},
+    os::windows::process::CommandExt,
     path::PathBuf,
     ptr::{null, null_mut},
     sync::{
@@ -29,12 +32,17 @@ use archrescue_evidence::{repair, Report};
 use windows_sys::Win32::{
     Foundation::*,
     Graphics::Gdi::*,
-    System::LibraryLoader::GetModuleHandleW,
+    System::{LibraryLoader::GetModuleHandleW, Threading::CREATE_NEW_CONSOLE},
     UI::{
         Controls::{
-            DRAWITEMSTRUCT, EM_SETMARGINS, MEASUREITEMSTRUCT, ODT_BUTTON, ODT_COMBOBOX, ODT_LISTBOX,
+            DRAWITEMSTRUCT, EM_SETMARGINS, MEASUREITEMSTRUCT, ODT_BUTTON, ODT_COMBOBOX,
+            ODT_LISTBOX, WM_MOUSELEAVE,
         },
-        Input::KeyboardAndMouse::{EnableWindow, GetFocus, SetFocus, VK_RETURN},
+        HiDpi::GetDpiForWindow,
+        Input::KeyboardAndMouse::{
+            EnableWindow, GetFocus, SetFocus, TrackMouseEvent, TME_LEAVE, TRACKMOUSEEVENT, VK_F11,
+            VK_RETURN,
+        },
         WindowsAndMessaging::*,
     },
 };
@@ -67,6 +75,16 @@ const SOURCE_LABEL: usize = 222;
 const DESTINATION_LABEL: usize = 223;
 const ESP_LABEL: usize = 224;
 const REPAIR_UNAVAILABLE: usize = 225;
+
+const RENDER_FAILURE: u32 = WM_APP + 1;
+const BUTTON_CLASS: [u16; 6] = [
+    b'B' as u16,
+    b'u' as u16,
+    b't' as u16,
+    b't' as u16,
+    b'o' as u16,
+    b'n' as u16,
+];
 
 const DASHBOARD: usize = 0;
 const DIAGNOSIS: usize = 1;
@@ -142,8 +160,24 @@ struct App {
 struct WindowState {
     app: RefCell<App>,
     theme: theme::Theme,
+    frame: RefCell<renderer::Frame>,
+    control_frame: RefCell<renderer::Frame>,
+    scene_dirty: Cell<bool>,
+    render_failed: Cell<bool>,
+    mode: window::Mode,
+    hovered: Cell<HWND>,
     selected_page: Cell<usize>,
     confirming: Cell<bool>,
+}
+
+unsafe fn invalidate_scene(hwnd: HWND) {
+    // The HWND belongs to this thread and WindowState outlives it.
+    let state = GetWindowLongPtrW(hwnd, GWLP_USERDATA) as *const WindowState;
+    if let Some(state) = state.as_ref() {
+        state.scene_dirty.set(true);
+    }
+
+    InvalidateRect(hwnd, null(), 0);
 }
 
 unsafe fn control(hwnd: HWND, id: usize) -> HWND {
@@ -207,6 +241,42 @@ unsafe fn add(
     }
 
     Ok(())
+}
+
+unsafe fn is_button(hwnd: HWND) -> bool {
+    let mut class = [0; 16];
+    let length = GetClassNameW(hwnd, class.as_mut_ptr(), class.len() as i32);
+
+    length == BUTTON_CLASS.len() as i32 && class[..BUTTON_CLASS.len()] == BUTTON_CLASS
+}
+
+unsafe fn track_hover(hwnd: HWND, state: &WindowState, message: &MSG) {
+    let hovered = state.hovered.get();
+    if message.message == WM_MOUSELEAVE && message.hwnd == hovered {
+        state.hovered.set(null_mut());
+        InvalidateRect(hovered, null(), 0);
+        return;
+    }
+    if message.message != WM_MOUSEMOVE || message.hwnd == hovered {
+        return;
+    }
+    if GetParent(message.hwnd) != hwnd || !is_button(message.hwnd) {
+        return;
+    }
+
+    let mut tracking = TRACKMOUSEEVENT {
+        cbSize: std::mem::size_of::<TRACKMOUSEEVENT>() as u32,
+        dwFlags: TME_LEAVE,
+        hwndTrack: message.hwnd,
+        dwHoverTime: 0,
+    };
+    if TrackMouseEvent(&mut tracking) != 0 {
+        state.hovered.set(message.hwnd);
+        if !hovered.is_null() {
+            InvalidateRect(hovered, null(), 0);
+        }
+        InvalidateRect(message.hwnd, null(), 0);
+    }
 }
 
 unsafe fn place(hwnd: HWND, id: usize, x: i32, y: i32, width: i32, height: i32) {
@@ -332,7 +402,7 @@ unsafe fn render(hwnd: HWND, app: &App) {
     );
 
     layout::arrange(hwnd, app);
-    InvalidateRect(hwnd, null(), 0);
+    invalidate_scene(hwnd);
 
     let structured = pages::render_page(hwnd, app);
     if deployment::render(hwnd, app) || structured {
@@ -546,6 +616,7 @@ unsafe fn action(hwnd: HWND, app: &mut App, id: usize, notification: u32) {
         CONSOLE => {
             if let Some(system) = std::env::var_os("SystemRoot") {
                 match std::process::Command::new(PathBuf::from(system).join("System32/cmd.exe"))
+                    .creation_flags(CREATE_NEW_CONSOLE)
                     .spawn()
                 {
                     Ok(_) => set(hwnd, STATUS, "Console de diagnóstico aberto."),
@@ -772,13 +843,13 @@ Gravados {}/{} bytes · Verificados {} bytes · {} arquivos · {} falhas",
                 );
                 set(hwnd, STATUS, &message);
                 app.progress = Some(progress);
-                InvalidateRect(hwnd, null(), 0);
+                invalidate_scene(hwnd);
                 continue;
             }
             Event::Deployment(deployment::Update::Progress(read, total)) => {
                 app.media_progress = Some((read, total));
                 deployment::update(hwnd, app, deployment::Update::Progress(read, total));
-                InvalidateRect(hwnd, null(), 0);
+                invalidate_scene(hwnd);
                 continue;
             }
             Event::Deployment(update) => deployment::update(hwnd, app, update),
@@ -1035,17 +1106,23 @@ unsafe extern "system" fn procedure(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM
     // application state is borrowed. They only need the window and must still run.
     match msg {
         WM_PAINT => {
-            let app = state.app.try_borrow().ok();
-            presentation::paint(hwnd, &state.theme, app.as_deref());
+            presentation::paint(hwnd, state);
             return 0;
         }
         WM_DRAWITEM if lp != 0 => {
             // The notification supplies a live DRAWITEMSTRUCT and child paint DC.
             let item = &*(lp as *const DRAWITEMSTRUCT);
-            match item.CtlType {
-                ODT_BUTTON => presentation::button(item, &state.theme, state.selected_page.get()),
-                ODT_LISTBOX | ODT_COMBOBOX => presentation::list_item(item, &state.theme),
-                _ => return DefWindowProcW(hwnd, msg, wp, lp),
+            if !matches!(item.CtlType, ODT_BUTTON | ODT_LISTBOX | ODT_COMBOBOX) {
+                return DefWindowProcW(hwnd, msg, wp, lp);
+            }
+            if let Ok(mut frame) = state.control_frame.try_borrow_mut() {
+                presentation::control_frame(
+                    &mut frame,
+                    item,
+                    &state.theme,
+                    state.selected_page.get(),
+                    state.hovered.get() == item.hwndItem,
+                );
             }
             return 1;
         }
@@ -1058,10 +1135,32 @@ unsafe extern "system" fn procedure(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM
         WM_ERASEBKGND => return 1,
         WM_GETMINMAXINFO => {
             let info = &mut *(lp as *mut MINMAXINFO);
-            info.ptMinTrackSize = POINT {
-                x: 800,
-                y: 600,
-            };
+            if !state.mode.is_fullscreen() {
+                if let Ok(display) = window::monitor(hwnd) {
+                    let work = display.rcWork;
+                    info.ptMinTrackSize = POINT {
+                        x: (work.right - work.left).min(800),
+                        y: (work.bottom - work.top).min(565),
+                    };
+                }
+            }
+            return 0;
+        }
+        WM_DISPLAYCHANGE | WM_DPICHANGED => {
+            // The suggested rectangle is valid for the duration of WM_DPICHANGED.
+            let suggested = (msg == WM_DPICHANGED && lp != 0).then(|| *(lp as *const RECT));
+            if let Err(error) = state.mode.reflow(hwnd, suggested) {
+                eprintln!("{error}");
+            }
+            if let Err(error) = state.theme.rescale(hwnd, GetDpiForWindow(hwnd)) {
+                eprintln!("{error}");
+            }
+            invalidate_scene(hwnd);
+            return 0;
+        }
+        RENDER_FAILURE => {
+            eprintln!("Falha ao apresentar a interface. Retorne ao console de recuperação.");
+            PostMessageW(hwnd, WM_CLOSE, 0, 0);
             return 0;
         }
         WM_DESTROY => {
@@ -1106,12 +1205,14 @@ unsafe extern "system" fn procedure(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM
             if let Some(confirmation) = confirmation {
                 confirmation.ask(hwnd, state);
             }
-            InvalidateRect(hwnd, null(), 0);
             0
         }
         WM_TIMER => {
             events(hwnd, app);
             state.selected_page.set(app.section);
+            if state.render_failed.get() && !app.busy {
+                PostMessageW(hwnd, WM_CLOSE, 0, 0);
+            }
             0
         }
         WM_CLOSE => {
@@ -1146,9 +1247,10 @@ impl Drop for OwnedWindow {
 
 pub fn run() -> Result<()> {
     unsafe {
+        let _dpi_context = window::DpiContext::enter();
+        let display = window::monitor(GetForegroundWindow())?.rcMonitor;
         let (tx, rx) = mpsc::channel();
         let theme = theme::Theme::new()?;
-        let font = theme.body;
         let app = Box::new(WindowState {
             app: RefCell::new(App {
                 deployment: deployment::Deployment::default(),
@@ -1178,6 +1280,12 @@ pub fn run() -> Result<()> {
                 rx,
             }),
             theme,
+            frame: RefCell::default(),
+            control_frame: RefCell::default(),
+            scene_dirty: Cell::new(true),
+            render_failed: Cell::new(false),
+            mode: window::Mode::fullscreen(),
+            hovered: Cell::new(null_mut()),
             selected_page: Cell::new(DASHBOARD),
             confirming: Cell::new(false),
         });
@@ -1202,11 +1310,11 @@ pub fn run() -> Result<()> {
             WS_EX_CONTROLPARENT,
             class.as_ptr(),
             wide(&title).as_ptr(),
-            WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN,
-            CW_USEDEFAULT,
-            CW_USEDEFAULT,
-            GetSystemMetrics(SM_CXSCREEN).min(1280),
-            GetSystemMetrics(SM_CYSCREEN).min(820),
+            window::FULLSCREEN_STYLE,
+            display.left,
+            display.top,
+            display.right - display.left,
+            display.bottom - display.top,
             null_mut(),
             null_mut(),
             instance,
@@ -1218,6 +1326,25 @@ pub fn run() -> Result<()> {
         }
 
         let window = OwnedWindow(hwnd);
+        app.theme.rescale(hwnd, GetDpiForWindow(hwnd))?;
+        let font = app.theme.body();
+        let screen = GetDC(hwnd);
+        let area = layout::Layout::read(hwnd);
+        let reserved = !screen.is_null()
+            && app
+                .frame
+                .borrow_mut()
+                .reserve(screen, area.width, area.height);
+        if !screen.is_null() {
+            ReleaseDC(hwnd, screen);
+        }
+        if !reserved {
+            return Err(Error::new(
+                ErrorKind::Environment,
+                "Create software framebuffer",
+            ));
+        }
+
         for page in navigation::ORDER {
             add(
                 hwnd,
@@ -1322,11 +1449,13 @@ pub fn run() -> Result<()> {
 
         pages::controls(hwnd, font)?;
         deployment::controls(hwnd, font)?;
-        layout::arrange(hwnd, &app.app.borrow());
-        ShowWindow(hwnd, SW_SHOW);
-        UpdateWindow(hwnd);
-        SetTimer(hwnd, 1, 100, None);
+        if SetTimer(hwnd, 1, 100, None) == 0 {
+            return Err(os_error("Start recovery event timer"));
+        }
         refresh(hwnd, &mut app.app.borrow_mut());
+        ShowWindow(hwnd, SW_SHOW);
+        SetFocus(control(hwnd, 100 + DASHBOARD));
+        UpdateWindow(hwnd);
 
         let mut msg = MSG::default();
         loop {
@@ -1337,12 +1466,23 @@ pub fn run() -> Result<()> {
             if result == -1 {
                 return Err(os_error("Native message loop"));
             }
+            track_hover(hwnd, &app, &msg);
+            if msg.message == WM_KEYDOWN && msg.wParam == VK_F11 as usize {
+                if msg.lParam & (1 << 30) == 0 {
+                    if let Err(error) = app.mode.toggle(hwnd) {
+                        set(
+                            hwnd,
+                            STATUS,
+                            &format!("Falha ao alternar tela cheia: {error}"),
+                        );
+                    }
+                }
+                continue;
+            }
             if msg.message == WM_KEYDOWN && msg.wParam == VK_RETURN as usize {
                 let focused = GetFocus();
                 let id = GetDlgCtrlID(focused);
-                let mut class = [0_u16; 16];
-                let length = GetClassNameW(focused, class.as_mut_ptr(), class.len() as i32);
-                if length > 0 && String::from_utf16_lossy(&class[..length as usize]) == "Button" {
+                if is_button(focused) {
                     SendMessageW(focused, BM_CLICK, 0, 0);
                     continue;
                 }
@@ -1363,6 +1503,13 @@ pub fn run() -> Result<()> {
         }
 
         drop(window);
+
+        if app.render_failed.get() {
+            return Err(Error::new(
+                ErrorKind::Environment,
+                "Present software framebuffer",
+            ));
+        }
 
         Ok(())
     }

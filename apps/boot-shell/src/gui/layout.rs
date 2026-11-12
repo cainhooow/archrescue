@@ -16,16 +16,32 @@ impl Layout {
         Self {
             width: client.right,
             height: client.bottom,
-            rail: if client.right < 960 { 150 } else { 218 },
+            rail: if client.right < 960 {
+                150
+            } else {
+                (client.right * 16 / 100).clamp(218, 236)
+            },
         }
     }
 
     pub fn left(&self) -> i32 {
-        self.rail + 22
+        self.rail + self.gutter()
     }
 
     pub fn body_width(&self) -> i32 {
-        self.width - self.left() - 22
+        (self.width - self.left() - self.gutter()).min(1480)
+    }
+
+    fn gutter(&self) -> i32 {
+        if self.width < 960 {
+            16
+        } else {
+            24
+        }
+    }
+
+    pub fn split_details(&self) -> bool {
+        self.body_width() >= 730
     }
 
     pub fn left_column(&self) -> i32 {
@@ -79,9 +95,9 @@ pub unsafe fn arrange(hwnd: HWND, app: &App) {
             hwnd,
             100 + page,
             10,
-            76 + index as i32 * 34 + group_gap,
+            78 + index as i32 * 33 + group_gap,
             area.rail - 20,
-            31,
+            30,
         );
     }
 
@@ -99,8 +115,9 @@ pub unsafe fn arrange(hwnd: HWND, app: &App) {
         );
     }
 
-    place(hwnd, PREVIOUS, area.width - 194, area.footer() + 10, 80, 30);
-    place(hwnd, NEXT, area.width - 106, area.footer() + 10, 84, 30);
+    let body_end = x + width;
+    place(hwnd, PREVIOUS, body_end - 172, area.footer() + 10, 80, 30);
+    place(hwnd, NEXT, body_end - 84, area.footer() + 10, 84, 30);
     place(hwnd, STATUS, x + 20, area.footer() + 8, width - 204, 34);
 
     place(hwnd, SOURCE_LABEL, x, 135, 58, 22);

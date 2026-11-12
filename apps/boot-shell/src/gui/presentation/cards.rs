@@ -5,14 +5,14 @@ use archrescue_storage::Disk;
 
 use super::*;
 
-struct Cards<'a> {
-    dc: HDC,
+struct Cards<'a, 'frame> {
+    dc: &'a mut Scene<'frame>,
     area: &'a Layout,
     theme: &'a Theme,
 }
 
-pub(super) unsafe fn render(dc: HDC, area: &Layout, theme: &Theme, app: &App) {
-    let cards = Cards {
+pub(super) fn render(dc: &mut Scene<'_>, area: &Layout, theme: &Theme, app: &App) {
+    let mut cards = Cards {
         dc,
         area,
         theme,
@@ -31,13 +31,13 @@ pub(super) unsafe fn render(dc: HDC, area: &Layout, theme: &Theme, app: &App) {
         deployment::DEPLOY => cards.deployment(app, top, bottom),
         deployment::RESTORE => cards.handoff(app),
         _ if pages::structured(app.section) => {
-            if width >= 880 {
-                let split = width * 43 / 100;
+            if area.split_details() {
+                let split = (width - 12) * 42 / 100;
                 cards.panel(rect(x, top, split, bottom - top));
-                cards.panel(rect(x + split + 4, top, width - split - 4, bottom - top));
+                cards.panel(rect(x + split + 12, top, width - split - 12, bottom - top));
                 cards.heading(
-                    rect(x + split + 15, top + 8, width - split - 28, 24),
-                    "Detalhes",
+                    rect(x + split + 24, top + 8, width - split - 36, 24),
+                    "Evidências e detalhes",
                 );
             } else {
                 cards.panel(rect(x, top, width, bottom - top));
@@ -47,23 +47,23 @@ pub(super) unsafe fn render(dc: HDC, area: &Layout, theme: &Theme, app: &App) {
     }
 }
 
-impl Cards<'_> {
-    unsafe fn panel(&self, bounds: RECT) {
+impl Cards<'_, '_> {
+    fn panel(&mut self, bounds: RECT) {
         surface(self.dc, bounds, PANEL, BORDER, 12);
     }
 
-    unsafe fn heading(&self, bounds: RECT, caption: &str) {
-        text(self.dc, self.theme.emphasis, bounds, caption, TEXT, LINE);
+    fn heading(&mut self, bounds: RECT, caption: &str) {
+        text(self.dc, self.theme.emphasis(), bounds, caption, TEXT, LINE);
     }
 
-    unsafe fn line(&self, bounds: RECT, caption: &str, color: COLORREF) {
-        text(self.dc, self.theme.body, bounds, caption, color, LINE);
+    fn line(&mut self, bounds: RECT, caption: &str, color: COLORREF) {
+        text(self.dc, self.theme.body(), bounds, caption, color, LINE);
     }
 
-    unsafe fn paragraph(&self, bounds: RECT, caption: &str, color: COLORREF) {
+    fn paragraph(&mut self, bounds: RECT, caption: &str, color: COLORREF) {
         text(
             self.dc,
-            self.theme.body,
+            self.theme.body(),
             bounds,
             caption,
             color,
@@ -71,20 +71,12 @@ impl Cards<'_> {
         );
     }
 
-    unsafe fn metric(
-        &self,
-        x: i32,
-        y: i32,
-        width: i32,
-        caption: &str,
-        value: &str,
-        color: COLORREF,
-    ) {
+    fn metric(&mut self, x: i32, y: i32, width: i32, caption: &str, value: &str, color: COLORREF) {
         self.panel(rect(x, y, width, 60));
         self.line(rect(x + 11, y + 7, width - 22, 18), caption, MUTED);
         text(
             self.dc,
-            self.theme.emphasis,
+            self.theme.emphasis(),
             rect(x + 11, y + 27, width - 22, 25),
             value,
             color,
@@ -92,7 +84,7 @@ impl Cards<'_> {
         );
     }
 
-    unsafe fn notice(&self, bounds: RECT, title: &str, detail: &str, tone: (COLORREF, COLORREF)) {
+    fn notice(&mut self, bounds: RECT, title: &str, detail: &str, tone: (COLORREF, COLORREF)) {
         let (background, foreground) = tone;
         surface(self.dc, bounds, background, BORDER, 10);
         let width = bounds.right - bounds.left;
@@ -105,7 +97,7 @@ impl Cards<'_> {
         );
         text(
             self.dc,
-            self.theme.emphasis,
+            self.theme.emphasis(),
             rect(bounds.left + 35, bounds.top + 6, width - 45, 23),
             title,
             foreground,
@@ -123,7 +115,7 @@ impl Cards<'_> {
         );
     }
 
-    unsafe fn detect(&self, app: &App) {
+    fn detect(&mut self, app: &App) {
         let x = self.area.left();
         let width = self.area.body_width();
         let column = (width - 12) / 2;
@@ -139,165 +131,199 @@ impl Cards<'_> {
             return;
         };
 
-        surface(self.dc, rect(x, top, column, 107), SELECTED, BORDER, 12);
-        let windows = &report.installations.installations;
-        if let Some(item) = windows.first() {
-            self.heading(rect(x + 12, top + 8, column - 24, 23), "Windows offline");
-            self.line(
-                rect(x + 12, top + 34, column - 24, 19),
-                &item.path.display().to_string(),
-                TEXT,
-            );
-            let kernel = item.architecture.as_deref().unwrap_or("indisponível");
-            let loader = item
+        let inventory = &report.inventory;
+        let installations = &report.installations.installations;
+        let overview_height = if self.area.height < 640 { 144 } else { 164 };
+        let bounds = rect(x, top, column, overview_height);
+        if let Some(installation) = installations.first() {
+            self.dc.gradient(bounds, SELECTED, PANEL, BORDER, 12);
+            self.icon_tile(DASHBOARD, x + 12, top + 12);
+            self.heading(rect(x + 48, top + 12, column - 60, 27), "Windows offline");
+
+            let kernel = installation
+                .architecture
+                .as_deref()
+                .unwrap_or("Indisponível");
+            let loader = installation
                 .loader_architecture
                 .as_deref()
-                .unwrap_or("indisponível");
-            self.line(
-                rect(x + 12, top + 57, column - 24, 19),
-                &format!("Kernel {kernel}  ·  UEFI {loader}"),
-                MUTED,
-            );
-            self.line(
-                rect(x + 12, top + 80, column - 24, 18),
-                item.version
-                    .as_deref()
-                    .unwrap_or("Versão de arquivo indisponível"),
-                MUTED,
-            );
+                .unwrap_or("Indisponível");
+            let version = installation.version.as_deref().unwrap_or("Indisponível");
+            let path = installation.path.display().to_string();
+            let rows = [
+                ("Instalação", path.as_str()),
+                ("Kernel", kernel),
+                ("Carregador UEFI", loader),
+                ("Versão do arquivo", version),
+            ];
+            for (index, (label, value)) in rows.into_iter().enumerate() {
+                let row = top + 48 + index as i32 * 21;
+                let label_width = (column * 47 / 100).clamp(95, 155);
+                self.line(rect(x + 12, row, label_width, 20), label, MUTED);
+                self.line(
+                    rect(x + label_width + 16, row, column - label_width - 28, 20),
+                    value,
+                    TEXT,
+                );
+            }
         } else {
-            self.heading(rect(x + 12, top + 10, column - 24, 23), "Windows offline");
-            self.paragraph(
-                rect(x + 12, top + 40, column - 24, 59),
-                "Nenhum candidato corroborado. Confira as unidades e atualize o diagnóstico.",
-                MUTED,
+            self.notice(
+                bounds,
+                "Windows offline",
+                "Nenhum candidato corroborado. Confira os volumes consultados e atualize o diagnóstico.",
+                (PANEL, MUTED),
             );
         }
 
-        let inventories = [
-            ("Discos", report.inventory.disks.len()),
-            ("Volumes", report.inventory.volumes.len()),
-            ("Windows", windows.len()),
+        let metrics = [
+            ("Discos", inventory.disks.len()),
+            ("Volumes", inventory.volumes.len()),
+            ("Windows", installations.len()),
         ];
-        let small = (column - 12) / 3;
-        for (index, (label, count)) in inventories.into_iter().enumerate() {
+        let metric_width = (column - 12) / 3;
+        for (index, (label, count)) in metrics.into_iter().enumerate() {
             self.metric(
-                right + index as i32 * (small + 6),
+                right + index as i32 * (metric_width + 6),
                 top,
-                small,
+                if index == 2 {
+                    column - 2 * (metric_width + 6)
+                } else {
+                    metric_width
+                },
                 label,
                 &count.to_string(),
                 TEXT,
             );
         }
-        self.panel(rect(right, top + 67, column, 40));
-        let volumes = report
-            .inventory
-            .volumes
-            .iter()
-            .filter_map(|volume| volume.paths.first())
-            .map(|path| path.display().to_string())
-            .collect::<Vec<_>>()
-            .join("   ");
-        let accessible = if volumes.is_empty() {
-            "Sem caminho de acesso"
-        } else {
-            &volumes
-        };
-        self.line(
-            rect(right + 11, top + 74, column - 22, 25),
-            accessible,
-            MUTED,
-        );
 
-        let disk_top = top + 119;
-        if report.inventory.disks.is_empty() {
+        let volume_top = top + 68;
+        self.panel(rect(right, volume_top, column, overview_height - 68));
+        self.heading(
+            rect(right + 12, volume_top + 6, column - 24, 23),
+            "Volumes consultados",
+        );
+        let visible_volumes = if overview_height > 150 { 3 } else { 2 };
+        if inventory.volumes.is_empty() {
+            self.line(
+                rect(right + 12, volume_top + 32, column - 24, 19),
+                "Nenhum volume enumerado",
+                MUTED,
+            );
+        }
+        for (index, volume) in inventory.volumes.iter().take(visible_volumes).enumerate() {
+            let path = volume
+                .paths
+                .first()
+                .map_or_else(|| "Sem caminho".into(), |path| path.display().to_string());
+            let filesystem = volume.filesystem.as_deref().unwrap_or("FS indisponível");
+            let capacity = volume.space.as_ref().map(|space| bytes(space.total));
+            let caption = match capacity {
+                Some(capacity) => format!("{path}   ·   {filesystem}   ·   {capacity}"),
+                None => format!("{path}   ·   {filesystem}"),
+            };
+            self.line(
+                rect(
+                    right + 12,
+                    volume_top + 32 + index as i32 * 18,
+                    column - 24,
+                    18,
+                ),
+                &caption,
+                MUTED,
+            );
+        }
+
+        let disk_top = top + overview_height + 12;
+        if inventory.disks.is_empty() {
             self.notice(
-                rect(x, disk_top, width, 95),
+                rect(x, disk_top, width, 93),
                 "Nenhum disco enumerado",
                 "Confira a conexão da mídia e atualize o diagnóstico.",
                 (PANEL, MUTED),
             );
         } else {
-            for (index, disk) in report.inventory.disks.iter().take(2).enumerate() {
+            for (index, disk) in inventory.disks.iter().take(2).enumerate() {
                 self.disk(disk, x + index as i32 * (column + 12), disk_top, column);
             }
         }
 
-        let summary_top = disk_top + 106;
-        let integrity = pages::selected_scan(app);
-        let integrity_label = pages::integrity_status(app);
-        let integrity_color = integrity.map_or(MUTED, |scan| match scan.status {
-            archrescue_integrity::Status::FindingsDetected => WARNING,
-            archrescue_integrity::Status::Blocked => CRITICAL,
-            _ => TEXT,
-        });
-        self.metric(
-            x,
-            summary_top,
-            column,
-            "Integridade do Windows",
-            integrity_label,
-            integrity_color,
-        );
-        let backup = report
-            .transactions
-            .iter()
-            .rev()
-            .find(|result| result.status.state == State::Completed);
-        let backup_label = if app.progress.is_some() {
-            "Operação em andamento".into()
-        } else if let Some(backup) = backup {
-            format!("{} arquivos verificados", backup.progress.verified_files)
-        } else {
-            "Sem backup conhecido".into()
-        };
-        self.metric(
-            right,
-            summary_top,
-            column,
-            "Backup",
-            &backup_label,
-            if backup.is_some() {
-                theme::SUCCESS
-            } else {
-                TEXT
-            },
-        );
-        let next = integrity.map_or_else(
-            || {
-                if windows.is_empty() {
-                    "Confira os volumes disponíveis."
+        let summary_top = disk_top + 132;
+        if summary_top + 60 < self.area.actions() {
+            let scan = pages::selected_scan(app);
+            let integrity_color = scan.map_or(MUTED, |scan| match scan.status {
+                archrescue_integrity::Status::FindingsDetected => WARNING,
+                archrescue_integrity::Status::Blocked => CRITICAL,
+                _ => TEXT,
+            });
+            self.metric(
+                x,
+                summary_top,
+                column,
+                "Integridade do Windows",
+                pages::integrity_status(app),
+                integrity_color,
+            );
+            let backup = report
+                .transactions
+                .iter()
+                .rev()
+                .find(|result| result.status.state == State::Completed);
+            let label = backup.map_or_else(
+                || "Sem backup na sessão".into(),
+                |backup| format!("{} arquivos verificados", backup.progress.verified_files),
+            );
+            self.metric(
+                right,
+                summary_top,
+                column,
+                "Backup",
+                &label,
+                if backup.is_some() {
+                    theme::SUCCESS
                 } else {
-                    "Analise os componentes do Windows offline."
-                }
-            },
-            |scan| scan.recommendation(),
-        );
-        self.line(
-            rect(x, summary_top + 65, width, 20),
-            &format!("Próxima ação  ·  {next}"),
-            MUTED,
-        );
+                    MUTED
+                },
+            );
+        }
     }
 
-    unsafe fn disk(&self, disk: &Disk, x: i32, top: i32, width: i32) {
-        self.panel(rect(x, top, width, 95));
-        let number = disk
+    fn icon_tile(&mut self, symbol: usize, x: i32, y: i32) {
+        surface(self.dc, rect(x, y, 28, 28), SELECTED, BORDER, 7);
+        icon(self.dc, symbol, x + 7, y + 7, ACCENT);
+    }
+
+    fn disk(&mut self, disk: &Disk, x: i32, top: i32, width: i32) {
+        self.panel(rect(x, top, width, 120));
+        self.icon_tile(DISKS, x + 12, top + 10);
+        let name = disk
             .number
             .map_or_else(|| "Disco".into(), |number| format!("Disco {number}"));
         let capacity = disk
             .capacity
             .map_or_else(|| "Capacidade indisponível".into(), bytes);
-        let style = disk.style.as_deref().unwrap_or("Estilo indisponível");
-        self.heading(
-            rect(x + 11, top + 5, width - 22, 24),
-            &format!("{number}  ·  {style}"),
+        let style = disk.style.as_deref().unwrap_or("—");
+        self.heading(rect(x + 48, top + 7, width - 112, 24), &name);
+        self.line(rect(x + 48, top + 30, width - 60, 17), &capacity, MUTED);
+        let badge_x = x + width - 60;
+        surface(
+            self.dc,
+            rect(badge_x, top + 12, 48, 23),
+            SELECTED,
+            BORDER,
+            6,
         );
-        self.line(rect(x + 11, top + 30, width - 22, 17), &capacity, MUTED);
+        text(
+            self.dc,
+            self.theme.body(),
+            rect(badge_x + 2, top + 12, 44, 23),
+            style,
+            ACCENT,
+            LINE | DT_CENTER,
+        );
 
-        let span = width - 22;
-        fill(self.dc, rect(x + 11, top + 55, span, 10), ELEVATED);
+        let span = width - 24;
+        let bar = rect(x + 12, top + 55, span, 11);
+        surface(self.dc, bar, INPUT, BORDER, 4);
         if let Some(capacity) = disk.capacity.filter(|&size| size > 0) {
             for partition in &disk.partitions {
                 let to_pixel = |position: u64| {
@@ -306,34 +332,42 @@ impl Cards<'_> {
                 };
                 let left = to_pixel(partition.offset);
                 let right = to_pixel(partition.offset.saturating_add(partition.length));
-                let color = if partition.efi { ACCENT } else { 0x00885772 };
-                fill(
-                    self.dc,
-                    rect(x + 11 + left, top + 55, right - left, 10),
-                    color,
-                );
+                if right > left {
+                    let color = if partition.efi {
+                        theme::SUCCESS
+                    } else {
+                        ACCENT_END
+                    };
+                    fill(
+                        self.dc,
+                        rect(bar.left + left, bar.top + 2, right - left, 7),
+                        color,
+                    );
+                }
             }
         }
-        let descriptor = if disk.partitions.is_empty() {
-            "Sem extensões de partição observadas".into()
-        } else {
-            format!(
-                "{}{}",
-                match disk.partitions.len() {
-                    1 => "1 partição observada".into(),
-                    count => format!("{count} partições observadas"),
-                },
-                if disk.read_only == Some(true) {
-                    "  ·  Somente leitura"
-                } else {
-                    ""
-                }
-            )
+        let descriptor = match disk.partitions.len() {
+            0 => "Sem extensões de partição observadas".into(),
+            1 => "1 partição observada".into(),
+            count => format!("{count} partições observadas"),
         };
-        self.line(rect(x + 11, top + 71, width - 22, 17), &descriptor, MUTED);
+        self.line(rect(x + 12, top + 72, width - 24, 19), &descriptor, MUTED);
+        let access = if !disk.errors.is_empty() {
+            (
+                format!("Consulta parcial · {} erros", disk.errors.len()),
+                WARNING,
+            )
+        } else if disk.read_only == Some(true) {
+            ("Somente leitura".into(), theme::SUCCESS)
+        } else if disk.partitions.iter().any(|partition| partition.efi) {
+            ("Partição EFI observada".into(), ACCENT)
+        } else {
+            return;
+        };
+        self.line(rect(x + 12, top + 94, width - 24, 18), &access.0, access.1);
     }
 
-    unsafe fn backup(&self, app: &App, top: i32, bottom: i32) {
+    fn backup(&mut self, app: &App, top: i32, bottom: i32) {
         let x = self.area.left();
         let width = self.area.body_width();
         let left = self.area.left_column();
@@ -397,6 +431,27 @@ impl Cards<'_> {
                 (bottom - top - 68).min(154),
             ));
             self.heading(rect(right + 11, top + 72, right_width - 22, 25), "Seleção");
+            if let Some(progress) = app.progress.as_ref().filter(|_| bottom - top >= 270) {
+                let y = bottom - 58;
+                self.dc
+                    .gradient(rect(x, y, width, 58), SELECTED, PANEL, BORDER, 10);
+                self.heading(rect(x + 13, y + 5, left - 26, 24), "Backup em andamento");
+                let bytes = format!(
+                    "{} gravados / {} planejados",
+                    bytes(progress.acknowledged_bytes),
+                    bytes(progress.planned_bytes),
+                );
+                self.line(rect(right, y + 5, right_width - 13, 24), &bytes, TEXT);
+                progress_bar(
+                    self.dc,
+                    x + 13,
+                    y + 38,
+                    width - 26,
+                    progress.acknowledged_bytes,
+                    progress.planned_bytes,
+                    ACCENT,
+                );
+            }
         } else {
             self.panel(rect(x, top, width, bottom - top));
             let checkpoints = app.checkpoints.as_ref();
@@ -463,7 +518,7 @@ impl Cards<'_> {
         }
     }
 
-    unsafe fn verify(&self, app: &App, top: i32, bottom: i32) {
+    fn verify(&mut self, app: &App, top: i32, bottom: i32) {
         let x = self.area.left();
         let width = self.area.body_width();
         let Some(backup) = app
@@ -518,7 +573,7 @@ impl Cards<'_> {
         );
     }
 
-    unsafe fn report(&self, app: &App, top: i32, bottom: i32) {
+    fn report(&mut self, app: &App, top: i32, bottom: i32) {
         let x = self.area.left();
         let width = self.area.body_width();
         let left = self.area.left_column();
@@ -603,7 +658,7 @@ impl Cards<'_> {
         }
     }
 
-    unsafe fn repair(&self, app: &App, top: i32, bottom: i32) {
+    fn repair(&mut self, app: &App, top: i32, bottom: i32) {
         let x = self.area.left();
         let left = self.area.left_column();
         let right = x + left + 12;
@@ -635,7 +690,7 @@ impl Cards<'_> {
         }
     }
 
-    unsafe fn deployment(&self, app: &App, top: i32, bottom: i32) {
+    fn deployment(&mut self, app: &App, top: i32, bottom: i32) {
         let x = self.area.left();
         let left = self.area.left_column();
         let right = x + left + 12;
@@ -673,7 +728,7 @@ impl Cards<'_> {
         );
     }
 
-    unsafe fn handoff(&self, app: &App) {
+    fn handoff(&mut self, app: &App) {
         let x = self.area.left();
         let left = self.area.left_column();
         let right = x + left + 12;
