@@ -15,6 +15,7 @@ Generated from locked Cargo metadata. These are declared SPDX expressions, not a
 | memchr | 2.8.3 | Unlicense OR MIT |
 | proc-macro2 | 1.0.107 | MIT OR Apache-2.0 |
 | quote | 1.0.47 | MIT OR Apache-2.0 |
+| roxmltree | 0.21.2 | MIT OR Apache-2.0 |
 | serde | 1.0.229 | MIT OR Apache-2.0 |
 | serde_core | 1.0.229 | MIT OR Apache-2.0 |
 | serde_derive | 1.0.229 | MIT OR Apache-2.0 |

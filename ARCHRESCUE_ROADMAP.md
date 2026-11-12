@@ -3520,3 +3520,17 @@ P0 automated technical validation is complete for the recorded lab scope and acc
 Track implementation against stable roadmap IDs and observable product acceptance criteria. For each entry record its exact source revision, user-facing workflow, acceptance fixture, result and open conditions. Count an entry toward product implementation when its scoped acceptance criteria have evidence. Keep infrastructure, QA, documentation, review and legal gates in the traceability matrix with their own states. Establish a stable weighted product denominator before reporting a global percentage. The existing roadmap and evidence are sufficient to report individual capabilities, and a global percentage has not been assigned.
 
 The [development wave report](docs/qa/M1-M3-DEVELOPMENT-WAVE.md) contains the detailed evidence and ClickUp reconciliation. The [workspace incident report](docs/evidence/ENVIRONMENT-HYGIENE.md) contains the inventory, removals, verified retention and remaining capacity limit.
+
+## 17. Wave 3 engineering update — 2026-11-12
+
+| Roadmap area | Evidence-backed state |
+|---|---|
+| AR-02 recovery interface | The native dashboard, navigation, findings, disk inventory, backup, planning, handoff and reports follow the owner design. WinPE ran the final shell at revision `54bd125` with live disk and Windows data. The report records viewport and input coverage. |
+| AR-03 diagnostics | Passive, versioned integrity inspection detected missing and truncated Windows files on the protected x64 clone. Servicing evidence separates current observations from historical CBS entries. Windows 11 qualification, active-loader attribution, full protected-file verification and broader fixture coverage remain open. |
+| AR-04 / AR-05 recovery and backup | Findings link to preservation. The WinPE session verified an independent backup and rejected a same-source report export. EFI repair qualification remains open. |
+| AR-06 / AR-07 deployment and restore | WinPE inspected a real WIM, exported a capacity-blocked plan and exported the verified backup handoff. The installation executor and deployment-to-restore journey remain open. |
+| AR-14 / AR-QA-M50 | The report links runtime screenshots, versioned evidence, regression and storage results. The 50% human-review milestone retains its existing gate. |
+
+See the [Wave 3 UI and Windows integrity report](docs/qa/WAVE-3-UI-WINDOWS-INTEGRITY.md) for the scoped acceptance matrix and ClickUp reconciliation.
+
+**SYNC — 2026-11-11.** ClickUp descriptions for AR-02, AR-03, AR-04, AR-05, AR-06, AR-07 and AR-14 record the verified Wave 3 scope. A connector readback confirmed the notes and existing statuses. See [ClickUp reconciliation](artifacts/evidence/wave3/clickup-reconciliation.json).
