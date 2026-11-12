@@ -7,6 +7,8 @@ mod navigation;
 mod pages;
 mod presentation;
 mod renderer;
+mod scroll;
+mod select;
 mod theme;
 mod window;
 
@@ -34,13 +36,13 @@ use windows_sys::Win32::{
     System::LibraryLoader::GetModuleHandleW,
     UI::{
         Controls::{
-            DRAWITEMSTRUCT, EM_SETMARGINS, MEASUREITEMSTRUCT, ODT_BUTTON, ODT_COMBOBOX,
-            ODT_LISTBOX, WM_MOUSELEAVE,
+            DRAWITEMSTRUCT, EM_SETMARGINS, MEASUREITEMSTRUCT, ODT_BUTTON, ODT_LISTBOX,
+            WM_MOUSELEAVE,
         },
         HiDpi::GetDpiForWindow,
         Input::KeyboardAndMouse::{
-            EnableWindow, GetFocus, SetFocus, TrackMouseEvent, TME_LEAVE, TRACKMOUSEEVENT, VK_F11,
-            VK_RETURN,
+            EnableWindow, GetFocus, IsWindowEnabled, SetFocus, TrackMouseEvent, TME_LEAVE,
+            TRACKMOUSEEVENT, VK_F11, VK_RETURN,
         },
         WindowsAndMessaging::*,
     },
@@ -74,6 +76,7 @@ const SOURCE_LABEL: usize = 222;
 const DESTINATION_LABEL: usize = 223;
 const ESP_LABEL: usize = 224;
 const REPAIR_UNAVAILABLE: usize = 225;
+const BACKUP_SELECTION: usize = 226;
 
 const RENDER_FAILURE: u32 = WM_APP + 1;
 const BUTTON_CLASS: [u16; 6] = [
@@ -212,7 +215,6 @@ unsafe fn add(
         | match class {
             "BUTTON" => BS_OWNERDRAW as u32,
             "LISTBOX" => (LBS_OWNERDRAWFIXED | LBS_HASSTRINGS | LBS_NOINTEGRALHEIGHT) as u32,
-            "COMBOBOX" => (CBS_OWNERDRAWFIXED | CBS_HASSTRINGS) as u32,
             _ => 0,
         };
     let child = CreateWindowExW(
@@ -235,6 +237,9 @@ unsafe fn add(
     }
 
     SendMessageW(child, WM_SETFONT, font as usize, 1);
+    if matches!(id, FILES | CONTENT | BACKUP_SELECTION | pages::ROWS) {
+        scroll::attach(hwnd, id, child)?;
+    }
     if class == "EDIT" {
         SendMessageW(child, EM_SETMARGINS, 3, (7 << 16) | 7);
     }
@@ -279,11 +284,15 @@ unsafe fn track_hover(hwnd: HWND, state: &WindowState, message: &MSG) {
 }
 
 unsafe fn place(hwnd: HWND, id: usize, x: i32, y: i32, width: i32, height: i32) {
-    MoveWindow(control(hwnd, id), x, y, width.max(1), height.max(1), 1);
+    let width = width.max(1);
+    let height = height.max(1);
+    MoveWindow(control(hwnd, id), x, y, width, height, 1);
+    scroll::place(hwnd, id, x, y, width, height);
 }
 
 unsafe fn show(hwnd: HWND, id: usize, visible: bool) {
     ShowWindow(control(hwnd, id), if visible { SW_SHOW } else { SW_HIDE });
+    scroll::show(hwnd, id, visible);
 }
 
 unsafe fn render(hwnd: HWND, app: &App) {
@@ -291,6 +300,9 @@ unsafe fn render(hwnd: HWND, app: &App) {
     let repair = app.section == REPAIR_PAGE;
     let verify = app.section == VERIFY_PAGE;
     let report_stage = app.section == REPORTS;
+    let has_selection =
+        protect && app.preview.is_none() && (app.listing_loaded || app.checkpoints.is_some());
+    show(hwnd, BACKUP_SELECTION, has_selection);
     let has_entries = app
         .checkpoints
         .as_ref()
@@ -343,7 +355,7 @@ unsafe fn render(hwnd: HWND, app: &App) {
 
     let area = layout::Layout::read(hwnd);
     for page in navigation::ORDER {
-        set(hwnd, 100 + page, navigation::label(page, area.rail < 200));
+        set(hwnd, 100 + page, navigation::label(page, area.rail < 224));
         InvalidateRect(control(hwnd, 100 + page), null(), 0);
     }
     for (id, full, compact) in [
@@ -351,7 +363,7 @@ unsafe fn render(hwnd: HWND, app: &App) {
         (CONSOLE, "Console de diagnóstico", "Console"),
         (CANCEL, "Cancelar operação", "Cancelar"),
     ] {
-        set(hwnd, id, if area.rail < 200 { compact } else { full });
+        set(hwnd, id, if area.rail < 222 { compact } else { full });
     }
 
     for id in [
@@ -401,6 +413,9 @@ unsafe fn render(hwnd: HWND, app: &App) {
     );
 
     layout::arrange(hwnd, app);
+    if has_selection {
+        update_backup_selection(hwnd, app);
+    }
     invalidate_scene(hwnd);
 
     let structured = pages::render_page(hwnd, app);
@@ -529,6 +544,24 @@ unsafe fn selected(hwnd: HWND, app: &App) -> Vec<PathBuf> {
         .collect()
 }
 
+unsafe fn update_backup_selection(hwnd: HWND, app: &App) {
+    let paths = selected(hwnd, app);
+    let summary = if paths.is_empty() {
+        if app.checkpoints.is_some() {
+            "Selecione um checkpoint e use Retomar.".to_owned()
+        } else {
+            "Use Ctrl ou Shift para selecionar vários itens.".to_owned()
+        }
+    } else {
+        paths
+            .iter()
+            .map(|path| path.display().to_string())
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+    set(hwnd, BACKUP_SELECTION, &summary);
+}
+
 unsafe fn stage(hwnd: HWND, app: &mut App, section: usize) {
     app.section = section;
     app.row_index = 0;
@@ -587,6 +620,7 @@ unsafe fn action(hwnd: HWND, app: &mut App, id: usize, notification: u32) {
                 browse(hwnd, app, parent.to_owned());
             }
         }
+        FILES if notification == LBN_SELCHANGE => update_backup_selection(hwnd, app),
         FILES if notification == LBN_DBLCLK => {
             if app.checkpoints.is_some() {
                 resume_backup(hwnd, app);
@@ -695,6 +729,7 @@ unsafe fn resume_backup(hwnd: HWND, app: &mut App) {
     app.confirmation = Some(confirmation::Confirmation::Resume {
         source,
         checkpoint,
+        recorded_state: entry.status.as_ref().map(|status| status.state),
     });
 }
 
@@ -1096,6 +1131,10 @@ unsafe extern "system" fn procedure(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM
             SetBkColor(wp as HDC, theme::INPUT);
             return state.theme.input as isize;
         }
+        if id == STATUS {
+            SetBkColor(wp as HDC, theme::FOOTER);
+            return state.theme.footer as isize;
+        }
         SetBkColor(wp as HDC, theme::PANEL);
         return state.theme.panel as isize;
     }
@@ -1110,7 +1149,7 @@ unsafe extern "system" fn procedure(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM
         WM_DRAWITEM if lp != 0 => {
             // The notification supplies a live DRAWITEMSTRUCT and child paint DC.
             let item = &*(lp as *const DRAWITEMSTRUCT);
-            if !matches!(item.CtlType, ODT_BUTTON | ODT_LISTBOX | ODT_COMBOBOX) {
+            if !matches!(item.CtlType, ODT_BUTTON | ODT_LISTBOX) {
                 return DefWindowProcW(hwnd, msg, wp, lp);
             }
             if let Ok(mut frame) = state.control_frame.try_borrow_mut() {
@@ -1150,7 +1189,11 @@ unsafe extern "system" fn procedure(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM
             if let Err(error) = state.mode.reflow(hwnd, suggested) {
                 eprintln!("{error}");
             }
-            if let Err(error) = state.theme.rescale(hwnd, GetDpiForWindow(hwnd)) {
+            if let Err(error) =
+                state
+                    .theme
+                    .rescale(hwnd, GetDpiForWindow(hwnd), &layout::Layout::read(hwnd))
+            {
                 eprintln!("{error}");
             }
             invalidate_scene(hwnd);
@@ -1185,6 +1228,13 @@ unsafe extern "system" fn procedure(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM
     match msg {
         WM_SIZE => {
             if wp != SIZE_MINIMIZED as usize && !control(hwnd, STATUS).is_null() {
+                if let Err(error) =
+                    state
+                        .theme
+                        .rescale(hwnd, GetDpiForWindow(hwnd), &layout::Layout::read(hwnd))
+                {
+                    eprintln!("{error}");
+                }
                 render(hwnd, app);
             }
             0
@@ -1299,6 +1349,8 @@ pub fn run() -> Result<()> {
             ..Default::default()
         };
 
+        select::register(instance)?;
+        scroll::register(instance)?;
         if RegisterClassW(&window_class) == 0 {
             return Err(os_error("Register native window"));
         }
@@ -1324,7 +1376,8 @@ pub fn run() -> Result<()> {
         }
 
         let window = OwnedWindow(hwnd);
-        app.theme.rescale(hwnd, GetDpiForWindow(hwnd))?;
+        app.theme
+            .rescale(hwnd, GetDpiForWindow(hwnd), &layout::Layout::read(hwnd))?;
         let font = app.theme.body();
         let screen = GetDC(hwnd);
         let area = layout::Layout::read(hwnd);
@@ -1363,8 +1416,8 @@ pub fn run() -> Result<()> {
             (COPY, "&Iniciar backup"),
             (CHECKPOINTS, "Checkpoints"),
             (RESUME, "&Retomar"),
-            (PREVIOUS, "‹  Voltar"),
-            (NEXT, "Avançar  ›"),
+            (PREVIOUS, "Voltar"),
+            (NEXT, "Avançar"),
             (TECHNICIAN, "Modo &técnico"),
             (VERIFY, "Verificar novamente"),
             (REPAIR, "Gerar prévia do reparo"),
@@ -1382,7 +1435,7 @@ pub fn run() -> Result<()> {
             ADDRESS,
             "EDIT",
             "",
-            WS_TABSTOP | WS_BORDER | ES_AUTOHSCROLL as u32,
+            WS_TABSTOP | ES_AUTOHSCROLL as u32,
             font,
         )?;
         add(hwnd, DESTINATION_LABEL, "STATIC", "Destino", 0, font)?;
@@ -1391,7 +1444,7 @@ pub fn run() -> Result<()> {
             DEST,
             "EDIT",
             "",
-            WS_TABSTOP | WS_BORDER | ES_AUTOHSCROLL as u32,
+            WS_TABSTOP | ES_AUTOHSCROLL as u32,
             font,
         )?;
         add(hwnd, ESP_LABEL, "STATIC", "Raiz da partição EFI", 0, font)?;
@@ -1400,7 +1453,7 @@ pub fn run() -> Result<()> {
             ESP,
             "EDIT",
             "",
-            WS_TABSTOP | WS_BORDER | ES_AUTOHSCROLL as u32,
+            WS_TABSTOP | ES_AUTOHSCROLL as u32,
             font,
         )?;
         for (id, hint) in [
@@ -1416,12 +1469,7 @@ pub fn run() -> Result<()> {
             FILES,
             "LISTBOX",
             "",
-            WS_TABSTOP
-                | WS_BORDER
-                | WS_VSCROLL
-                | WS_HSCROLL
-                | LBS_EXTENDEDSEL as u32
-                | LBS_NOTIFY as u32,
+            WS_TABSTOP | WS_BORDER | WS_VSCROLL | LBS_EXTENDEDSEL as u32 | LBS_NOTIFY as u32,
             font,
         )?;
         add(
@@ -1445,6 +1493,14 @@ pub fn run() -> Result<()> {
             font,
         )?;
 
+        add(
+            hwnd,
+            BACKUP_SELECTION,
+            "EDIT",
+            "",
+            WS_TABSTOP | WS_VSCROLL | ES_MULTILINE as u32 | ES_READONLY as u32,
+            font,
+        )?;
         pages::controls(hwnd, font)?;
         deployment::controls(hwnd, font)?;
         if SetTimer(hwnd, 1, 100, None) == 0 {
@@ -1497,6 +1553,17 @@ pub fn run() -> Result<()> {
             if IsDialogMessageW(hwnd, &msg) == 0 {
                 TranslateMessage(&msg);
                 DispatchMessageW(&msg);
+            }
+            if matches!(
+                msg.message,
+                WM_KEYDOWN
+                    | WM_MOUSEWHEEL
+                    | WM_LBUTTONDOWN
+                    | WM_LBUTTONUP
+                    | WM_MOUSEMOVE
+                    | WM_TIMER
+            ) {
+                scroll::invalidate(hwnd);
             }
         }
 

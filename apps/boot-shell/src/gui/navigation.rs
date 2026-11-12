@@ -28,7 +28,6 @@ pub fn label(section: usize, compact: bool) -> &'static str {
         (DIAGNOSIS, _) => "Diagnosticar",
         (INTEGRITY_PAGE, true) => "Integridade",
         (INTEGRITY_PAGE, false) => "Integridade do Windows",
-        (BACKUP, true) => "Backup",
         (BACKUP, false) => "Proteger dados",
         (REPAIR_PAGE, _) => "Reparar",
         (VERIFY_PAGE, _) => "Verificar",
@@ -38,6 +37,15 @@ pub fn label(section: usize, compact: bool) -> &'static str {
         (deployment::RESTORE, true) => "Restaurar",
         (deployment::RESTORE, false) => "Restaurar arquivos",
         _ => "",
+    }
+}
+
+pub fn context_offset(section: usize) -> i32 {
+    match section {
+        DASHBOARD | DISKS | REPAIR_PAGE | VERIFY_PAGE | REPORTS => 68,
+        DIAGNOSIS | BACKUP => 98,
+        deployment::DEPLOY | deployment::RESTORE => 132,
+        _ => 169,
     }
 }
 

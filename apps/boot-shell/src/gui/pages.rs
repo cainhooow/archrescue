@@ -33,14 +33,7 @@ impl Row {
 }
 
 pub unsafe fn controls(hwnd: HWND, font: HFONT) -> Result<()> {
-    add(
-        hwnd,
-        ROOT,
-        "COMBOBOX",
-        "",
-        WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST as u32,
-        font,
-    )?;
+    add(hwnd, ROOT, select::class(), "", WS_TABSTOP, font)?;
     add(
         hwnd,
         ROWS,
@@ -65,16 +58,16 @@ pub unsafe fn controls(hwnd: HWND, font: HFONT) -> Result<()> {
 pub unsafe fn layout(hwnd: HWND, area: &layout::Layout, section: usize) {
     let x = area.left();
     let width = area.body_width();
-    let top = layout::Layout::body_top(section);
+    let top = area.body_top(section);
     let bottom = area.body_bottom(section);
 
-    place(hwnd, ROOT, x, 128, width - 140, 252);
-    place(hwnd, SCAN, x + width - 130, 128, 130, 30);
+    place(hwnd, ROOT, x, top - 38, width - 140, 30);
+    place(hwnd, SCAN, x + width - 130, top - 38, 130, 30);
     place(hwnd, PROTECT, x, area.actions(), 142, 32);
     place(hwnd, REPORT_ACTION, x + 152, area.actions(), 122, 32);
 
     if area.split_details() {
-        let list_width = (width - 12) * 42 / 100;
+        let (list_width, detail_x, detail_width) = area.detail_columns(section);
         place(hwnd, PAGE_HINT, x + 12, top + 8, list_width - 24, 23);
         place(
             hwnd,
@@ -87,9 +80,9 @@ pub unsafe fn layout(hwnd: HWND, area: &layout::Layout, section: usize) {
         place(
             hwnd,
             CONTENT,
-            x + list_width + 24,
+            detail_x + 12,
             top + 38,
-            width - list_width - 36,
+            detail_width - 24,
             bottom - top - 48,
         );
     } else {

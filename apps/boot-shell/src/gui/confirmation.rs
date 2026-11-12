@@ -1,4 +1,6 @@
-//! Bind an explicit native confirmation to the reviewed backup or checkpoint.
+//! Bind explicit confirmation to the reviewed backup or checkpoint.
+
+mod dialog;
 
 use std::path::Path;
 
@@ -9,33 +11,74 @@ pub(super) enum Confirmation {
     Resume {
         source: PathBuf,
         checkpoint: PathBuf,
+        recorded_state: Option<archrescue_core::State>,
     },
 }
 
 impl Confirmation {
     pub unsafe fn ask(self, hwnd: HWND, state: &WindowState) {
-        let (title, prompt, approved, refused) = match &self {
+        let (prompt, approved, refused) = match &self {
             Self::Start(preview) => (
-                "Confirmar backup",
-                format!(
-                    "Iniciar backup de {} arquivos?\n\nOrigem: {}\nDestino: {}",
-                    preview.files,
-                    preview.source.display(),
-                    preview.destination.display(),
-                ),
+                dialog::Prompt {
+                    title: "Confirmar backup",
+                    question: format!("Iniciar backup de {} arquivos?", preview.files),
+                    paths: [
+                        ("Origem", preview.source.display().to_string()),
+                        ("Destino", preview.destination.display().to_string()),
+                    ],
+                    notice: if preview.files == 0 {
+                        (
+                            "Pasta vazia na seleção",
+                            "A estrutura das pastas selecionadas será preservada.",
+                        )
+                    } else {
+                        ("Cópia de conteúdo", "Os arquivos serão publicados em uma pasta exclusiva e conferidos por SHA-256.")
+                    },
+                    width: if [preview.source.as_os_str(), preview.destination.as_os_str()]
+                        .iter()
+                        .any(|path| path.len() > 60)
+                    {
+                        730
+                    } else {
+                        600
+                    },
+                },
                 "Backup autorizado",
                 "Backup recusado",
             ),
             Self::Resume {
                 source,
                 checkpoint,
+                recorded_state,
             } => (
-                "Confirmar retomada",
-                format!(
-                    "Retomar a operação?\n\nCheckpoint: {}\nOrigem: {}",
-                    checkpoint.display(),
-                    source.display()
-                ),
+                dialog::Prompt {
+                    title: "Confirmar retomada",
+                    question: "Retomar a operação a partir do checkpoint?".into(),
+                    paths: [
+                        ("Checkpoint", checkpoint.display().to_string()),
+                        ("Origem", source.display().to_string()),
+                    ],
+                    notice: (
+                        match recorded_state {
+                            Some(archrescue_core::State::Running) => {
+                                "Estado registrado · Em execução"
+                            }
+                            Some(archrescue_core::State::Completed) => {
+                                "Estado registrado · Conclusão registrada"
+                            }
+                            Some(archrescue_core::State::Cancelled) => {
+                                "Estado registrado · Cancelado"
+                            }
+                            Some(archrescue_core::State::Pending) => {
+                                "Estado registrado · Planejado"
+                            }
+                            Some(state) => state_label(*state),
+                            None => "Validar checkpoint",
+                        },
+                        "A retomada valida a origem e confere o conteúdo já gravado.",
+                    ),
+                    width: 600,
+                },
                 "Retomada autorizada",
                 "Retomada recusada",
             ),
@@ -43,12 +86,7 @@ impl Confirmation {
 
         // The modal dialog dispatches messages. App must be available to paint the owner window.
         state.confirming.set(true);
-        let accepted = MessageBoxW(
-            hwnd,
-            wide(&prompt).as_ptr(),
-            wide(title).as_ptr(),
-            MB_YESNO | MB_ICONQUESTION | MB_DEFBUTTON2,
-        ) == IDYES;
+        let accepted = dialog::show(hwnd, state, &prompt);
         state.confirming.set(false);
 
         let Ok(mut app) = state.app.try_borrow_mut() else {
@@ -56,7 +94,11 @@ impl Confirmation {
         };
         if let Some(report) = &mut app.report {
             let decision = if accepted { approved } else { refused };
-            report.decisions.push(format!("{decision}. {prompt}"));
+            let [(first, first_path), (second, second_path)] = &prompt.paths;
+            report.decisions.push(format!(
+                "{decision}. {}\n{first}: {first_path}\n{second}: {second_path}",
+                prompt.question,
+            ));
         }
         if !accepted || app.busy {
             return;
@@ -80,6 +122,7 @@ impl Confirmation {
             Self::Resume {
                 source,
                 checkpoint,
+                ..
             } => {
                 if source != Path::new(&get(hwnd, ADDRESS)) {
                     set(

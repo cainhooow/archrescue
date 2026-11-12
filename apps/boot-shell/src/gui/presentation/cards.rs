@@ -1,7 +1,7 @@
 //! Presentation of typed session data in the reference card layout.
 
 use archrescue_core::State;
-use archrescue_storage::Disk;
+use archrescue_storage::{Disk, Partition, Volume};
 
 use super::*;
 
@@ -19,24 +19,24 @@ pub(super) fn render(dc: &mut Scene<'_>, area: &Layout, theme: &Theme, app: &App
     };
     let x = area.left();
     let width = area.body_width();
-    let top = Layout::body_top(app.section);
+    let top = area.body_top(app.section);
     let bottom = area.body_bottom(app.section);
 
     match app.section {
         DASHBOARD => cards.detect(app),
-        BACKUP => cards.backup(app, top, bottom),
-        VERIFY_PAGE => cards.verify(app, top, bottom),
+        BACKUP => cards.backup(app),
+        VERIFY_PAGE => cards.verify(app, bottom),
         REPORTS => cards.report(app, top, bottom),
         REPAIR_PAGE => cards.repair(app, top, bottom),
         deployment::DEPLOY => cards.deployment(app, top, bottom),
         deployment::RESTORE => cards.handoff(app),
         _ if pages::structured(app.section) => {
             if area.split_details() {
-                let split = (width - 12) * 42 / 100;
+                let (split, detail_x, detail_width) = area.detail_columns(app.section);
                 cards.panel(rect(x, top, split, bottom - top));
-                cards.panel(rect(x + split + 12, top, width - split - 12, bottom - top));
+                cards.panel(rect(detail_x, top, detail_width, bottom - top));
                 cards.heading(
-                    rect(x + split + 24, top + 8, width - split - 36, 24),
+                    rect(detail_x + 12, top + 8, detail_width - 24, 24),
                     "Evidências e detalhes",
                 );
             } else {
@@ -72,7 +72,7 @@ impl Cards<'_, '_> {
     }
 
     fn metric(&mut self, x: i32, y: i32, width: i32, caption: &str, value: &str, color: COLORREF) {
-        self.panel(rect(x, y, width, 60));
+        surface(self.dc, rect(x, y, width, 60), METRIC, BORDER, 9);
         self.line(rect(x + 11, y + 7, width - 22, 18), caption, MUTED);
         text(
             self.dc,
@@ -118,263 +118,434 @@ impl Cards<'_, '_> {
     fn detect(&mut self, app: &App) {
         let x = self.area.left();
         let width = self.area.body_width();
-        let column = (width - 12) / 2;
-        let right = x + column + 12;
-        let top = Layout::body_top(DASHBOARD);
+        let gap = self.area.gap();
+        let column = (width - gap) / 2;
+        let right = x + column + gap;
+        let top = self.area.body_top(DASHBOARD);
+        let px = |value| self.area.px(value);
         let Some(report) = &app.report else {
             self.notice(
-                rect(x, top, width, 70),
+                rect(x, top, width, px(88)),
                 "Consultando discos e volumes",
                 "Aguarde o inventário de dispositivos acessíveis.",
                 (SELECTED, ACCENT),
+            );
+            self.empty(
+                rect(x, top + px(102), column, px(210)),
+                Icon::Windows,
+                "Windows offline",
+                "O resultado aparecerá após a consulta.",
+            );
+            self.empty(
+                rect(right, top + px(102), column, px(210)),
+                Icon::Disk,
+                "Discos físicos",
+                "O inventário será exibido nesta região.",
             );
             return;
         };
 
         let inventory = &report.inventory;
         let installations = &report.installations.installations;
-        let overview_height = if self.area.height < 640 { 144 } else { 164 };
-        let bounds = rect(x, top, column, overview_height);
-        if let Some(installation) = installations.first() {
-            self.dc.gradient(bounds, SELECTED, PANEL, BORDER, 12);
-            self.icon_tile(DASHBOARD, x + 12, top + 12);
-            self.heading(rect(x + 48, top + 12, column - 60, 27), "Windows offline");
-
-            let kernel = installation
-                .architecture
-                .as_deref()
-                .unwrap_or("Indisponível");
-            let loader = installation
-                .loader_architecture
-                .as_deref()
-                .unwrap_or("Indisponível");
-            let version = installation.version.as_deref().unwrap_or("Indisponível");
-            let path = installation.path.display().to_string();
-            let rows = [
-                ("Instalação", path.as_str()),
-                ("Kernel", kernel),
-                ("Carregador UEFI", loader),
-                ("Versão do arquivo", version),
-            ];
-            for (index, (label, value)) in rows.into_iter().enumerate() {
-                let row = top + 48 + index as i32 * 21;
-                let label_width = (column * 47 / 100).clamp(95, 155);
-                self.line(rect(x + 12, row, label_width, 20), label, MUTED);
-                self.line(
-                    rect(x + label_width + 16, row, column - label_width - 28, 20),
-                    value,
-                    TEXT,
-                );
-            }
-        } else {
-            self.notice(
-                bounds,
-                "Windows offline",
-                "Nenhum candidato corroborado. Confira os volumes consultados e atualize o diagnóstico.",
-                (PANEL, MUTED),
-            );
-        }
-
-        let metrics = [
-            ("Discos", inventory.disks.len()),
-            ("Volumes", inventory.volumes.len()),
-            ("Windows", installations.len()),
-        ];
-        let metric_width = (column - 12) / 3;
-        for (index, (label, count)) in metrics.into_iter().enumerate() {
-            self.metric(
-                right + index as i32 * (metric_width + 6),
-                top,
-                if index == 2 {
-                    column - 2 * (metric_width + 6)
-                } else {
-                    metric_width
-                },
-                label,
-                &count.to_string(),
-                TEXT,
-            );
-        }
-
-        let volume_top = top + 68;
-        self.panel(rect(right, volume_top, column, overview_height - 68));
-        self.heading(
-            rect(right + 12, volume_top + 6, column - 24, 23),
-            "Volumes consultados",
-        );
-        let visible_volumes = if overview_height > 150 { 3 } else { 2 };
-        if inventory.volumes.is_empty() {
-            self.line(
-                rect(right + 12, volume_top + 32, column - 24, 19),
-                "Nenhum volume enumerado",
-                MUTED,
-            );
-        }
-        for (index, volume) in inventory.volumes.iter().take(visible_volumes).enumerate() {
-            let path = volume
-                .paths
-                .first()
-                .map_or_else(|| "Sem caminho".into(), |path| path.display().to_string());
-            let filesystem = volume.filesystem.as_deref().unwrap_or("FS indisponível");
-            let capacity = volume.space.as_ref().map(|space| bytes(space.total));
-            let caption = match capacity {
-                Some(capacity) => format!("{path}   ·   {filesystem}   ·   {capacity}"),
-                None => format!("{path}   ·   {filesystem}"),
-            };
-            self.line(
-                rect(
-                    right + 12,
-                    volume_top + 32 + index as i32 * 18,
-                    column - 24,
-                    18,
-                ),
-                &caption,
-                MUTED,
-            );
-        }
-
-        let disk_top = top + overview_height + 12;
-        if inventory.disks.is_empty() {
-            self.notice(
-                rect(x, disk_top, width, 93),
-                "Nenhum disco enumerado",
+        if inventory.disks.is_empty() && installations.is_empty() {
+            self.empty(
+                rect(x, top, width, px(207)),
+                Icon::Disk,
+                "Nenhum disco físico enumerado",
                 "Confira a conexão da mídia e atualize o diagnóstico.",
-                (PANEL, MUTED),
             );
-        } else {
-            for (index, disk) in inventory.disks.iter().take(2).enumerate() {
-                self.disk(disk, x + index as i32 * (column + 12), disk_top, column);
+            self.notice(
+                rect(x, top + px(221), width, px(67)),
+                "Nenhuma instalação encontrada",
+                "Nenhum Windows offline foi corroborado nos volumes consultados.",
+                (METRIC, MUTED),
+            );
+            return;
+        }
+
+        let partial = !inventory.errors.is_empty()
+            || inventory.disks.iter().any(|disk| !disk.errors.is_empty());
+        let mut body = top;
+        if partial || installations.len() != 1 {
+            let (title, detail, tone) = if installations.len() > 1 {
+                (
+                    "Mais de um Windows offline encontrado",
+                    "Consulte a integridade para selecionar a instalação que deseja analisar.",
+                    (WARNING_SURFACE, WARNING),
+                )
+            } else if partial {
+                (
+                    "Dados de armazenamento incompletos",
+                    "Consulte os detalhes dos discos para ver os erros de consulta.",
+                    (WARNING_SURFACE, WARNING),
+                )
+            } else {
+                (
+                    "Nenhum Windows offline corroborado",
+                    "Os discos abaixo foram enumerados durante a consulta.",
+                    (METRIC, MUTED),
+                )
+            };
+            self.notice(rect(x, body, width, px(68)), title, detail, tone);
+            body += px(68) + gap;
+        }
+
+        if let Some(installation) = installations.first() {
+            let height = px(179);
+            self.candidate(rect(x, body, column, height), installation);
+            if let Some(second) = installations.get(1) {
+                self.candidate(rect(right, body, column, height), second);
+                body += height + gap;
+            } else {
+                let metrics = [
+                    ("Discos", inventory.disks.len()),
+                    ("Volumes", inventory.volumes.len()),
+                    ("Windows offline", installations.len()),
+                ];
+                let metric_gap = px(10);
+                let metric_width = (column - 2 * metric_gap) / 3;
+                for (index, (label, count)) in metrics.into_iter().enumerate() {
+                    self.metric(
+                        right + index as i32 * (metric_width + metric_gap),
+                        body,
+                        metric_width,
+                        label,
+                        &count.to_string(),
+                        TEXT,
+                    );
+                }
+
+                let volume_top = body + 60 + px(13);
+                let row_count = inventory.volumes.len().clamp(1, 3) as i32;
+                let volume_height = px(55 + 27 * row_count + 10);
+                self.panel(rect(right, volume_top, column, volume_height));
+                self.heading(
+                    rect(right + px(18), volume_top + px(14), column - px(36), px(31)),
+                    "Volumes consultados",
+                );
+                for (index, volume) in inventory.volumes.iter().take(3).enumerate() {
+                    self.volume_row(
+                        right,
+                        volume_top + px(51 + index as i32 * 27),
+                        column,
+                        volume,
+                    );
+                }
+                if inventory.volumes.is_empty() {
+                    self.line(
+                        rect(right + px(18), volume_top + px(51), column - px(36), px(27)),
+                        "Nenhum volume enumerado",
+                        MUTED,
+                    );
+                }
+                let mut candidate_bottom = body + height;
+                if report
+                    .diagnosis
+                    .associations
+                    .iter()
+                    .any(|item| !item.efi_partitions.is_empty() && item.mounted_efi.is_empty())
+                {
+                    let y = candidate_bottom + px(13);
+                    self.notice(
+                        rect(x, y, column, px(68)),
+                        "Partição EFI sem caminho de acesso",
+                        "Consulte os achados de inicialização em Diagnosticar.",
+                        (METRIC, MUTED),
+                    );
+                    candidate_bottom = y + px(68);
+                }
+                body = candidate_bottom.max(volume_top + volume_height) + gap;
             }
         }
 
-        let summary_top = disk_top + 132;
-        if summary_top + 60 < self.area.actions() {
-            let scan = pages::selected_scan(app);
-            let integrity_color = scan.map_or(MUTED, |scan| match scan.status {
-                archrescue_integrity::Status::FindingsDetected => WARNING,
-                archrescue_integrity::Status::Blocked => CRITICAL,
-                _ => TEXT,
+        let available = self.area.actions() - gap - body;
+        if available < px(118) {
+            return;
+        }
+        for (index, disk) in inventory.disks.iter().take(2).enumerate() {
+            let volumes = inventory.volumes.iter().filter(|volume| {
+                disk.number
+                    .is_some_and(|number| volume.physical_disks.contains(&number))
             });
-            self.metric(
-                x,
-                summary_top,
+            self.disk(
+                disk,
+                volumes,
+                x + index as i32 * (column + gap),
+                body,
                 column,
-                "Integridade do Windows",
-                pages::integrity_status(app),
-                integrity_color,
-            );
-            let backup = report
-                .transactions
-                .iter()
-                .rev()
-                .find(|result| result.status.state == State::Completed);
-            let label = backup.map_or_else(
-                || "Sem backup na sessão".into(),
-                |backup| format!("{} arquivos verificados", backup.progress.verified_files),
-            );
-            self.metric(
-                right,
-                summary_top,
-                column,
-                "Backup",
-                &label,
-                if backup.is_some() {
-                    theme::SUCCESS
-                } else {
-                    MUTED
-                },
+                available,
             );
         }
+    }
+
+    fn empty(&mut self, bounds: RECT, symbol: Icon, title: &str, detail: &str) {
+        self.panel(bounds);
+        let center = (bounds.left + bounds.right) / 2;
+        let top = (bounds.top + bounds.bottom) / 2 - 45;
+        surface(self.dc, rect(center - 16, top, 32, 32), ELEVATED, BORDER, 7);
+        symbol.draw(self.dc, center - 8, top + 8, 16, MUTED);
+        for (caption, font, y, color) in [
+            (title, self.theme.emphasis(), top + 37, TEXT),
+            (detail, self.theme.body(), top + 65, MUTED),
+        ] {
+            text(
+                self.dc,
+                font,
+                rect(bounds.left + 12, y, bounds.right - bounds.left - 24, 24),
+                caption,
+                color,
+                LINE | DT_CENTER,
+            );
+        }
+    }
+
+    fn candidate(
+        &mut self,
+        bounds: RECT,
+        installation: &archrescue_windows_detection::Installation,
+    ) {
+        let px = |value| self.area.px(value);
+        let x = bounds.left;
+        let y = bounds.top;
+        let width = bounds.right - x;
+        let badge = width >= px(510);
+        self.dc
+            .gradient(bounds, CANDIDATE_START, PANEL, CANDIDATE_BORDER, px(12));
+        self.icon_tile(deployment::DEPLOY, x + px(18), y + px(21));
+        self.heading(
+            rect(
+                x + px(68),
+                y + px(15),
+                width - px(if badge { 260 } else { 82 }),
+                px(32),
+            ),
+            "Windows offline",
+        );
+        self.mono_line(
+            rect(
+                x + px(68),
+                y + px(43),
+                width - px(if badge { 260 } else { 82 }),
+                px(26),
+            ),
+            &display_path(&installation.path),
+            MUTED,
+        );
+        if badge {
+            self.badge(
+                rect(x + width - px(190), y + px(29), px(172), px(26)),
+                "Candidato corroborado",
+            );
+        }
+        fill(
+            self.dc,
+            rect(x + px(18), y + px(77), width - px(36), 1),
+            BORDER,
+        );
+
+        for (index, (label, value)) in [
+            ("Kernel", installation.architecture.as_deref()),
+            (
+                "Carregador UEFI",
+                installation.loader_architecture.as_deref(),
+            ),
+            ("Versão do kernel", installation.version.as_deref()),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            self.pair(
+                x,
+                y + px(84 + index as i32 * 27),
+                width,
+                label,
+                value.unwrap_or("Indisponível"),
+                index == 2,
+            );
+        }
+    }
+
+    fn badge(&mut self, bounds: RECT, caption: &str) {
+        surface(self.dc, bounds, BADGE, CANDIDATE_BORDER, 5);
+        text(
+            self.dc,
+            self.theme.body(),
+            bounds,
+            caption,
+            NAV_TEXT,
+            LINE | DT_CENTER,
+        );
+    }
+
+    fn mono_line(&mut self, bounds: RECT, caption: &str, color: COLORREF) {
+        text(self.dc, self.theme.mono(), bounds, caption, color, LINE);
+    }
+
+    fn pair(&mut self, x: i32, y: i32, width: i32, label: &str, value: &str, mono: bool) {
+        let inset = self.area.px(18);
+        let split = width * 42 / 100;
+        let row = self.area.px(27);
+        self.line(rect(x + inset, y, split - inset - 4, row), label, MUTED);
+        let value_area = rect(x + split, y, width - split - inset, row);
+        if mono {
+            self.mono_line(value_area, value, TEXT);
+        } else {
+            self.line(value_area, value, TEXT);
+        }
+    }
+
+    fn volume_row(&mut self, x: i32, y: i32, width: i32, volume: &Volume) {
+        let path = volume
+            .paths
+            .first()
+            .map_or_else(|| "Sem caminho".into(), |path| display_path(path));
+        let detail = match (volume.filesystem.as_deref(), &volume.space) {
+            (Some(fs), Some(_)) => format!("{fs} · espaço consultado"),
+            (Some(fs), None) => format!("{fs} · espaço indisponível"),
+            (None, _) => "Sistema de arquivos indisponível".into(),
+        };
+        self.pair(x, y, width, &path, &detail, false);
     }
 
     fn icon_tile(&mut self, symbol: usize, x: i32, y: i32) {
-        surface(self.dc, rect(x, y, 28, 28), SELECTED, BORDER, 7);
-        icon(self.dc, symbol, x + 7, y + 7, ACCENT);
+        let size = self.area.px(41);
+        surface(
+            self.dc,
+            rect(x, y, size, size),
+            SELECTED,
+            SELECTED_BORDER,
+            9,
+        );
+        let icon_size = self.area.px(19);
+        let inset = (size - icon_size) / 2;
+        Icon::page(symbol).draw(self.dc, x + inset, y + inset, icon_size, ACCENT);
     }
 
-    fn disk(&mut self, disk: &Disk, x: i32, top: i32, width: i32) {
-        self.panel(rect(x, top, width, 120));
-        self.icon_tile(DISKS, x + 12, top + 10);
+    fn disk<'a>(
+        &mut self,
+        disk: &Disk,
+        volumes: impl Iterator<Item = &'a Volume>,
+        x: i32,
+        top: i32,
+        width: i32,
+        available: i32,
+    ) {
+        let px = |value| self.area.px(value);
+        let volumes = volumes.take(3).collect::<Vec<_>>();
+        let access = if !disk.errors.is_empty() {
+            Some((
+                format!("Consulta parcial · {} erros", disk.errors.len()),
+                WARNING,
+            ))
+        } else if disk.read_only == Some(true) {
+            Some(("Somente leitura".into(), theme::SUCCESS))
+        } else {
+            None
+        };
+        let rows = volumes.len() as i32 + i32::from(access.is_some());
+        let height = px(202 + rows * 27).min(available);
+        self.panel(rect(x, top, width, height));
+        let inset = px(18);
+        self.icon_tile(DISKS, x + inset, top + px(19));
         let name = disk
             .number
             .map_or_else(|| "Disco".into(), |number| format!("Disco {number}"));
         let capacity = disk
             .capacity
             .map_or_else(|| "Capacidade indisponível".into(), bytes);
-        let style = disk.style.as_deref().unwrap_or("—");
-        self.heading(rect(x + 48, top + 7, width - 112, 24), &name);
-        self.line(rect(x + 48, top + 30, width - 60, 17), &capacity, MUTED);
-        let badge_x = x + width - 60;
-        surface(
-            self.dc,
-            rect(badge_x, top + 12, 48, 23),
-            SELECTED,
-            BORDER,
-            6,
+        self.heading(
+            rect(x + px(68), top + px(13), width - px(126), px(32)),
+            &name,
         );
-        text(
-            self.dc,
-            self.theme.body(),
-            rect(badge_x + 2, top + 12, 44, 23),
-            style,
-            ACCENT,
-            LINE | DT_CENTER,
+        self.line(
+            rect(x + px(68), top + px(42), width - px(126), px(21)),
+            &capacity,
+            MUTED,
+        );
+        self.badge(
+            rect(x + width - px(63), top + px(27), px(45), px(26)),
+            disk.style.as_deref().unwrap_or("—"),
         );
 
-        let span = width - 24;
-        let bar = rect(x + 12, top + 55, span, 11);
+        let span = width - 2 * inset;
+        let bar = rect(x + inset, top + px(87), span, px(17));
         surface(self.dc, bar, INPUT, BORDER, 4);
         if let Some(capacity) = disk.capacity.filter(|&size| size > 0) {
+            let to_pixel = |position: u64| {
+                (u128::from(position.min(capacity)) * span as u128 / u128::from(capacity)) as i32
+            };
             for partition in &disk.partitions {
-                let to_pixel = |position: u64| {
-                    (u128::from(position.min(capacity)) * span as u128 / u128::from(capacity))
-                        as i32
-                };
                 let left = to_pixel(partition.offset);
                 let right = to_pixel(partition.offset.saturating_add(partition.length));
                 if right > left {
-                    let color = if partition.efi {
-                        theme::SUCCESS
-                    } else {
-                        ACCENT_END
-                    };
-                    fill(
+                    let (_, color) = partition_style(partition);
+                    let length = (right - left - i32::from(left > 0) * 2).max(1);
+                    surface(
                         self.dc,
-                        rect(bar.left + left, bar.top + 2, right - left, 7),
+                        rect(bar.left + left, bar.top, length, px(17)),
                         color,
+                        color,
+                        4,
                     );
                 }
             }
         }
-        let descriptor = match disk.partitions.len() {
-            0 => "Sem extensões de partição observadas".into(),
-            1 => "1 partição observada".into(),
-            count => format!("{count} partições observadas"),
-        };
-        self.line(rect(x + 12, top + 72, width - 24, 19), &descriptor, MUTED);
-        let access = if !disk.errors.is_empty() {
-            (
-                format!("Consulta parcial · {} erros", disk.errors.len()),
-                WARNING,
-            )
-        } else if disk.read_only == Some(true) {
-            ("Somente leitura".into(), theme::SUCCESS)
-        } else if disk.partitions.iter().any(|partition| partition.efi) {
-            ("Partição EFI observada".into(), ACCENT)
-        } else {
+
+        if height < px(152) {
             return;
-        };
-        self.line(rect(x + 12, top + 94, width - 24, 18), &access.0, access.1);
+        }
+        if disk.partitions.is_empty() {
+            self.line(
+                rect(x + inset, top + px(118), span, px(26)),
+                "Sem partições observadas",
+                MUTED,
+            );
+        } else {
+            let columns = if width >= px(540) { 4 } else { 2 };
+            let step = span / columns;
+            for (index, partition) in disk.partitions.iter().take(columns as usize).enumerate() {
+                let (label, color) = partition_style(partition);
+                let x = x + inset + index as i32 * step;
+                surface(self.dc, rect(x, top + px(130), 7, 7), color, color, 2);
+                self.line(
+                    rect(x + 11, top + px(120), step - 15, px(27)),
+                    &format!("{label} · {}", bytes(partition.length)),
+                    MUTED,
+                );
+            }
+        }
+
+        if height >= px(167) {
+            fill(self.dc, rect(x + inset, top + px(167), span, 1), BORDER);
+        }
+        for (index, volume) in volumes.into_iter().enumerate() {
+            let offset = px(188 + index as i32 * 27);
+            if offset + px(27) <= height {
+                self.volume_row(x, top + offset, width, volume);
+            }
+        }
+        if let Some((label, color)) = access {
+            let y = top + height - px(28);
+            if height >= px(215) {
+                self.line(rect(x + inset, y, span, px(23)), &label, color);
+            }
+        }
     }
 
-    fn backup(&mut self, app: &App, top: i32, bottom: i32) {
+    fn backup(&mut self, app: &App) {
         let x = self.area.left();
         let width = self.area.body_width();
-        let left = self.area.left_column();
-        let right = x + left + 12;
-        let right_width = width - left - 12;
+        let (left, right, right_width) = self.area.columns(60);
 
-        self.panel(rect(x, self.area.destination() - 9, width, 81));
+        let top = self.area.backup_top(app);
+        let form = self.area.backup_form(app);
+        let bottom = form - self.area.gap();
+        self.panel(rect(x, form, width, 105));
+        self.field(rect(x + 13, form + 28, width - 26, 30));
+        if app.preview.is_none() {
+            self.field(rect(x, self.area.body_top(DASHBOARD) + 18, width - 156, 30));
+        }
+
         if let Some(preview) = &app.preview {
             surface(
                 self.dc,
@@ -431,8 +602,8 @@ impl Cards<'_, '_> {
                 (bottom - top - 68).min(154),
             ));
             self.heading(rect(right + 11, top + 72, right_width - 22, 25), "Seleção");
-            if let Some(progress) = app.progress.as_ref().filter(|_| bottom - top >= 270) {
-                let y = bottom - 58;
+            if let Some(progress) = &app.progress {
+                let y = self.area.body_top(DASHBOARD);
                 self.dc
                     .gradient(rect(x, y, width, 58), SELECTED, PANEL, BORDER, 10);
                 self.heading(rect(x + 13, y + 5, left - 26, 24), "Backup em andamento");
@@ -453,7 +624,6 @@ impl Cards<'_, '_> {
                 );
             }
         } else {
-            self.panel(rect(x, top, width, bottom - top));
             let checkpoints = app.checkpoints.as_ref();
             let empty = checkpoints.map_or(app.entries.is_empty(), Vec::is_empty);
             if empty {
@@ -473,28 +643,48 @@ impl Cards<'_, '_> {
                         "Confirme o caminho, use Abrir e selecione os itens.",
                     )
                 };
-                self.notice(
-                    rect(x + 12, top + 13, width - 24, 77),
+                self.empty(
+                    rect(x, top, left, bottom - top),
+                    Icon::History,
                     title,
                     detail,
-                    (ELEVATED, ACCENT),
+                );
+                self.panel(rect(right, top, right_width, 115));
+                self.heading(
+                    rect(right + 12, top + 9, right_width - 24, 28),
+                    "Prepare o destino",
+                );
+                self.paragraph(
+                    rect(right + 12, top + 44, right_width - 24, 60),
+                    "Informe uma pasta existente em outro disco e escolha a operação.",
+                    MUTED,
                 );
                 return;
             }
+            self.panel(rect(x, top, left, bottom - top));
+            self.panel(rect(right, top, right_width, (bottom - top).min(156)));
+            self.heading(
+                rect(right + 12, top + 9, right_width - 24, 28),
+                if checkpoints.is_some() {
+                    "Checkpoint selecionado"
+                } else {
+                    "Itens selecionados"
+                },
+            );
             let title = if checkpoints.is_some() {
                 "Operações no destino"
             } else {
                 "Arquivos e pastas"
             };
-            self.heading(rect(x + 12, top + 6, width - 24, 23), title);
-            fill(self.dc, rect(x + 11, top + 35, width - 22, 24), ELEVATED);
+            self.heading(rect(x + 12, top + 6, left - 24, 23), title);
+            fill(self.dc, rect(x + 11, top + 35, left - 22, 24), ELEVATED);
             let header = if checkpoints.is_some() {
                 ("Pasta da operação", "Estado registrado", "")
             } else {
                 ("Nome", "Tipo", "Tamanho / acesso")
             };
             let row_x = x + 19;
-            let row_width = width - 38;
+            let row_width = left - 38;
             self.line(
                 rect(row_x, top + 35, row_width * 57 / 100, 24),
                 header.0,
@@ -518,19 +708,25 @@ impl Cards<'_, '_> {
         }
     }
 
-    fn verify(&mut self, app: &App, top: i32, bottom: i32) {
+    fn verify(&mut self, app: &App, bottom: i32) {
         let x = self.area.left();
-        let width = self.area.body_width();
+        let (left, right, right_width) = self.area.columns(60);
+        let top = self.area.body_top(DASHBOARD);
         let Some(backup) = app
             .report
             .as_ref()
             .and_then(|report| report.transactions.last())
         else {
-            self.notice(
-                rect(x, 127, width, 81),
+            self.empty(
+                rect(x, top, left, 175),
+                Icon::Check,
                 "Nenhum backup nesta sessão",
                 "Inicie ou retome um backup para obter um resultado verificável.",
-                (PANEL, MUTED),
+            );
+            self.panel(rect(right, top, right_width, 148));
+            self.heading(
+                rect(right + 13, top + 8, right_width - 26, 28),
+                "Nova verificação",
             );
             return;
         };
@@ -540,8 +736,10 @@ impl Cards<'_, '_> {
             State::Failed | State::Blocked => (ERROR_SURFACE, CRITICAL),
             _ => (PANEL, MUTED),
         };
+
+        self.panel(rect(x, top, left, (bottom - top).min(365)));
         self.notice(
-            rect(x, 127, width, 58),
+            rect(x + 11, top + 11, left - 22, 62),
             state_label(backup.status.state),
             &backup.status.operation_id,
             tone,
@@ -551,34 +749,37 @@ impl Cards<'_, '_> {
             ("Gravados", backup.progress.acknowledged_bytes),
             ("Verificados", backup.progress.verified_bytes),
         ];
-        let column = (width - 16) / 3;
+        let column = (left - 38) / 3;
         for (index, (label, value)) in metrics.into_iter().enumerate() {
             self.metric(
-                x + index as i32 * (column + 8),
-                191,
+                x + 11 + index as i32 * (column + 8),
+                top + 80,
                 column,
                 label,
                 &bytes(value),
                 if index == 2 { tone.1 } else { TEXT },
             );
         }
-        self.panel(rect(x, top, width, bottom - top));
+        self.panel(rect(right, top, right_width, 148));
         self.heading(
-            rect(x + 13, top + 8, width - 26, 26),
-            if app.technician {
-                "Evidências por arquivo"
-            } else {
-                "Último resultado"
-            },
+            rect(right + 13, top + 8, right_width - 26, 28),
+            "Nova verificação",
         );
+        self.paragraph(
+            rect(right + 13, top + 40, right_width - 26, 52),
+            "A releitura confere o conteúdo gravado com os hashes do manifesto.",
+            MUTED,
+        );
+    }
+
+    fn field(&mut self, bounds: RECT) {
+        surface(self.dc, bounds, INPUT, BORDER, 7);
     }
 
     fn report(&mut self, app: &App, top: i32, bottom: i32) {
         let x = self.area.left();
         let width = self.area.body_width();
-        let left = self.area.left_column();
-        let right = x + left + 12;
-        let right_width = width - left - 12;
+        let (left, right, right_width) = self.area.columns(60);
 
         if let Some(report) = &app.report {
             let findings = report.diagnosis.findings.len()
@@ -597,7 +798,7 @@ impl Cards<'_, '_> {
             for (index, (label, value)) in metrics.into_iter().enumerate() {
                 self.metric(
                     x + index as i32 * (column + 8),
-                    129,
+                    self.area.body_top(DASHBOARD),
                     column,
                     label,
                     &value.to_string(),
@@ -606,7 +807,7 @@ impl Cards<'_, '_> {
             }
         } else {
             self.notice(
-                rect(x, 129, width, 60),
+                rect(x, self.area.body_top(DASHBOARD), width, 60),
                 "Sessão sem dados para exportar",
                 "Atualize o diagnóstico para reunir as evidências.",
                 (PANEL, MUTED),
@@ -623,6 +824,7 @@ impl Cards<'_, '_> {
             },
         );
         self.panel(rect(right, top, right_width, 147));
+        self.field(rect(right + 13, top + 64, right_width - 26, 28));
         self.heading(
             rect(right + 13, top + 7, right_width - 26, 26),
             "Destino da exportação",
@@ -660,10 +862,11 @@ impl Cards<'_, '_> {
 
     fn repair(&mut self, app: &App, top: i32, bottom: i32) {
         let x = self.area.left();
-        let left = self.area.left_column();
-        let right = x + left + 12;
-        let right_width = self.area.body_width() - left - 12;
+        let (left, right, right_width) = self.area.columns(60);
         self.panel(rect(x, top, left, 200));
+        for offset in [64, 120] {
+            self.field(rect(x + 13, top + offset, left - 26, 28));
+        }
         self.heading(rect(x + 13, top + 7, left - 26, 26), "Entradas da prévia");
         self.panel(rect(x, top + 210, left, bottom - top - 210));
         self.heading(
@@ -692,11 +895,20 @@ impl Cards<'_, '_> {
 
     fn deployment(&mut self, app: &App, top: i32, bottom: i32) {
         let x = self.area.left();
-        let left = self.area.left_column();
-        let right = x + left + 12;
         let width = self.area.body_width();
-        let right_width = width - left - 12;
-        self.panel(rect(x, 126, width, 160));
+        let (left, right, right_width) = self.area.columns(60);
+        let form_top = self.area.body_top(DASHBOARD);
+        self.panel(rect(x, form_top, width, 160));
+        if !deployment::media_loaded(app) {
+            self.notice(
+                rect(x, top, left, 75),
+                "Execução da instalação indisponível",
+                "Informe um WIM, ESD ou a raiz de uma mídia montada.",
+                (METRIC, WARNING),
+            );
+            self.panel(rect(right, top, right_width, 75));
+            return;
+        }
         self.panel(rect(x, top, left, bottom - top));
         self.heading(
             rect(x + 13, top + 7, left - 26, 26),
@@ -730,11 +942,12 @@ impl Cards<'_, '_> {
 
     fn handoff(&mut self, app: &App) {
         let x = self.area.left();
-        let left = self.area.left_column();
-        let right = x + left + 12;
-        let right_width = self.area.body_width() - left - 12;
-        let top = 127;
+        let (left, right, right_width) = self.area.columns(60);
+        let top = self.area.body_top(DASHBOARD);
         self.panel(rect(x, top, left, 196));
+        for offset in [60, 116] {
+            self.field(rect(x + 13, top + offset, left - 26, 29));
+        }
         self.heading(
             rect(x + 13, top + 7, left - 26, 26),
             "Referência de restauração",
@@ -790,5 +1003,28 @@ fn bytes(value: u64) -> String {
         format!("{:.1} MiB", value as f64 / (1_u64 << 20) as f64)
     } else {
         format!("{value} bytes")
+    }
+}
+
+fn display_path(path: &std::path::Path) -> String {
+    let path = path.display().to_string();
+    if let Some(unc) = path.strip_prefix(r"\\?\UNC\") {
+        return format!(r"\\{unc}");
+    }
+    path.strip_prefix(r"\\?\")
+        .filter(|rest| rest.as_bytes().get(1) == Some(&b':'))
+        .unwrap_or(&path)
+        .to_owned()
+}
+
+fn partition_style(partition: &Partition) -> (&str, COLORREF) {
+    if partition.efi {
+        return ("ESP", PARTITION_EFI);
+    }
+    match partition.kind.as_str() {
+        "e3c9e316-0b5c-4db8-817d-f92df00215ae" => ("Reservada", PARTITION_RESERVED),
+        "de94bba4-06d1-4d40-a16a-bfd50179d6ac" | "mbr:27" => ("Recuperação", PARTITION_RECOVERY),
+        "ebd0a0a2-b9e5-4433-87c0-68b6b72699c7" | "mbr:07" => ("Dados básicos", PARTITION_DATA),
+        _ => ("Partição", PARTITION_RESERVED),
     }
 }

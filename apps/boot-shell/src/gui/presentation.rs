@@ -5,9 +5,11 @@ use windows_sys::Win32::UI::Controls::{ODS_DISABLED, ODS_FOCUS, ODS_SELECTED};
 use super::{layout::Layout, theme::*, *};
 
 mod cards;
+mod icons;
+
+use icons::Icon;
 
 use super::renderer::{Frame, Scene};
-use tiny_skia::PathBuilder;
 
 fn fill(scene: &mut Scene<'_>, bounds: RECT, color: COLORREF) {
     scene.fill(bounds, color);
@@ -86,13 +88,19 @@ unsafe fn button(
     let primary = matches!(
         id,
         PREVIEW | COPY | RESUME | EXPORT | VERIFY | REPAIR | pages::SCAN
-    ) || deployment::primary(id);
+    ) || deployment::primary(id)
+        || id == IDYES as usize;
     let disabled = item.itemState & ODS_DISABLED != 0;
     let pressed = item.itemState & ODS_SELECTED != 0;
-    let accent = (primary || id == NEXT && selected_page == DASHBOARD) && !disabled;
+    let accent = primary && !disabled;
     let focused = item.itemState & ODS_FOCUS != 0;
+    let modal = id == IDYES as usize || id == IDNO as usize;
     let backdrop = if nav {
         SIDEBAR
+    } else if modal {
+        MODAL
+    } else if matches!(id, PREVIOUS | NEXT) {
+        FOOTER
     } else if matches!(
         id,
         OPEN | UP | DISK_DETAILS | VERIFY | pages::SCAN | pages::PROTECT | pages::REPORT_ACTION
@@ -125,7 +133,13 @@ unsafe fn button(
 
     scene.clear(backdrop);
     if !nav || selected || pressed || hovered || focused {
-        let border = if focused || accent { ACCENT } else { BORDER };
+        let border = if focused || accent {
+            ACCENT
+        } else if selected {
+            SELECTED_BORDER
+        } else {
+            BORDER
+        };
         let end = if accent && !pressed {
             ACCENT_END
         } else {
@@ -133,7 +147,9 @@ unsafe fn button(
         };
         scene.gradient(bounds, color, end, border, 8);
     }
-    if focused && accent {
+    if focused && modal {
+        scene.focus_outline(bounds, ACCENT_HOVER);
+    } else if focused && accent {
         scene.focus_outline(rect(3, 3, bounds.right - 6, bounds.bottom - 6), ON_ACCENT);
     }
     if selected {
@@ -149,31 +165,49 @@ unsafe fn button(
         );
     }
 
-    let mut label_area = bounds;
-    label_area.left += if nav { 32 } else { 7 };
-    label_area.right -= 7;
-    if nav {
-        let symbol = page.unwrap_or(match id {
-            TECHNICIAN => INTEGRITY_PAGE,
-            REFRESH => deployment::RESTORE,
-            CONSOLE => deployment::DEPLOY,
-            _ => VERIFY_PAGE,
-        });
-        icon(
-            scene,
-            symbol,
-            bounds.left + 10,
-            (bounds.top + bounds.bottom - 14) / 2,
-            if selected { ACCENT } else { MUTED },
+    if modal && focused && !accent {
+        scene.focus_outline(
+            rect(1, 1, bounds.right - 2, bounds.bottom - 2),
+            ACCENT_HOVER,
         );
     }
+
+    let mut label_area = bounds;
+    label_area.left += if nav { 35 } else { 7 };
+    label_area.right -= 7;
     let foreground = if accent {
         ON_ACCENT
-    } else if disabled || nav && !selected {
+    } else if disabled {
+        DISABLED
+    } else if selected {
+        NAV_TEXT
+    } else if nav {
         MUTED
     } else {
         TEXT
     };
+    let symbol = page.map(Icon::page).or(match id {
+        TECHNICIAN => Some(Icon::Sliders),
+        REFRESH => Some(Icon::Refresh),
+        CONSOLE => Some(Icon::Terminal),
+        CANCEL => Some(Icon::Stop),
+        PREVIOUS => Some(Icon::Left),
+        NEXT => Some(Icon::Right),
+        id if id == IDYES as usize => Some(Icon::Right),
+        _ => None,
+    });
+    if let Some(symbol) = symbol {
+        if !nav {
+            label_area.left += 13;
+        }
+        symbol.draw(
+            scene,
+            bounds.left + 10,
+            (bounds.top + bounds.bottom - 16) / 2,
+            16,
+            foreground,
+        );
+    }
     text(
         scene,
         theme.body(),
@@ -185,46 +219,26 @@ unsafe fn button(
 }
 
 unsafe fn list_item(scene: &mut Scene<'_>, item: &DRAWITEMSTRUCT, bounds: RECT, theme: &Theme) {
-    let combo = item.CtlType == ODT_COMBOBOX;
     let selected = item.itemState & ODS_SELECTED != 0;
-    let background = if selected {
-        SELECTED
-    } else if !combo && item.itemID % 2 == 1 {
-        ELEVATED
-    } else if combo {
-        INPUT
-    } else {
-        PANEL
-    };
-    scene.clear(if combo { INPUT } else { PANEL });
-    if selected || !combo && item.itemID % 2 == 1 {
+    let alternating = item.itemID % 2 == 1;
+    scene.clear(PANEL);
+    if selected || alternating {
+        let background = if selected { SELECTED } else { METRIC };
         scene.surface(bounds, background, background, 5);
     }
 
-    let label = if item.itemID == u32::MAX {
-        match item.CtlID as usize {
-            pages::ROOT => "Selecione a origem".to_owned(),
-            id => deployment::empty_choice(id).to_owned(),
-        }
-    } else {
-        let (measure, read) = if combo {
-            (CB_GETLBTEXTLEN, CB_GETLBTEXT)
-        } else {
-            (LB_GETTEXTLEN, LB_GETTEXT)
-        };
-        let length = SendMessageW(item.hwndItem, measure, item.itemID as usize, 0);
-        if length < 0 {
-            return;
-        }
-        let mut buffer = vec![0u16; length as usize + 1];
-        SendMessageW(
-            item.hwndItem,
-            read,
-            item.itemID as usize,
-            buffer.as_mut_ptr() as isize,
-        );
-        String::from_utf16_lossy(&buffer[..length as usize])
-    };
+    let length = SendMessageW(item.hwndItem, LB_GETTEXTLEN, item.itemID as usize, 0);
+    if length < 0 {
+        return;
+    }
+    let mut buffer = vec![0u16; length as usize + 1];
+    SendMessageW(
+        item.hwndItem,
+        LB_GETTEXT,
+        item.itemID as usize,
+        buffer.as_mut_ptr() as isize,
+    );
+    let label = String::from_utf16_lossy(&buffer[..length as usize]);
 
     let color = if label.starts_with("CRÍTICO") {
         CRITICAL
@@ -245,6 +259,189 @@ unsafe fn list_item(scene: &mut Scene<'_>, item: &DRAWITEMSTRUCT, bounds: RECT, 
     }
     if item.itemState & ODS_FOCUS != 0 {
         scene.focus_outline(bounds, ACCENT);
+    }
+}
+
+pub fn scrollbar(scene: &mut Scene<'_>, height: i32, top: i32, length: i32, color: COLORREF) {
+    surface(scene, rect(5, 3, 7, height - 6), INPUT, INPUT, 4);
+    surface(scene, rect(5, top, 7, length), color, color, 4);
+}
+
+pub struct ConfirmationCard<'a> {
+    pub bounds: RECT,
+    pub title: &'a str,
+    pub question: &'a str,
+    pub labels: [&'a str; 2],
+    pub rows: [i32; 2],
+    pub notice: (&'a str, &'a str),
+}
+
+pub fn confirmation(
+    scene: &mut Scene<'_>,
+    area: &Layout,
+    theme: &Theme,
+    card: ConfirmationCard<'_>,
+) {
+    let px = |reference| area.px(reference);
+    let bounds = card.bounds;
+    surface(scene, bounds, MODAL, MODAL_BORDER, px(15));
+
+    let x = bounds.left + px(27);
+    let width = bounds.right - bounds.left - px(54);
+    let y = bounds.top;
+    surface(
+        scene,
+        rect(x, y + px(26), px(41), px(41)),
+        SELECTED,
+        SELECTED_BORDER,
+        px(10),
+    );
+    Icon::Shield.draw(scene, x + px(11), y + px(37), px(19), ACCENT);
+    text(
+        scene,
+        theme.brand(),
+        rect(x + px(53), y + px(26), width - px(53), px(41)),
+        card.title,
+        TEXT,
+        LINE,
+    );
+    text(
+        scene,
+        theme.body(),
+        rect(x, y + px(77), width, px(26)),
+        card.question,
+        TEXT,
+        LINE,
+    );
+
+    let mut top = y + px(112);
+    for (label, height) in card.labels.into_iter().zip(card.rows) {
+        text(
+            scene,
+            theme.body(),
+            rect(x, top, px(132), px(20)),
+            label,
+            MUTED,
+            LINE,
+        );
+        top += height;
+    }
+
+    let notice_top = top + px(9);
+    surface(
+        scene,
+        rect(x, notice_top, width, px(67)),
+        METRIC,
+        BORDER,
+        px(9),
+    );
+    Icon::Info.draw(scene, x + px(15), notice_top + px(15), px(16), MUTED);
+    text(
+        scene,
+        theme.body(),
+        rect(x + px(42), notice_top + px(9), width - px(55), px(27)),
+        card.notice.0,
+        TEXT,
+        LINE,
+    );
+    text(
+        scene,
+        theme.body(),
+        rect(x + px(42), notice_top + px(37), width - px(55), px(29)),
+        card.notice.1,
+        MUTED,
+        DT_WORDBREAK | DT_NOPREFIX,
+    );
+}
+
+pub fn select_field(
+    scene: &mut Scene<'_>,
+    theme: &Theme,
+    bounds: RECT,
+    label: &str,
+    focused: bool,
+    enabled: bool,
+    expanded: bool,
+) {
+    scene.clear(PANEL);
+    let border = if focused || expanded { ACCENT } else { BORDER };
+    surface(scene, bounds, INPUT, border, 7);
+    text(
+        scene,
+        theme.body(),
+        rect(9, 0, bounds.right - 36, bounds.bottom),
+        label,
+        if enabled { TEXT } else { DISABLED },
+        LINE,
+    );
+    Icon::Down.draw(
+        scene,
+        bounds.right - 24,
+        (bounds.bottom - 16) / 2,
+        16,
+        if expanded { ACCENT } else { MUTED },
+    );
+}
+
+pub struct SelectOptions<'a> {
+    pub labels: &'a [String],
+    pub selected: Option<usize>,
+    pub highlighted: Option<usize>,
+    pub scrollbar: Option<(i32, i32)>,
+    pub inset: i32,
+    pub row: i32,
+    pub dragging: bool,
+}
+
+pub fn select_popup(
+    scene: &mut Scene<'_>,
+    theme: &Theme,
+    bounds: RECT,
+    options: SelectOptions<'_>,
+) {
+    scene.clear(BACKGROUND);
+    surface(scene, bounds, PANEL, SELECTED_BORDER, 7);
+    let scrollbar_width = if options.scrollbar.is_some() { 12 } else { 0 };
+    let width = bounds.right - 2 * options.inset - scrollbar_width;
+    for (index, label) in options.labels.iter().enumerate() {
+        let top = options.inset + index as i32 * options.row;
+        let selected = options.selected == Some(index);
+        let highlighted = options.highlighted == Some(index);
+        if selected || highlighted {
+            let color = if highlighted { SELECTED } else { HOVER };
+            let border = if highlighted { SELECTED_BORDER } else { color };
+            surface(
+                scene,
+                rect(options.inset, top, width, options.row),
+                color,
+                border,
+                5,
+            );
+        }
+        text(
+            scene,
+            theme.body(),
+            rect(options.inset + 7, top, width - 14, options.row),
+            label,
+            if selected { NAV_TEXT } else { TEXT },
+            LINE,
+        );
+    }
+    if let Some((length, top)) = options.scrollbar {
+        let x = bounds.right - 9;
+        surface(
+            scene,
+            rect(x, options.inset, 6, bounds.bottom - 2 * options.inset),
+            INPUT,
+            INPUT,
+            3,
+        );
+        let color = if options.dragging {
+            ACCENT
+        } else {
+            SCROLL_THUMB
+        };
+        surface(scene, rect(x, top, 6, length), color, color, 3);
     }
 }
 
@@ -311,68 +508,7 @@ fn file_row(dc: &mut Scene<'_>, theme: &Theme, area: RECT, label: &str) {
 }
 
 fn icon(scene: &mut Scene<'_>, section: usize, x: i32, y: i32, color: COLORREF) {
-    // Stroke coordinates use a 14-pixel grid.
-    let paths: &[&[(i32, i32)]] = match section {
-        deployment::DEPLOY => &[
-            &[(0, 0), (6, 0), (6, 6), (0, 6), (0, 0)],
-            &[(9, 0), (14, 0), (14, 14), (9, 14), (9, 0)],
-            &[(0, 9), (6, 9), (6, 14), (0, 14), (0, 9)],
-        ],
-        DIAGNOSIS => &[&[(0, 7), (4, 7), (6, 2), (8, 12), (10, 7), (14, 7)]],
-        INTEGRITY_PAGE => &[
-            &[(7, 0), (13, 3), (13, 9), (7, 14), (1, 9), (1, 3), (7, 0)],
-            &[(4, 7), (6, 9), (10, 5)],
-        ],
-        DASHBOARD | DISKS => &[
-            &[(0, 2), (14, 2), (14, 12), (0, 12), (0, 2)],
-            &[(0, 7), (14, 7)],
-            &[(10, 9), (12, 9)],
-        ],
-        BACKUP => &[
-            &[(1, 8), (1, 14), (13, 14), (13, 8)],
-            &[(7, 0), (7, 10)],
-            &[(3, 6), (7, 10), (11, 6)],
-        ],
-        REPAIR_PAGE => &[
-            &[(7, 1), (7, 7), (13, 7)],
-            &[(4, 2), (1, 5), (1, 10), (4, 13), (10, 13), (13, 10)],
-        ],
-        VERIFY_PAGE => &[
-            &[
-                (7, 0),
-                (12, 2),
-                (14, 7),
-                (12, 12),
-                (7, 14),
-                (2, 12),
-                (0, 7),
-                (2, 2),
-                (7, 0),
-            ],
-            &[(4, 7), (6, 9), (10, 5)],
-        ],
-        deployment::RESTORE => &[&[(0, 4), (5, 4), (7, 6), (14, 6), (14, 13), (0, 13), (0, 4)]],
-        _ => &[
-            &[(2, 0), (10, 0), (13, 3), (13, 14), (2, 14), (2, 0)],
-            &[(5, 6), (10, 6)],
-            &[(5, 10), (10, 10)],
-        ],
-    };
-
-    let mut builder = PathBuilder::new();
-    for path in paths {
-        let [(start_x, start_y), rest @ ..] = *path else {
-            continue;
-        };
-
-        builder.move_to((x + start_x) as f32 + 0.5, (y + start_y) as f32 + 0.5);
-        for &(px, py) in rest {
-            builder.line_to((x + px) as f32 + 0.5, (y + py) as f32 + 0.5);
-        }
-    }
-    if let Some(path) = builder.finish() {
-        scene.stroke(&path, color, 1.4);
-    }
+    Icon::page(section).draw(scene, x, y, 16, color);
 }
 
 pub unsafe fn paint(hwnd: HWND, state: &WindowState) {
@@ -414,29 +550,40 @@ pub unsafe fn paint(hwnd: HWND, state: &WindowState) {
 
 fn scene(dc: &mut Scene<'_>, area: &Layout, theme: &Theme, app: &App) {
     dc.clear(BACKGROUND);
+    let px = |reference| area.px(reference);
     fill(dc, rect(0, 0, area.rail, area.height), SIDEBAR);
-    fill(dc, rect(area.rail - 1, 0, 1, area.height), BORDER);
-    fill(dc, rect(14, 312, area.rail - 28, 1), BORDER);
-    fill(dc, rect(14, area.height - 132, area.rail - 28, 1), BORDER);
+    fill(dc, rect(area.rail - 1, 0, 1, area.height), SHELL_LINE);
+    fill(
+        dc,
+        rect(px(23), area.navigation(6).0 + px(58), area.rail - px(46), 1),
+        SHELL_LINE,
+    );
+    fill(
+        dc,
+        rect(px(17), area.utilities() - px(10), area.rail - px(34), 1),
+        SHELL_LINE,
+    );
 
-    dc.gradient(rect(15, 20, 30, 30), ACCENT, ACCENT_END, ACCENT, 9);
-    icon(dc, INTEGRITY_PAGE, 23, 28, ON_ACCENT);
+    dc.gradient(
+        rect(px(23), px(30), px(38), px(38)),
+        ACCENT_HOVER,
+        ACCENT_END,
+        ACCENT,
+        px(11),
+    );
+    Icon::Brand.draw(dc, px(32), px(39), px(20), ON_ACCENT);
     text(
         dc,
-        if area.rail < 200 {
-            theme.body()
-        } else {
-            theme.emphasis()
-        },
-        rect(53, 16, area.rail - 57, 25),
+        theme.brand(),
+        rect(px(70), px(19), area.rail - px(78), px(36)),
         "ArchRescue",
         TEXT,
         LINE,
     );
     text(
         dc,
-        theme.body(),
-        rect(54, 42, area.rail - 59, 18),
+        theme.mono(),
+        rect(px(70), px(53), area.rail - px(78), px(20)),
         "ArchGTi",
         MUTED,
         LINE,
@@ -446,38 +593,62 @@ fn scene(dc: &mut Scene<'_>, area: &Layout, theme: &Theme, app: &App) {
     let width = area.body_width();
     let label = navigation::label(app.section, false);
     let (title, subtitle) = navigation::heading(app);
-    icon(dc, app.section, x, 16, MUTED);
+    Icon::page(app.section).draw(dc, x, px(20), px(16), MUTED);
     text(
         dc,
         theme.body(),
-        rect(x + 23, 9, width - 170, 28),
+        rect(x + px(26), px(13), width - px(170), px(28)),
         label,
         TEXT,
         LINE,
     );
-    let source = app
-        .roots
-        .get(app.root_index)
-        .map(|path| path.display().to_string());
-    let context = if app.technician {
-        "Modo técnico".into()
-    } else {
-        source.map_or_else(|| "Windows x64".into(), |path| format!("Origem  ·  {path}"))
-    };
-    surface(dc, rect(x + width - 145, 10, 145, 25), PANEL, BORDER, 7);
+    if app.technician {
+        let badge_x = x + px(26) + px(navigation::context_offset(app.section));
+        surface(
+            dc,
+            rect(badge_x, px(16), px(92), px(23)),
+            SELECTED,
+            SELECTED_BORDER,
+            px(5),
+        );
+        text(
+            dc,
+            theme.body(),
+            rect(badge_x, px(16), px(92), px(23)),
+            "Modo técnico",
+            NAV_TEXT,
+            LINE | DT_CENTER,
+        );
+    }
+
+    let context_width = px(108);
+    let context_x = x + width - context_width;
+    surface(
+        dc,
+        rect(context_x, px(14), context_width, px(27)),
+        ELEVATED,
+        BORDER,
+        px(6),
+    );
+    Icon::Windows.draw(dc, context_x + px(10), px(21), px(12), ACCENT);
     text(
         dc,
-        theme.body(),
-        rect(x + width - 136, 10, 128, 25),
-        &context,
+        theme.mono(),
+        rect(context_x + px(25), px(14), context_width - px(30), px(27)),
+        theme.context,
         MUTED,
         LINE | DT_CENTER,
     );
-    fill(dc, rect(area.rail, 44, area.width - area.rail, 1), BORDER);
+
+    fill(
+        dc,
+        rect(area.rail, px(54), area.width - area.rail, 1),
+        SHELL_LINE,
+    );
     text(
         dc,
         theme.heading(),
-        rect(x, 56, width, 38),
+        rect(x, px(73), width, px(56)),
         title,
         TEXT,
         LINE,
@@ -485,7 +656,7 @@ fn scene(dc: &mut Scene<'_>, area: &Layout, theme: &Theme, app: &App) {
     text(
         dc,
         theme.body(),
-        rect(x, 96, width, 24),
+        rect(x, px(128), width, px(28)),
         subtitle,
         MUTED,
         LINE,
@@ -499,20 +670,20 @@ fn footer(dc: &mut Scene<'_>, area: &Layout, app: &App) {
     let x = area.left();
     let width = area.body_width();
     let top = area.footer();
-    fill(dc, rect(area.rail, top, area.width - area.rail, 51), PANEL);
-    fill(dc, rect(area.rail, top, area.width - area.rail, 1), BORDER);
-    let color = if app.error_status { CRITICAL } else { ACCENT };
-    icon(
+    fill(
         dc,
-        if app.error_status {
-            CANCEL
-        } else {
-            VERIFY_PAGE
-        },
-        x,
-        top + 13,
-        color,
+        rect(area.rail, top, area.width - area.rail, area.height - top),
+        FOOTER,
     );
+    fill(dc, rect(area.rail, top, area.width - area.rail, 1), BORDER);
+    let (symbol, color) = if app.error_status {
+        (Icon::Info, CRITICAL)
+    } else if app.busy {
+        (Icon::Refresh, ACCENT)
+    } else {
+        (Icon::Check, theme::SUCCESS)
+    };
+    symbol.draw(dc, x, top + area.px(25), area.px(14), color);
 
     if let Some(progress) = &app.progress {
         progress_bar(

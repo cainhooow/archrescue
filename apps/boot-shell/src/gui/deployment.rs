@@ -59,21 +59,14 @@ pub unsafe fn controls(hwnd: HWND, font: HFONT) -> Result<()> {
             id,
             "EDIT",
             "",
-            WS_TABSTOP | WS_BORDER | ES_AUTOHSCROLL as u32,
+            WS_TABSTOP | ES_AUTOHSCROLL as u32,
             font,
         )?;
         SendMessageW(control(hwnd, id), 0x1501, 1, wide(hint).as_ptr() as isize);
     }
 
     for id in [IMAGE_INDEX, DISK, MODE] {
-        add(
-            hwnd,
-            id,
-            "COMBOBOX",
-            "",
-            WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST as u32,
-            font,
-        )?;
+        add(hwnd, id, select::class(), "", WS_TABSTOP, font)?;
     }
     for mode in [
         "Somente inspeção",
@@ -125,6 +118,10 @@ pub fn form_field(id: usize) -> bool {
     matches!(id, MEDIA | PRESERVATION)
 }
 
+pub fn media_loaded(app: &App) -> bool {
+    app.deployment.media.is_some()
+}
+
 pub fn qualification(app: &App) -> Option<(&'static str, &str, COLORREF)> {
     use super::theme::{ACCENT, CRITICAL, WARNING};
 
@@ -157,48 +154,61 @@ pub fn primary(id: usize) -> bool {
     matches!(id, INSPECT | PLAN | SAVE | HANDOFF)
 }
 
-pub unsafe fn layout(hwnd: HWND, area: &super::layout::Layout, section: usize) {
+pub unsafe fn layout(hwnd: HWND, area: &super::layout::Layout, app: &App) {
     let x = area.left();
     let width = area.body_width();
-    let left = area.left_column();
-    let right = x + left + 12;
-    let right_width = width - left - 12;
+    let (left, right, right_width) = area.columns(60);
 
-    if section == RESTORE {
-        place(hwnd, BACKUP_LABEL, x + 13, 167, left - 26, 20);
-        place(hwnd, PRESERVATION, x + 13, 187, left - 26, 29);
-        place(hwnd, DESTINATION_LABEL, x + 13, 223, left - 26, 20);
-        place(hwnd, DEST, x + 13, 243, left - 26, 29);
-        place(hwnd, HANDOFF, x + 13, 282, left - 26, 29);
+    let base = area.body_top(DASHBOARD);
+    if app.section == RESTORE {
+        place(hwnd, BACKUP_LABEL, x + 13, base + 40, left - 26, 20);
+        place(hwnd, PRESERVATION, x + 19, base + 63, left - 38, 23);
+        place(hwnd, DESTINATION_LABEL, x + 13, base + 96, left - 26, 20);
+        place(hwnd, DEST, x + 19, base + 119, left - 38, 23);
+        place(hwnd, HANDOFF, x + 13, base + 155, left - 26, 29);
         return;
     }
 
     let form_x = x + 13;
     let form_width = width - 26;
-    place(hwnd, MEDIA_LABEL, form_x, 141, 54, 20);
-    place(hwnd, MEDIA, form_x + 56, 136, form_width - 185, 29);
-    place(hwnd, INSPECT, form_x + form_width - 121, 136, 121, 29);
+    place(hwnd, MEDIA_LABEL, form_x, base + 14, 54, 20);
+    place(hwnd, MEDIA, form_x + 56, base + 9, form_width - 185, 29);
+    place(hwnd, INSPECT, form_x + form_width - 121, base + 9, 121, 29);
 
     let disk_width = form_width * 43 / 100;
-    place(hwnd, DISK, form_x, 173, disk_width, 250);
-    place(hwnd, IMAGE_INDEX, form_x + disk_width + 8, 173, 106, 250);
+    place(hwnd, DISK, form_x, base + 46, disk_width, 29);
+    place(
+        hwnd,
+        IMAGE_INDEX,
+        form_x + disk_width + 8,
+        base + 46,
+        106,
+        250,
+    );
     place(
         hwnd,
         MODE,
         form_x + disk_width + 122,
-        173,
+        base + 46,
         form_width - disk_width - 122,
-        180,
+        29,
     );
 
-    place(hwnd, BACKUP_LABEL, form_x, 214, 129, 20);
-    place(hwnd, PRESERVATION, form_x + 130, 209, form_width - 130, 29);
-    place(hwnd, DESTINATION_LABEL, form_x, 250, 59, 20);
-    place(hwnd, DEST, form_x + 60, 245, form_width - 325, 29);
-    place(hwnd, PLAN, form_x + form_width - 257, 245, 121, 29);
-    place(hwnd, SAVE, form_x + form_width - 128, 245, 128, 29);
+    place(hwnd, BACKUP_LABEL, form_x, base + 87, 129, 20);
+    place(
+        hwnd,
+        PRESERVATION,
+        form_x + 130,
+        base + 82,
+        form_width - 130,
+        29,
+    );
+    place(hwnd, DESTINATION_LABEL, form_x, base + 123, 59, 20);
+    place(hwnd, DEST, form_x + 60, base + 118, form_width - 325, 29);
+    place(hwnd, PLAN, form_x + form_width - 257, base + 118, 121, 29);
+    place(hwnd, SAVE, form_x + form_width - 128, base + 118, 128, 29);
 
-    let top = super::layout::Layout::body_top(DEPLOY);
+    let top = area.body_top(DEPLOY);
     let bottom = area.body_bottom(DEPLOY);
     place(
         hwnd,
@@ -212,7 +222,11 @@ pub unsafe fn layout(hwnd: HWND, area: &super::layout::Layout, section: usize) {
         hwnd,
         INSTALL_UNAVAILABLE,
         right + 13,
-        bottom - 38,
+        if media_loaded(app) {
+            bottom - 38
+        } else {
+            top + 23
+        },
         right_width - 26,
         29,
     );
@@ -265,6 +279,7 @@ pub unsafe fn render(hwnd: HWND, app: &App) -> bool {
     );
 
     if deployment {
+        show(hwnd, CONTENT, media_loaded(app));
         set(
             hwnd,
             CONTENT,

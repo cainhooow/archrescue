@@ -40,6 +40,45 @@ impl Frame {
         true
     }
 
+    pub unsafe fn dim_backdrop(
+        &mut self,
+        screen: HDC,
+        origin: POINT,
+        width: i32,
+        height: i32,
+    ) -> bool {
+        let Some(buffer) = self.buffer.as_mut() else {
+            return false;
+        };
+        if BitBlt(
+            buffer.dc, 0, 0, width, height, screen, origin.x, origin.y, SRCCOPY,
+        ) == 0
+        {
+            return false;
+        }
+        GdiFlush();
+
+        let stride = buffer.width as usize * 4;
+        // SAFETY: the selected DIB has buffer.height rows with this byte stride.
+        let dib = slice::from_raw_parts(buffer.bits, stride * buffer.height as usize);
+        let rows = buffer.pixels.data_mut().chunks_exact_mut(stride);
+        for (destination, source) in rows.zip(dib.chunks_exact(stride)).take(height as usize) {
+            let pixels = destination.as_chunks_mut::<4>().0;
+            let colors = source.as_chunks::<4>().0;
+            for (rgba, bgra) in pixels.iter_mut().zip(colors).take(width as usize) {
+                // Composite the captured owner over the reference's near-black scrim.
+                rgba.copy_from_slice(&[
+                    (u16::from(bgra[2]) / 5 + 5) as u8,
+                    (u16::from(bgra[1]) / 5 + 4) as u8,
+                    (u16::from(bgra[0]) / 5 + 8) as u8,
+                    255,
+                ]);
+            }
+        }
+
+        true
+    }
+
     pub unsafe fn draw(&mut self, width: i32, height: i32, paint: impl FnOnce(&mut Scene<'_>)) {
         let Some(buffer) = &mut self.buffer else {
             return;
