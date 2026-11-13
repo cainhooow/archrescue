@@ -40,6 +40,8 @@ pub struct FileReport {
 pub struct RestoreReport {
     pub operation_id: String,
     pub backup_operation: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub recovery: Option<crate::RecoveryBinding>,
     pub plan_sha256: String,
     pub target_sid: String,
     pub target_profile: PathBuf,
@@ -54,9 +56,20 @@ pub fn execute(
     cancel: &AtomicBool,
     progress: impl FnMut(usize, usize, &FileReport),
 ) -> Result<RestoreReport> {
+    execute_recovery(request, None, authorization, cancel, progress)
+}
+
+pub fn execute_recovery(
+    request: &Request,
+    recovery: Option<&crate::RecoveryBinding>,
+    authorization: &str,
+    cancel: &AtomicBool,
+    progress: impl FnMut(usize, usize, &FileReport),
+) -> Result<RestoreReport> {
     execute_for(
         request,
         &Profile::current()?,
+        recovery,
         authorization,
         cancel,
         progress,
@@ -66,11 +79,12 @@ pub fn execute(
 pub(crate) fn execute_for(
     request: &Request,
     profile: &Profile,
+    recovery: Option<&crate::RecoveryBinding>,
     authorization: &str,
     cancel: &AtomicBool,
     mut progress: impl FnMut(usize, usize, &FileReport),
 ) -> Result<RestoreReport> {
-    let (plan, target, payload) = prepare(request, profile, cancel)?;
+    let (plan, target, payload) = prepare(request, profile, recovery, cancel)?;
     if authorization != format!("AUTORIZAR-RESTAURACAO:{}", plan.fingerprint) {
         return Err(Error::new(
             ErrorKind::Permission,
@@ -81,6 +95,7 @@ pub(crate) fn execute_for(
     let mut report = RestoreReport {
         operation_id: Operation::new().id,
         backup_operation: plan.backup_operation,
+        recovery: plan.recovery,
         plan_sha256: plan.fingerprint,
         target_sid: plan.target_sid,
         target_profile: plan.target_profile,

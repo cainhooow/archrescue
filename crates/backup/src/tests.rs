@@ -13,6 +13,12 @@ struct Fixture {
 impl Fixture {
     fn new() -> Self {
         let id = Operation::new().id;
+        #[cfg(windows)]
+        let base = PathBuf::from(
+            std::env::var_os("ARCHRESCUE_TEST_SOURCE")
+                .expect("Set ARCHRESCUE_TEST_SOURCE to a disposable persistent GPT volume"),
+        );
+        #[cfg(not(windows))]
         let base = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../.agent-tmp/tests");
         fs::create_dir_all(&base).unwrap();
 

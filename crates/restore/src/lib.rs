@@ -24,7 +24,7 @@ use crate::{
     profile::PinnedProfile,
 };
 
-pub use execution::{execute, FileOutcome, FileReport, RestoreReport};
+pub use execution::{execute, execute_recovery, FileOutcome, FileReport, RestoreReport};
 pub use profile::{Folder, Profile};
 
 const ALLOCATION_ALLOWANCE: u64 = 64 * 1024;
@@ -59,6 +59,33 @@ pub struct Request {
     pub conflicts: ConflictPolicy,
 }
 
+#[derive(Debug, Clone, Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RecoveryBinding {
+    pub recovery_operation: String,
+    pub deployment_plan_sha256: String,
+    pub backup_operation: String,
+    pub backup_manifest_sha256: String,
+}
+
+impl RecoveryBinding {
+    fn validate(&self, manifest: &archrescue_backup::transaction::BackupManifest) -> Result<()> {
+        let is_hash =
+            |value: &str| value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit());
+        if self.recovery_operation.is_empty()
+            || !is_hash(&self.deployment_plan_sha256)
+            || self.backup_operation != manifest.operation_id
+            || self.backup_manifest_sha256 != manifest.plan_fingerprint
+        {
+            return Err(invalid(
+                "A referência de recuperação não corresponde ao backup verificado",
+            ));
+        }
+
+        Ok(())
+    }
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct PlannedFile {
     pub source: ExpectedFile,
@@ -87,6 +114,8 @@ pub struct RestorePlan {
     pub blocked_by_conflicts: bool,
     pub authorization_required: bool,
     pub fingerprint: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub recovery: Option<RecoveryBinding>,
 }
 
 fn invalid(message: &str) -> Error {
@@ -179,8 +208,16 @@ fn conflict_name(
 }
 
 pub fn preview(request: &Request, cancel: &AtomicBool) -> Result<RestorePlan> {
+    preview_recovery(request, None, cancel)
+}
+
+pub fn preview_recovery(
+    request: &Request,
+    recovery: Option<&RecoveryBinding>,
+    cancel: &AtomicBool,
+) -> Result<RestorePlan> {
     let profile = Profile::current()?;
-    let (plan, _, _) = prepare(request, &profile, cancel)?;
+    let (plan, _, _) = prepare(request, &profile, recovery, cancel)?;
 
     Ok(plan)
 }
@@ -188,6 +225,7 @@ pub fn preview(request: &Request, cancel: &AtomicBool) -> Result<RestorePlan> {
 fn prepare(
     request: &Request,
     profile: &Profile,
+    recovery: Option<&RecoveryBinding>,
     cancel: &AtomicBool,
 ) -> Result<(RestorePlan, PinnedProfile, Directory)> {
     validate_mappings(&request.mappings)?;
@@ -205,6 +243,9 @@ fn prepare(
 
     let payload = Directory::open(&backup.join("payload"))?;
     let manifest = verify_payload(&backup, cancel)?;
+    if let Some(recovery) = recovery {
+        recovery.validate(&manifest)?;
+    }
     for mapping in &request.mappings {
         if !manifest.directories.contains(&mapping.source) {
             return Err(invalid(
@@ -318,6 +359,7 @@ fn prepare(
         blocked_by_conflicts,
         authorization_required: true,
         fingerprint: String::new(),
+        recovery: recovery.cloned(),
     };
     let bytes = serde_json::to_vec(&plan).map_err(|error| invalid(&error.to_string()))?;
     plan.fingerprint = format!("{:x}", Sha256::digest(bytes));

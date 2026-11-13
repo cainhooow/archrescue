@@ -630,6 +630,56 @@ pub fn disk_health(device_path: &str) -> DiskHealth {
     }
 }
 
+#[derive(Debug)]
+pub struct DiskAttachment {
+    pub serial: String,
+    pub product: String,
+    pub bus: u32,
+    pub logical_sector: u32,
+    pub physical_sector: u32,
+}
+
+pub fn disk_attachment(device_path: &str) -> Result<DiskAttachment> {
+    let disk = open(device_path)?;
+    let descriptor = query(&disk, IOCTL_STORAGE_QUERY_PROPERTY, &[0; 12])?;
+    let read_string = |field| -> Result<String> {
+        let offset = value::<u32>(&descriptor, field)? as usize;
+        let data = descriptor
+            .get(offset..)
+            .filter(|_| offset >= offset_of!(STORAGE_DEVICE_DESCRIPTOR, RawDeviceProperties))
+            .and_then(|bytes| {
+                bytes
+                    .iter()
+                    .position(|byte| *byte == 0)
+                    .map(|end| &bytes[..end])
+            })
+            .ok_or_else(|| Error::new(ErrorKind::Io, "Missing storage descriptor text"))?;
+        let text = std::str::from_utf8(data)
+            .map_err(|_| Error::new(ErrorKind::Io, "Invalid storage descriptor text"))?;
+
+        Ok(text.trim().to_owned())
+    };
+
+    // StorageAccessAlignmentProperty (6), PropertyStandardQuery (0).
+    let mut alignment_query = [0; 12];
+    alignment_query[0] = 6;
+    let alignment = query(&disk, IOCTL_STORAGE_QUERY_PROPERTY, &alignment_query)?;
+
+    Ok(DiskAttachment {
+        serial: read_string(offset_of!(STORAGE_DEVICE_DESCRIPTOR, SerialNumberOffset))?,
+        product: read_string(offset_of!(STORAGE_DEVICE_DESCRIPTOR, ProductIdOffset))?,
+        bus: value(&descriptor, offset_of!(STORAGE_DEVICE_DESCRIPTOR, BusType))?,
+        logical_sector: value(
+            &alignment,
+            offset_of!(STORAGE_ACCESS_ALIGNMENT_DESCRIPTOR, BytesPerLogicalSector),
+        )?,
+        physical_sector: value(
+            &alignment,
+            offset_of!(STORAGE_ACCESS_ALIGNMENT_DESCRIPTOR, BytesPerPhysicalSector),
+        )?,
+    })
+}
+
 pub fn require_writable_disk(device_path: &str) -> Result<()> {
     let disk = open(device_path)?;
     query(&disk, IOCTL_DISK_IS_WRITABLE, &[])?;

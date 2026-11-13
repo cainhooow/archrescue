@@ -4,6 +4,9 @@ version.workspace = true
 edition.workspace = true
 publish.workspace = true
 
+[features]
+lab-deployment = ["archrescue-deployment/lab-deployment"]
+
 [dependencies]
 serde_json.workspace = true
 serde.workspace = true

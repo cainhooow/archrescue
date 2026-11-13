@@ -140,6 +140,15 @@ pub fn inspect(
     cancel: &AtomicBool,
     mut progress: impl FnMut(u64, u64),
 ) -> Result<Media> {
+    inspect_open(input, expected_hash, cancel, &mut progress).map(|(media, _)| media)
+}
+
+pub(crate) fn inspect_open(
+    input: &Path,
+    expected_hash: Option<&str>,
+    cancel: &AtomicBool,
+    mut progress: impl FnMut(u64, u64),
+) -> Result<(Media, File)> {
     let (path, image_type) = image_path(input)?;
     let mut options = fs::OpenOptions::new();
     options.read(true);
@@ -190,13 +199,15 @@ pub fn inspect(
         ));
     }
 
-    Ok(Media {
+    let media = Media {
         path,
         image_type,
         container_bytes: length,
         sha256,
         images,
-    })
+    };
+
+    Ok((media, file))
 }
 
 pub(crate) fn check_cancel(cancel: &AtomicBool) -> Result<()> {
@@ -217,20 +228,8 @@ fn image_metadata(_: &Path, _: u32, _: &AtomicBool) -> Result<Vec<Image>> {
 #[cfg(windows)]
 fn image_metadata(path: &Path, count: u32, cancel: &AtomicBool) -> Result<Vec<Image>> {
     use std::{os::windows::process::CommandExt, process::Command};
-    use windows_sys::Win32::System::SystemInformation::GetSystemDirectoryW;
 
-    let mut directory = [0u16; 32768];
-    // SAFETY: directory is writable for the supplied UTF-16 capacity.
-    let length = unsafe { GetSystemDirectoryW(directory.as_mut_ptr(), directory.len() as u32) };
-    if length == 0 || length as usize >= directory.len() {
-        return Err(Error::io(
-            "Localizar DISM do sistema",
-            io::Error::last_os_error(),
-        ));
-    }
-
-    let executable =
-        PathBuf::from(String::from_utf16_lossy(&directory[..length as usize])).join("dism.exe");
+    let executable = system_directory()?.join("dism.exe");
     let mut image_argument = std::ffi::OsString::from("/ImageFile:");
     image_argument.push(path);
     let mut images = Vec::new();
@@ -257,6 +256,26 @@ fn image_metadata(path: &Path, count: u32, cancel: &AtomicBool) -> Result<Vec<Im
     }
 
     Ok(images)
+}
+
+#[cfg(windows)]
+pub(crate) fn system_directory() -> Result<PathBuf> {
+    use std::{ffi::OsString, os::windows::ffi::OsStringExt};
+    use windows_sys::Win32::System::SystemInformation::GetSystemDirectoryW;
+
+    let mut directory = vec![0u16; 32768];
+    // SAFETY: directory is writable for the supplied UTF-16 capacity.
+    let length = unsafe { GetSystemDirectoryW(directory.as_mut_ptr(), directory.len() as u32) };
+    if length == 0 || length as usize >= directory.len() {
+        return Err(Error::io(
+            "Localizar diretório do sistema",
+            io::Error::last_os_error(),
+        ));
+    }
+
+    Ok(PathBuf::from(OsString::from_wide(
+        &directory[..length as usize],
+    )))
 }
 
 #[cfg(any(windows, test))]

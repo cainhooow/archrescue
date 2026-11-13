@@ -60,3 +60,50 @@ pub fn command(command: &str, args: &[OsString]) -> Result<()> {
         _ => Err(invalid()),
     }
 }
+
+#[cfg(all(feature = "lab-deployment", windows, target_arch = "x86_64"))]
+pub fn lab_command(command: &str, args: &[OsString]) -> Result<()> {
+    use archrescue_deployment::lab::windows::{self, Request};
+
+    let invalid = || {
+        Error::new(
+            ErrorKind::Validation,
+            "Argumentos inválidos para o laboratório",
+        )
+    };
+    match (command, args) {
+        ("deployment-lab-observe", [target]) => {
+            let target = target.to_str().ok_or_else(invalid)?;
+            super::print_json(&windows::observe_target_identity(target)?)
+        }
+        (
+            "deployment-lab-execute",
+            [plan, registration, signature, confirmation, backup, evidence],
+        ) => {
+            let plan_path = archrescue_storage::safe_existing(Path::new(plan))?;
+            let bytes =
+                fs::read(plan_path).map_err(|error| Error::io("Ler plano revisado", error))?;
+            let plan = serde_json::from_slice(&bytes)
+                .map_err(|error| Error::new(ErrorKind::Validation, error.to_string()))?;
+            let request = Request {
+                plan: &plan,
+                registration: Path::new(registration),
+                signature: Path::new(signature),
+                confirmation: confirmation.to_str().ok_or_else(invalid)?,
+                backup: Path::new(backup),
+                evidence: Path::new(evidence),
+            };
+            let evidence = windows::execute(&request, &AtomicBool::new(false), |step| {
+                eprintln!("{step:?}");
+            })?;
+            eprintln!("{}", evidence.path.display());
+            super::print_json(&evidence.execution)?;
+
+            match evidence.execution.errors.first() {
+                Some(error) => Err(error.clone()),
+                None => Ok(()),
+            }
+        }
+        _ => Err(invalid()),
+    }
+}

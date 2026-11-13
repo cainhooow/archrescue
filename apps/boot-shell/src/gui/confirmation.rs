@@ -6,6 +6,8 @@ use super::*;
 
 pub(super) enum Confirmation {
     Start(Preview),
+    #[cfg(all(feature = "lab-deployment", target_arch = "x86_64"))]
+    Deployment(Box<archrescue_deployment::Plan>),
     Resume {
         source: Location,
         checkpoint: PathBuf,
@@ -53,6 +55,30 @@ impl Confirmation {
                 },
                 "Backup autorizado",
                 "Backup recusado",
+            ),
+            #[cfg(all(feature = "lab-deployment", target_arch = "x86_64"))]
+            Self::Deployment(plan) => (
+                dialog::Prompt {
+                    title: "Confirmar instalação de laboratório",
+                    question: "Autorizar a instalação neste disco descartável?".into(),
+                    paths: [
+                        (
+                            "Imagem",
+                            plan.selected_image
+                                .name
+                                .clone()
+                                .unwrap_or_else(|| format!("Índice {}", plan.selected_image.index)),
+                        ),
+                        ("Disco GPT", plan.target.disk.identity.clone()),
+                    ],
+                    notice: (
+                        "Os dados do disco alvo serão apagados",
+                        "A autorização vale para este plano e para o disco descartável registrado.",
+                    ),
+                    width: 670,
+                },
+                "Implantação autorizada",
+                "Implantação recusada",
             ),
             Self::Resume {
                 source,
@@ -127,6 +153,8 @@ impl Confirmation {
                     transaction::resume(&source, &checkpoint, cancel, progress)
                 });
             }
+            #[cfg(all(feature = "lab-deployment", target_arch = "x86_64"))]
+            Self::Deployment(plan) => deployment::start_lab(hwnd, &mut app, *plan),
             Self::Resume {
                 source,
                 checkpoint,

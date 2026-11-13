@@ -16,7 +16,14 @@ struct Fixture {
 impl Fixture {
     fn new() -> Self {
         let id = Operation::new().id;
-        let root = std::env::temp_dir().join(&id);
+        #[cfg(windows)]
+        let source_base = PathBuf::from(
+            std::env::var_os("ARCHRESCUE_TEST_SOURCE")
+                .expect("Set ARCHRESCUE_TEST_SOURCE to a disposable persistent GPT volume"),
+        );
+        #[cfg(not(windows))]
+        let source_base = std::env::temp_dir();
+        let root = source_base.join(&id);
         let destination = std::env::var_os("ARCHRESCUE_TEST_DESTINATION")
             .map(PathBuf::from)
             .unwrap_or_else(|| PathBuf::from("/dev/shm"));
@@ -72,7 +79,7 @@ impl Fixture {
     }
 
     fn preview(&self) -> Result<RestorePlan> {
-        let (plan, _, _) = prepare(&self.request, &self.profile, &AtomicBool::new(false))?;
+        let (plan, _, _) = prepare(&self.request, &self.profile, None, &AtomicBool::new(false))?;
         Ok(plan)
     }
 
@@ -85,6 +92,7 @@ impl Fixture {
         execution::execute_for(
             &self.request,
             &self.profile,
+            None,
             &format!("AUTORIZAR-RESTAURACAO:{}", plan.fingerprint),
             cancel,
             progress,

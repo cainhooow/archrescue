@@ -21,7 +21,7 @@ const PRESERVATION: usize = 235;
 const PLAN: usize = 236;
 const SAVE: usize = 237;
 const HANDOFF: usize = 238;
-const INSTALL_UNAVAILABLE: usize = 239;
+const INSTALL: usize = 239;
 const MEDIA_LABEL: usize = 246;
 const BACKUP_LABEL: usize = 247;
 
@@ -31,12 +31,17 @@ pub struct Deployment {
     disk: Option<String>,
     source: Option<Location>,
     plan: Option<Plan>,
+    lab_status: Option<String>,
 }
 
 pub enum Update {
     Progress(u64, u64),
     Media(Box<Media>),
     Plan(Box<Plan>),
+    #[cfg(all(feature = "lab-deployment", target_arch = "x86_64"))]
+    LabProgress(archrescue_deployment::lab::windows::Step),
+    #[cfg(all(feature = "lab-deployment", target_arch = "x86_64"))]
+    LabFinished(Box<Result<archrescue_deployment::lab::windows::Evidence>>),
 }
 
 pub unsafe fn controls(hwnd: HWND, font: HFONT) -> Result<()> {
@@ -67,7 +72,7 @@ pub unsafe fn controls(hwnd: HWND, font: HFONT) -> Result<()> {
         (PLAN, "&Gerar prévia"),
         (SAVE, "Exportar &plano"),
         (HANDOFF, "Verificar e exportar referência"),
-        (INSTALL_UNAVAILABLE, "Instalar Windows"),
+        (INSTALL, "Instalar Windows"),
     ] {
         add(hwnd, id, "BUTTON", label, WS_TABSTOP, font)?;
     }
@@ -135,7 +140,7 @@ pub fn empty_choice(id: usize) -> &'static str {
 }
 
 pub fn primary(id: usize) -> bool {
-    matches!(id, INSPECT | PLAN | SAVE | HANDOFF)
+    matches!(id, INSPECT | PLAN | SAVE | HANDOFF | INSTALL)
 }
 
 pub unsafe fn layout(hwnd: HWND, area: &super::layout::Layout, app: &App) {
@@ -205,7 +210,7 @@ pub unsafe fn layout(hwnd: HWND, area: &super::layout::Layout, app: &App) {
     );
     place(
         hwnd,
-        INSTALL_UNAVAILABLE,
+        INSTALL,
         right + 13,
         if media_loaded(app) {
             bottom - 38
@@ -265,14 +270,23 @@ pub unsafe fn render(hwnd: HWND, app: &App) -> bool {
         MODE,
         PLAN,
         SAVE,
-        INSTALL_UNAVAILABLE,
+        INSTALL,
     ] {
         show(hwnd, id, deployment);
     }
     show(hwnd, BACKUP_LABEL, deployment || handoff);
     show(hwnd, PRESERVATION, deployment || handoff);
     show(hwnd, HANDOFF, handoff);
-    EnableWindow(control(hwnd, INSTALL_UNAVAILABLE), 0);
+    set(
+        hwnd,
+        INSTALL,
+        if lab_available() {
+            "Instalar em laboratório"
+        } else {
+            "Instalar Windows"
+        },
+    );
+    EnableWindow(control(hwnd, INSTALL), (!app.busy && lab_ready(app)) as i32);
     for id in [
         MEDIA,
         INSPECT,
@@ -309,7 +323,14 @@ pub unsafe fn render(hwnd: HWND, app: &App) -> bool {
         set(
             hwnd,
             CONTENT,
-            &preview_text(&app.deployment, app.technician),
+            &if let Some(status) = &app.deployment.lab_status {
+                format!(
+                    "{status}\n{}",
+                    preview_text(&app.deployment, app.technician)
+                )
+            } else {
+                preview_text(&app.deployment, app.technician)
+            },
         );
     }
 
@@ -402,6 +423,7 @@ pub fn select_disk(app: &mut App, disk: String) {
 
 pub fn invalidate_plan(app: &mut App) {
     app.deployment.plan = None;
+    app.deployment.lab_status = None;
 }
 
 pub unsafe fn inspect(hwnd: HWND, app: &mut App, source: Location) {
@@ -463,7 +485,55 @@ pub unsafe fn update(hwnd: HWND, app: &mut App, event: Update) {
                 "Mídia inspecionada. Escolha a edição, o disco e o modo.",
             );
         }
+        #[cfg(all(feature = "lab-deployment", target_arch = "x86_64"))]
+        Update::LabProgress(step) => {
+            use archrescue_deployment::lab::windows::Step;
+
+            let status = match step {
+                Step::Preflight => "Em execução · Conferindo autorização, imagem e discos",
+                Step::Partition => "Em execução · Preparando partições GPT",
+                Step::ApplyImage => "Em execução · Aplicando imagem do Windows",
+                Step::ConfigureBoot => "Em execução · Configurando a inicialização UEFI",
+                Step::Verify => "Em execução · Verificando a implantação",
+            };
+            app.deployment.lab_status = Some(status.into());
+            set(hwnd, STATUS, status);
+        }
+        #[cfg(all(feature = "lab-deployment", target_arch = "x86_64"))]
+        Update::LabFinished(result) => {
+            use archrescue_deployment::lab::windows::ExecutionState;
+
+            let (summary, detail) = match *result {
+                Ok(evidence) => {
+                    let summary = match evidence.execution.execution_state {
+                        ExecutionState::AwaitingFirstBoot => "Aguardando primeira inicialização",
+                        ExecutionState::Blocked => "Implantação bloqueada",
+                        ExecutionState::Cancelled => "Implantação cancelada",
+                        ExecutionState::Failed | ExecutionState::Running => "Falha na implantação",
+                    };
+                    let errors = evidence
+                        .execution
+                        .errors
+                        .iter()
+                        .map(ToString::to_string)
+                        .collect::<Vec<_>>()
+                        .join("\n");
+                    (
+                        summary,
+                        format!(
+                            "{}\n{}",
+                            paths::display(&evidence.path, app.technician),
+                            errors
+                        ),
+                    )
+                }
+                Err(error) => ("Implantação bloqueada", error.to_string()),
+            };
+            app.deployment.lab_status = Some(format!("{summary}\n{detail}"));
+            set(hwnd, STATUS, summary);
+        }
         Update::Plan(plan) => {
+            app.deployment.lab_status = None;
             app.deployment.plan = Some(*plan);
             set(hwnd, STATUS, "Prévia disponível para revisão e exportação.");
         }
@@ -498,7 +568,18 @@ pub unsafe fn action(hwnd: HWND, app: &mut App, id: usize, notification: u32) ->
                 return true;
             };
             let hash = media.sha256.clone();
-            let backup = app.session.backup.clone();
+            let separate_lab_backup = lab_available()
+                && intent == Intent::Clean
+                && app.report.as_ref().is_some_and(|report| {
+                    report.inventory.disks.iter().any(|candidate| {
+                        candidate.identity == disk && candidate.partitions.is_empty()
+                    })
+                });
+            let backup = if separate_lab_backup {
+                None
+            } else {
+                app.session.backup.clone()
+            };
             app.deployment.plan = None;
             let cancel = app.cancel.clone();
             cancel.store(false, Ordering::Relaxed);
@@ -527,6 +608,14 @@ pub unsafe fn action(hwnd: HWND, app: &mut App, id: usize, notification: u32) ->
                 STATUS,
                 "Revalidando mídia, identidade e pré-requisitos…",
             );
+        }
+        #[cfg(all(feature = "lab-deployment", target_arch = "x86_64"))]
+        INSTALL => {
+            if !app.busy && lab_ready(app) {
+                if let Some(plan) = app.deployment.plan.clone() {
+                    app.confirmation = Some(confirmation::Confirmation::Deployment(Box::new(plan)));
+                }
+            }
         }
         SAVE => {
             let Some(plan) = app.deployment.plan.clone() else {
@@ -653,4 +742,93 @@ fn export_handoff(
     }
 
     Ok(path)
+}
+
+pub fn lab_available() -> bool {
+    #[cfg(all(feature = "lab-deployment", target_arch = "x86_64"))]
+    return archrescue_deployment::lab::windows::capability_available();
+
+    #[cfg(not(all(feature = "lab-deployment", target_arch = "x86_64")))]
+    false
+}
+
+fn lab_ready(app: &App) -> bool {
+    #[cfg(all(feature = "lab-deployment", target_arch = "x86_64"))]
+    {
+        lab_available()
+            && app.session.backup.is_some()
+            && app.session.destination(DEPLOY).is_ok()
+            && app.deployment.plan.as_ref().is_some_and(|plan| {
+                plan.result == Qualification::Supported && plan.lab_layout.is_some()
+            })
+    }
+
+    #[cfg(not(all(feature = "lab-deployment", target_arch = "x86_64")))]
+    {
+        let _ = app;
+        false
+    }
+}
+
+pub fn lab_status(app: &App) -> &str {
+    app.deployment.lab_status.as_deref().unwrap_or_else(|| {
+        if lab_ready(app) {
+            "Pronto para confirmar o alvo"
+        } else if lab_available() {
+            "Aguardando plano, backup e pasta de evidências"
+        } else {
+            "Execução indisponível nesta versão"
+        }
+    })
+}
+
+#[cfg(all(feature = "lab-deployment", target_arch = "x86_64"))]
+pub(super) unsafe fn start_lab(hwnd: HWND, app: &mut App, plan: Plan) {
+    use archrescue_deployment::lab::windows::{self, Request};
+
+    if app
+        .deployment
+        .plan
+        .as_ref()
+        .map(|current| &current.fingerprint)
+        != Some(&plan.fingerprint)
+    {
+        return;
+    }
+    let (Some(backup), Ok(destination)) =
+        (app.session.backup.clone(), app.session.destination(DEPLOY))
+    else {
+        return;
+    };
+
+    let cancel = Arc::new(AtomicBool::new(false));
+    app.cancel = cancel.clone();
+    let sender = app.tx.clone();
+    work(app, move || {
+        let result = (|| {
+            let evidence = destination.revalidate()?;
+            let backup = backup.revalidate()?;
+            let registration = evidence.join("registration.json");
+            let signature = evidence.join("registration.sig");
+            let attestation = windows::read_registration(&registration, &signature)?;
+            let confirmation = attestation.confirmation();
+            let request = Request {
+                plan: &plan,
+                registration: &registration,
+                signature: &signature,
+                confirmation: &confirmation,
+                backup: &backup,
+                evidence: &evidence,
+            };
+
+            windows::execute(&request, &cancel, |step| {
+                let _ = sender.send(Event::Deployment(Update::LabProgress(step)));
+            })
+        })();
+
+        Event::Deployment(Update::LabFinished(Box::new(result)))
+    });
+    app.cancellable = true;
+    set(hwnd, STATUS, "Conferindo autorização do laboratório…");
+    super::render(hwnd, app);
 }

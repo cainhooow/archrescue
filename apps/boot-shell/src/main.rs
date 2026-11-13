@@ -77,6 +77,10 @@ fn run() -> Result<()> {
         "deployment-media" | "deployment-plan" | "deployment-authorize" => {
             deployment::command(command, &args[1..])?;
         }
+        #[cfg(all(feature = "lab-deployment", windows, target_arch = "x86_64"))]
+        "deployment-lab-observe" | "deployment-lab-execute" => {
+            deployment::lab_command(command, &args[1..])?;
+        }
         "integrity" | "integrity-report" => integrity::command(command, &args[1..])?,
         "inventory" if args.len() == 1 => print_json(&archrescue_storage::inventory())?,
         "discover" if args.len() > 1 => {

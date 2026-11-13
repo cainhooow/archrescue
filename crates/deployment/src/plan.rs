@@ -93,9 +93,15 @@ pub struct Plan {
     pub expected_final_state: String,
     pub authorization_required: String,
     pub fingerprint: String,
+    #[cfg(feature = "lab-deployment")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lab_layout: Option<crate::lab::Layout>,
 }
 
-fn select_disk(inventory: &archrescue_storage::Inventory, stable_id: &str) -> Result<Disk> {
+pub(crate) fn select_disk(
+    inventory: &archrescue_storage::Inventory,
+    stable_id: &str,
+) -> Result<Disk> {
     let matches: Vec<_> = inventory
         .disks
         .iter()
@@ -129,7 +135,7 @@ fn select_disk(inventory: &archrescue_storage::Inventory, stable_id: &str) -> Re
 }
 
 #[cfg(windows)]
-fn observe_target(
+pub(crate) fn observe_target(
     stable_id: &str,
     media: &Media,
     backup: Option<&Path>,
@@ -244,15 +250,32 @@ fn observe_target(
 }
 
 #[cfg(windows)]
-fn optical_media(path: &Path) -> bool {
+pub(crate) fn optical_media(path: &Path) -> bool {
     use std::os::windows::ffi::OsStrExt;
     use windows_sys::Win32::Storage::FileSystem::GetDriveTypeW;
 
-    let root = path.ancestors().last().unwrap_or(path);
+    let path = dos_path(path);
+    let root = path.ancestors().last().unwrap_or(&path);
     let wide: Vec<_> = root.as_os_str().encode_wide().chain(Some(0)).collect();
 
     // SAFETY: root is a terminated UTF-16 string. DRIVE_CDROM is 5.
     unsafe { GetDriveTypeW(wide.as_ptr()) == 5 }
+}
+
+#[cfg(windows)]
+pub(crate) fn dos_path(path: &Path) -> PathBuf {
+    use std::path::{Component, Prefix};
+
+    let mut components = path.components();
+    if let Some(Component::Prefix(prefix)) = components.next() {
+        if let Prefix::VerbatimDisk(letter) = prefix.kind() {
+            let mut dos = PathBuf::from(format!("{}:", char::from(letter)));
+            dos.extend(components);
+            return dos;
+        }
+    }
+
+    path.to_owned()
 }
 
 #[cfg(not(windows))]
@@ -279,7 +302,12 @@ pub fn create_plan(
     build(media, target, image_index, intent)
 }
 
-fn build(media: Media, target: Target, image_index: u32, intent: Intent) -> Result<Plan> {
+pub(crate) fn build(
+    media: Media,
+    target: Target,
+    image_index: u32,
+    intent: Intent,
+) -> Result<Plan> {
     let selected_image = media
         .images
         .iter()
@@ -296,6 +324,14 @@ fn build(media: Media, target: Target, image_index: u32, intent: Intent) -> Resu
         .filter(|size| *size > 0)
         .and_then(|size| size.checked_add(SYSTEM_RESERVE))
         .map(|bytes| bytes.max(64 * 1024 * 1024 * 1024));
+    #[cfg(feature = "lab-deployment")]
+    let lab_layout = (intent == Intent::Clean
+        && media.image_type == crate::ImageType::Wim
+        && selected_image.installation.as_deref() == Some("Client")
+        && target.disk.partitions.is_empty()
+        && target.volumes.is_empty())
+    .then(|| minimum_bytes.map(crate::lab::Layout::for_image))
+    .flatten();
     let mut findings = Vec::new();
     let mut add = |result, reason: &str| {
         findings.push(Finding {
@@ -351,6 +387,18 @@ fn build(media: Media, target: Target, image_index: u32, intent: Intent) -> Resu
         add(
             Qualification::Blocked,
             "Capacidade insuficiente ou desconhecida",
+        );
+    }
+    #[cfg(feature = "lab-deployment")]
+    if lab_layout.as_ref().is_some_and(|layout| {
+        !layout
+            .required_disk_bytes()
+            .zip(target.disk.capacity)
+            .is_some_and(|(required, capacity)| required <= capacity)
+    }) {
+        add(
+            Qualification::Blocked,
+            "Capacidade insuficiente para as partições do laboratório",
         );
     }
     if target.storage_health == "Falha prevista" {
@@ -414,7 +462,20 @@ fn build(media: Media, target: Target, image_index: u32, intent: Intent) -> Resu
         expected_final_state: if clean { "Windows instalado em GPT e inicializável em UEFI" } else { "Nenhuma alteração no disco nesta revisão" }.into(),
         authorization_required: "Exige plano revalidado, confirmação vinculada ao SHA-256 e execução futura restrita a laboratório descartável".into(),
         fingerprint: String::new(),
+        #[cfg(feature = "lab-deployment")]
+        lab_layout,
     };
+
+    #[cfg(feature = "lab-deployment")]
+    if let Some(layout) = &plan.lab_layout {
+        plan.intended_partitions = vec![
+            format!("EFI (FAT32, {} MiB)", layout.efi_mib),
+            format!("MSR ({} MiB)", layout.msr_mib),
+            "Windows (NTFS)".into(),
+        ];
+        plan.planned_modifications =
+            vec!["Criar partições no GPT vazio, aplicar a imagem e configurar o boot UEFI".into()];
+    }
 
     plan.fingerprint = fingerprint(&plan)?;
 
@@ -442,7 +503,7 @@ impl Plan {
         Ok(())
     }
 
-    /// Validate review authorization against freshly observed evidence. There is no executor.
+    /// Validate review authorization against freshly observed evidence. This preview authorization does not enable lab execution.
     pub fn validate_authorization(&self, confirmation: &str, cancel: &AtomicBool) -> Result<()> {
         self.validate_fingerprint()?;
         if self.intent != Intent::Clean
@@ -506,11 +567,11 @@ pub fn export(plan: &Plan, destination: &Path) -> Result<PathBuf> {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use crate::ImageType;
 
-    fn fixture() -> (Media, Target) {
+    pub(crate) fn fixture() -> (Media, Target) {
         let media = Media {
             path: "install.wim".into(),
             image_type: ImageType::Wim,
@@ -534,7 +595,7 @@ mod tests {
                 capacity: Some(80 * 1024 * 1024 * 1024),
                 bus: Some(1),
                 removable: Some(false),
-                read_only: None,
+                read_only: Some(false),
                 style: Some("GPT".into()),
                 partitions: vec![],
                 errors: vec![],

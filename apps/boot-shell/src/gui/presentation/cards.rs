@@ -934,7 +934,7 @@ impl Cards<'_, '_> {
         if !deployment::media_loaded(app) {
             self.notice(
                 rect(x, top, left, 75),
-                "Execução da instalação indisponível",
+                "Escolha a mídia de instalação",
                 "Escolha uma imagem WIM/ESD ou abra a mídia montada.",
                 (METRIC, WARNING),
             );
@@ -967,7 +967,10 @@ impl Cards<'_, '_> {
         );
         self.line(
             rect(right + 13, bottom - 64, right_width - 26, 22),
-            "Execução indisponível",
+            deployment::lab_status(app)
+                .lines()
+                .next()
+                .unwrap_or_default(),
             WARNING,
         );
     }

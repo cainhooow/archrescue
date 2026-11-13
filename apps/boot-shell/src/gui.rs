@@ -1073,6 +1073,12 @@ Gravados {}/{} bytes · Verificados {} bytes · {} arquivos · {} falhas",
                 invalidate_scene(hwnd);
                 continue;
             }
+            #[cfg(all(feature = "lab-deployment", target_arch = "x86_64"))]
+            Event::Deployment(update @ deployment::Update::LabProgress(_)) => {
+                deployment::update(hwnd, app, update);
+                invalidate_scene(hwnd);
+                continue;
+            }
             Event::Deployment(update) => deployment::update(hwnd, app, update),
             Event::PlanExported(path) => set(
                 hwnd,
