@@ -1,0 +1,76 @@
+{
+  "recovery_operation": "3a748a97-0c55-4938-8915-256b85fb2567",
+  "deployment_plan_sha256": "7afa018d0fe2e962fef946389b275e29a70c3c16790e03690e7347e92419289c",
+  "backup_manifest_sha256": "b6b04eb1a5c8d4ed8ca044a5ef55857f922ad67ab8a08b1efbba906454e304fa",
+  "restore_plan_sha256": "04761d44e85276fab39ece849119f5e31a0f80ff6e8178276ef5c685faef0139",
+  "boot": {
+    "hostname": "AR-WAVE5-QA",
+    "username": "RecoveryQA",
+    "sid": "S-1-5-21-3082017920-1407072025-4162156510-1001",
+    "firmware": 2,
+    "caption": "Microsoft Windows 10 Pro",
+    "version": "10.0.19045",
+    "build": "19045",
+    "ubr": 2965,
+    "display_version": "22H2",
+    "disk_guid": "{a9ae696a-9bad-421c-9865-2f6627829644}",
+    "disk_serial": "86bf627bd46d478a8b5e",
+    "explorer_running": true
+  },
+  "file_count": 5,
+  "bytes": 3100118,
+  "files": [
+    {
+      "source": "Desktop/conflict.txt",
+      "destination": "Desktop/conflict (ArchRescue 1).txt",
+      "bytes": 22,
+      "sha256": {
+        "source": "7e85747b4ce5ce3da09edd20c2c4f146a2d8c873a0d76466871854bfdb4b023b",
+        "backup": "7e85747b4ce5ce3da09edd20c2c4f146a2d8c873a0d76466871854bfdb4b023b",
+        "restored": "7e85747b4ce5ce3da09edd20c2c4f146a2d8c873a0d76466871854bfdb4b023b"
+      }
+    },
+    {
+      "source": "Documents/nested/ação.txt",
+      "destination": "Documents/nested/ação.txt",
+      "bytes": 14,
+      "sha256": {
+        "source": "ebb55fec443fe53e84d0674ac0801a5afe57e804fd99de02f791d8d59fba368c",
+        "backup": "ebb55fec443fe53e84d0674ac0801a5afe57e804fd99de02f791d8d59fba368c",
+        "restored": "ebb55fec443fe53e84d0674ac0801a5afe57e804fd99de02f791d8d59fba368c"
+      }
+    },
+    {
+      "source": "Documents/notes.txt",
+      "destination": "Documents/notes.txt",
+      "bytes": 24,
+      "sha256": {
+        "source": "c74a73c293e935eeec767f55f28dba2bf17e631497f465a66598adcfc2aaac63",
+        "backup": "c74a73c293e935eeec767f55f28dba2bf17e631497f465a66598adcfc2aaac63",
+        "restored": "c74a73c293e935eeec767f55f28dba2bf17e631497f465a66598adcfc2aaac63"
+      }
+    },
+    {
+      "source": "Downloads/sample.bin",
+      "destination": "Downloads/sample.bin",
+      "bytes": 3100000,
+      "sha256": {
+        "source": "0c311fe914874d8df645bde0f709e8a8de191f110030f0a8ed27f5cff7b7fb0f",
+        "backup": "0c311fe914874d8df645bde0f709e8a8de191f110030f0a8ed27f5cff7b7fb0f",
+        "restored": "0c311fe914874d8df645bde0f709e8a8de191f110030f0a8ed27f5cff7b7fb0f"
+      }
+    },
+    {
+      "source": "Pictures/grid.bmp",
+      "destination": "Pictures/grid.bmp",
+      "bytes": 58,
+      "sha256": {
+        "source": "801b37600aa2c117c49639f81f1e072e205c5ad18380808f471c5430c7a4f8a7",
+        "backup": "801b37600aa2c117c49639f81f1e072e205c5ad18380808f471c5430c7a4f8a7",
+        "restored": "801b37600aa2c117c49639f81f1e072e205c5ad18380808f471c5430c7a4f8a7"
+      }
+    }
+  ],
+  "empty_directory": "Documents/empty-folder",
+  "preserved_conflict_sha256": "e44e1c6f384753c21b447f3d3cc202c79c5c3df8d02405da2a4da9c5088a4ae0"
+}

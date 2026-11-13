@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "purpose": "archrescue-disposable-uefi-v1",
+  "operation_id": "3a748a97-0c55-4938-8915-256b85fb2567",
+  "issued_unix": 1794533035,
+  "expires_unix": 1794536635,
+  "plan_fingerprint": "7afa018d0fe2e962fef946389b275e29a70c3c16790e03690e7347e92419289c",
+  "vm_uuid": "a39042de-8dde-4018-94df-dae7da4042b7",
+  "target_vdi_uuid": "86bf627b-d46d-478a-8b5e-ed3395e46e9b",
+  "target_backing_file": "/home/cainhooow/.cache/archrescue/769806d801c44fdeb2e6b542c01e2f40/target.vdi",
+  "controller": "SATA",
+  "port": 2,
+  "device": 0,
+  "target_gpt_id": "gpt:a9ae696a-9bad-421c-9865-2f6627829644",
+  "target_serial": "86bf627bd46d478a8b5e",
+  "target_capacity": 85899345920,
+  "initial_layout": "empty-gpt",
+  "source_gpt_id": "gpt:b8150c40-7502-45e8-aefe-c918ac9dac9e",
+  "backup_gpt_id": "gpt:a0797c76-4a36-47b9-877e-86be00d6fa0c",
+  "evidence_gpt_id": "gpt:0a1843ca-6dd1-426b-a0bf-925d525acffe",
+  "backup_operation": "ar-18e785c27264be68-6b8-0",
+  "backup_manifest_sha256": "b6b04eb1a5c8d4ed8ca044a5ef55857f922ad67ab8a08b1efbba906454e304fa"
+}

@@ -1,0 +1,3 @@
+/home/cainhooow/Projetos/archrescue/artifacts/windows/7355215/archrescue-0.0.1-x64.iso: OK
+/home/cainhooow/Downloads/Win10_22H2_BrazilianPortuguese_x64v1.iso: OK
+'/home/cainhooow/VirtualBox VMs/W10Val/W10Val.vbox': OK

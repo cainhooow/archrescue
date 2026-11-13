@@ -1,0 +1,6 @@
+VMState="running"
+"SATA-ImageUUID-0-0"="e7dfd2a5-db22-4ffe-80b2-7c193d7347d9"
+"SATA-ImageUUID-1-0"="e8f7939f-0b27-4c9f-901b-e655c99803ba"
+"SATA-ImageUUID-2-0"="1164566d-f9be-480f-97b4-02cb432774e6"
+"SATA-ImageUUID-3-0"="562d1968-03ef-498c-8b2e-9a819a09a85f"
+CurrentSnapshotUUID="1452602a-8bec-4221-a152-302ffedad65a"

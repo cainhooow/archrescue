@@ -1,0 +1,22 @@
+{
+  "Desktop/conflict.txt": {
+    "bytes": 22,
+    "sha256": "7e85747b4ce5ce3da09edd20c2c4f146a2d8c873a0d76466871854bfdb4b023b"
+  },
+  "Documents/nested/a\u00e7\u00e3o.txt": {
+    "bytes": 14,
+    "sha256": "ebb55fec443fe53e84d0674ac0801a5afe57e804fd99de02f791d8d59fba368c"
+  },
+  "Documents/notes.txt": {
+    "bytes": 24,
+    "sha256": "c74a73c293e935eeec767f55f28dba2bf17e631497f465a66598adcfc2aaac63"
+  },
+  "Downloads/sample.bin": {
+    "bytes": 3100000,
+    "sha256": "0c311fe914874d8df645bde0f709e8a8de191f110030f0a8ed27f5cff7b7fb0f"
+  },
+  "Pictures/grid.bmp": {
+    "bytes": 58,
+    "sha256": "801b37600aa2c117c49639f81f1e072e205c5ad18380808f471c5430c7a4f8a7"
+  }
+}

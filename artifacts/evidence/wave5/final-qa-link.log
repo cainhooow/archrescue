@@ -1,0 +1,3 @@
+   Compiling archrescue-deployment v0.0.1 (/home/cainhooow/Projetos/archrescue/crates/deployment)
+   Compiling archrescue-boot-shell v0.0.1 (/home/cainhooow/Projetos/archrescue/apps/boot-shell)
+    Finished `release` profile [optimized] target(s) in 38.99s

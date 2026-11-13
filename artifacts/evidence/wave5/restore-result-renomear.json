@@ -1,0 +1,79 @@
+{
+  "operation_id": "ar-18e780b28a5f31d4-1524-0",
+  "backup_operation": "ar-18e785c27264be68-6b8-0",
+  "recovery": {
+    "recovery_operation": "3a748a97-0c55-4938-8915-256b85fb2567",
+    "deployment_plan_sha256": "7afa018d0fe2e962fef946389b275e29a70c3c16790e03690e7347e92419289c",
+    "backup_operation": "ar-18e785c27264be68-6b8-0",
+    "backup_manifest_sha256": "b6b04eb1a5c8d4ed8ca044a5ef55857f922ad67ab8a08b1efbba906454e304fa"
+  },
+  "plan_sha256": "04761d44e85276fab39ece849119f5e31a0f80ff6e8178276ef5c685faef0139",
+  "target_sid": "S-1-5-21-3082017920-1407072025-4162156510-1001",
+  "target_profile": "\\\\?\\C:\\Users\\RecoveryQA",
+  "files": [
+    {
+      "source_relative": "Desktop\\conflict.txt",
+      "target_relative": "Desktop\\conflict (ArchRescue 1).txt",
+      "expected_sha256": "7e85747b4ce5ce3da09edd20c2c4f146a2d8c873a0d76466871854bfdb4b023b",
+      "actual_sha256": "7e85747b4ce5ce3da09edd20c2c4f146a2d8c873a0d76466871854bfdb4b023b",
+      "bytes_copied": 22,
+      "published": true,
+      "action": "Rename",
+      "outcome": "Verified",
+      "error": null
+    },
+    {
+      "source_relative": "Documents\\nested\\ação.txt",
+      "target_relative": "Documents\\nested\\ação.txt",
+      "expected_sha256": "ebb55fec443fe53e84d0674ac0801a5afe57e804fd99de02f791d8d59fba368c",
+      "actual_sha256": "ebb55fec443fe53e84d0674ac0801a5afe57e804fd99de02f791d8d59fba368c",
+      "bytes_copied": 14,
+      "published": true,
+      "action": "Copy",
+      "outcome": "Verified",
+      "error": null
+    },
+    {
+      "source_relative": "Documents\\notes.txt",
+      "target_relative": "Documents\\notes.txt",
+      "expected_sha256": "c74a73c293e935eeec767f55f28dba2bf17e631497f465a66598adcfc2aaac63",
+      "actual_sha256": "c74a73c293e935eeec767f55f28dba2bf17e631497f465a66598adcfc2aaac63",
+      "bytes_copied": 24,
+      "published": true,
+      "action": "Copy",
+      "outcome": "Verified",
+      "error": null
+    },
+    {
+      "source_relative": "Downloads\\sample.bin",
+      "target_relative": "Downloads\\sample.bin",
+      "expected_sha256": "0c311fe914874d8df645bde0f709e8a8de191f110030f0a8ed27f5cff7b7fb0f",
+      "actual_sha256": "0c311fe914874d8df645bde0f709e8a8de191f110030f0a8ed27f5cff7b7fb0f",
+      "bytes_copied": 3100000,
+      "published": true,
+      "action": "Copy",
+      "outcome": "Verified",
+      "error": null
+    },
+    {
+      "source_relative": "Pictures\\grid.bmp",
+      "target_relative": "Pictures\\grid.bmp",
+      "expected_sha256": "801b37600aa2c117c49639f81f1e072e205c5ad18380808f471c5430c7a4f8a7",
+      "actual_sha256": "801b37600aa2c117c49639f81f1e072e205c5ad18380808f471c5430c7a4f8a7",
+      "bytes_copied": 58,
+      "published": true,
+      "action": "Copy",
+      "outcome": "Verified",
+      "error": null
+    }
+  ],
+  "prepared_directories": [
+    "Desktop",
+    "Documents",
+    "Documents\\empty-folder",
+    "Documents\\nested",
+    "Downloads",
+    "Pictures"
+  ],
+  "error": null
+}

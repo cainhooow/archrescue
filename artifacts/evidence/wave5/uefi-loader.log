@@ -1,0 +1,1 @@
+00:00:00.697451 EFI: VBoxDbg> loadimage64 'bootmgfw.efi' 0x10000000 LB 0x1c7000

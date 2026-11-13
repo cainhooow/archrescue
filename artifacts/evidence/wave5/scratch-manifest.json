@@ -1,0 +1,23 @@
+{
+  "id": "769806d801c44fdeb2e6b542c01e2f40",
+  "owner_uid": 1000,
+  "purpose": "Wave 5 disposable UEFI Windows deployment and restoration",
+  "expected_lifespan": "Through build or QA and evidence promotion",
+  "scratch": "/home/cainhooow/.cache/archrescue/769806d801c44fdeb2e6b542c01e2f40",
+  "device": 50,
+  "inode": 1229457,
+  "budget_bytes": 112742891520,
+  "free_at_start_bytes": 299030417408,
+  "dependencies": [
+    "/home/cainhooow/Projetos/archrescue/artifacts/windows/7355215/archrescue-0.0.1-x64.iso",
+    "/home/cainhooow/Downloads/Win10_22H2_BrazilianPortuguese_x64v1.iso"
+  ],
+  "retain": [
+    "/home/cainhooow/Projetos/archrescue/artifacts/evidence/wave5"
+  ],
+  "state": "cleaned",
+  "allocated_before_cleanup": 36771082240,
+  "allocated_bytes": 0,
+  "removed_path_count": 17830,
+  "full_manifest_sha256": "065c6ada30b60733b3d976e2cd62a2e656a10f32f218379c09f714d6ab969de1"
+}

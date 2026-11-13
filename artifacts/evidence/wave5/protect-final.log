@@ -1,0 +1,27 @@
+
+Microsoft DiskPart version 10.0.26100.1
+
+Copyright (C) Microsoft Corporation.
+On computer: MININT-MI898RD
+
+Disk 1 is now the selected disk.
+
+Disk attributes set successfully.
+Current Read-only State : Yes
+Read-only  : Yes
+Boot Disk  : No
+Pagefile Disk  : No
+Hibernation File Disk  : No
+Crashdump Disk  : No
+Clustered Disk  : No
+
+Disk 2 is now the selected disk.
+
+Disk attributes set successfully.
+Current Read-only State : Yes
+Read-only  : Yes
+Boot Disk  : No
+Pagefile Disk  : No
+Hibernation File Disk  : No
+Crashdump Disk  : No
+Clustered Disk  : No

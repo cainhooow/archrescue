@@ -1,0 +1,376 @@
+{
+  "schema_version": 1,
+  "version": "0.0.1",
+  "build_id": "wave5-lab-769806d8",
+  "runtime_os": "windows",
+  "architecture": "x86_64",
+  "generated_unix": 1794550046,
+  "inventory": {
+    "disks": [
+      {
+        "number": 0,
+        "identity": "gpt:a9ae696a-9bad-421c-9865-2f6627829644",
+        "device_path": "\\\\?\\scsi#disk&ven_vbox&prod_harddisk#4&2617aeae&0&020000#{53f56307-b6bf-11d0-94f2-00a0c91efb8b}",
+        "capacity": 85899345920,
+        "bus": 11,
+        "removable": false,
+        "read_only": false,
+        "style": "GPT",
+        "partitions": [],
+        "errors": []
+      },
+      {
+        "number": 1,
+        "identity": "gpt:b8150c40-7502-45e8-aefe-c918ac9dac9e",
+        "device_path": "\\\\?\\scsi#disk&ven_vbox&prod_harddisk#4&2617aeae&0&030000#{53f56307-b6bf-11d0-94f2-00a0c91efb8b}",
+        "capacity": 805306368,
+        "bus": 11,
+        "removable": false,
+        "read_only": false,
+        "style": "GPT",
+        "partitions": [
+          {
+            "number": 1,
+            "id": "224dc341-ffc2-4c6b-9cd6-bcb93aaeff50",
+            "offset": 1048576,
+            "length": 803209216,
+            "kind": "ebd0a0a2-b9e5-4433-87c0-68b6b72699c7",
+            "efi": false
+          }
+        ],
+        "errors": []
+      },
+      {
+        "number": 2,
+        "identity": "gpt:a0797c76-4a36-47b9-877e-86be00d6fa0c",
+        "device_path": "\\\\?\\scsi#disk&ven_vbox&prod_harddisk#4&2617aeae&0&040000#{53f56307-b6bf-11d0-94f2-00a0c91efb8b}",
+        "capacity": 805306368,
+        "bus": 11,
+        "removable": false,
+        "read_only": false,
+        "style": "GPT",
+        "partitions": [
+          {
+            "number": 1,
+            "id": "f6c8b2e1-c4ae-4d2c-9991-2baa1fd15864",
+            "offset": 1048576,
+            "length": 803209216,
+            "kind": "ebd0a0a2-b9e5-4433-87c0-68b6b72699c7",
+            "efi": false
+          }
+        ],
+        "errors": []
+      },
+      {
+        "number": 3,
+        "identity": "gpt:0a1843ca-6dd1-426b-a0bf-925d525acffe",
+        "device_path": "\\\\?\\scsi#disk&ven_vbox&prod_harddisk#4&2617aeae&0&050000#{53f56307-b6bf-11d0-94f2-00a0c91efb8b}",
+        "capacity": 805306368,
+        "bus": 11,
+        "removable": false,
+        "read_only": false,
+        "style": "GPT",
+        "partitions": [
+          {
+            "number": 1,
+            "id": "041f7dee-519b-4a9a-bd72-2e24034a4f32",
+            "offset": 1048576,
+            "length": 803209216,
+            "kind": "ebd0a0a2-b9e5-4433-87c0-68b6b72699c7",
+            "efi": false
+          }
+        ],
+        "errors": []
+      }
+    ],
+    "volumes": [
+      {
+        "identity": "\\\\?\\Volume{224dc341-ffc2-4c6b-9cd6-bcb93aaeff50}\\",
+        "paths": [
+          "C:\\"
+        ],
+        "filesystem": "NTFS",
+        "space": {
+          "total": 803205120,
+          "available": 751517696,
+          "free": 751517696,
+          "used": 51687424
+        },
+        "physical_disks": [
+          1
+        ],
+        "errors": []
+      },
+      {
+        "identity": "\\\\?\\Volume{f6c8b2e1-c4ae-4d2c-9991-2baa1fd15864}\\",
+        "paths": [
+          "D:\\"
+        ],
+        "filesystem": "NTFS",
+        "space": {
+          "total": 803205120,
+          "available": 785829888,
+          "free": 785829888,
+          "used": 17375232
+        },
+        "physical_disks": [
+          2
+        ],
+        "errors": []
+      },
+      {
+        "identity": "\\\\?\\Volume{041f7dee-519b-4a9a-bd72-2e24034a4f32}\\",
+        "paths": [
+          "E:\\"
+        ],
+        "filesystem": "NTFS",
+        "space": {
+          "total": 803205120,
+          "available": 785821696,
+          "free": 785821696,
+          "used": 17383424
+        },
+        "physical_disks": [
+          3
+        ],
+        "errors": []
+      },
+      {
+        "identity": "\\\\?\\Volume{d9b257fc-684e-4dcb-ab79-03cfa2f6b750}\\",
+        "paths": [
+          "X:\\"
+        ],
+        "filesystem": "NTFS",
+        "space": {
+          "total": 538371072,
+          "available": 534806528,
+          "free": 534806528,
+          "used": 3564544
+        },
+        "physical_disks": [
+          4294967295
+        ],
+        "errors": []
+      },
+      {
+        "identity": "\\\\?\\Volume{821f712d-df27-11f1-9112-806e6f6e6963}\\",
+        "paths": [
+          "F:\\"
+        ],
+        "filesystem": "CDFS",
+        "space": {
+          "total": 8144896,
+          "available": 0,
+          "free": 0,
+          "used": 8144896
+        },
+        "physical_disks": [],
+        "errors": [
+          {
+            "kind": "IO",
+            "context": "Read-only device query: Incorrect function. (os error 1)",
+            "os_code": 1
+          }
+        ]
+      },
+      {
+        "identity": "\\\\?\\Volume{821f712e-df27-11f1-9112-806e6f6e6963}\\",
+        "paths": [
+          "G:\\"
+        ],
+        "filesystem": "UDF",
+        "space": {
+          "total": 407939072,
+          "available": 0,
+          "free": 0,
+          "used": 407939072
+        },
+        "physical_disks": [],
+        "errors": [
+          {
+            "kind": "IO",
+            "context": "Read-only device query: Incorrect function. (os error 1)",
+            "os_code": 1
+          }
+        ]
+      },
+      {
+        "identity": "\\\\?\\Volume{821f712f-df27-11f1-9112-806e6f6e6963}\\",
+        "paths": [
+          "H:\\"
+        ],
+        "filesystem": "UDF",
+        "space": {
+          "total": 5826543616,
+          "available": 0,
+          "free": 0,
+          "used": 5826543616
+        },
+        "physical_disks": [],
+        "errors": [
+          {
+            "kind": "IO",
+            "context": "Read-only device query: Incorrect function. (os error 1)",
+            "os_code": 1
+          }
+        ]
+      }
+    ],
+    "errors": []
+  },
+  "installations": {
+    "installations": [
+      {
+        "path": "\\\\?\\C:\\Windows",
+        "volume": "\\\\?\\C:\\",
+        "architecture": "x64",
+        "version": "10.0.26100.1",
+        "loader_architecture": "x64",
+        "recovery_files": [],
+        "confidence": "candidate: corroborated filesystem markers",
+        "evidence": [
+          "SYSTEM and SOFTWARE have regf signatures",
+          "ntoskrnl.exe has a valid PE signature and supported machine type"
+        ],
+        "limitations": [
+          "Registry hive contents and kernel signatures are not authenticated; this is not proof of a healthy or bootable installation",
+          "Version, when present, is the offline kernel file version; registry edition, activation and servicing state are unresolved"
+        ]
+      }
+    ],
+    "probes": [
+      {
+        "root": "\\\\?\\C:\\",
+        "state": "candidate",
+        "windows_old": false
+      }
+    ],
+    "errors": []
+  },
+  "boot": {
+    "observations": [
+      {
+        "path": "\\\\?\\C:\\EFI\\Microsoft\\Boot\\bootmgfw.efi",
+        "status": "missing",
+        "detail": "Expected path is absent from this root"
+      },
+      {
+        "path": "\\\\?\\C:\\EFI\\Boot\\bootx64.efi",
+        "status": "missing",
+        "detail": "Expected path is absent from this root"
+      },
+      {
+        "path": "\\\\?\\C:\\EFI\\Microsoft\\Boot\\BCD",
+        "status": "missing",
+        "detail": "Expected path is absent from this root"
+      },
+      {
+        "path": "\\\\?\\C:\\Boot\\BCD",
+        "status": "missing",
+        "detail": "Expected path is absent from this root"
+      }
+    ],
+    "errors": [],
+    "limitations": [
+      "Only supplied accessible roots are examined. Unmounted EFI partitions are not mounted or modified.",
+      "File presence does not establish correct firmware boot order or valid BCD device references."
+    ]
+  },
+  "operations": [],
+  "diagnosis": {
+    "findings": [
+      {
+        "id": "WINDOWS_CANDIDATE",
+        "severity": "info",
+        "confidence": "observed",
+        "affected": "\\\\?\\C:\\",
+        "evidence": "Assinaturas SYSTEM e SOFTWARE e cabeçalho do kernel observados.",
+        "next_action": "Confira a instalação e o disco antes de escolher um alvo.",
+        "blocks_repair": false
+      },
+      {
+        "id": "WINDOWS_LOADER_ARCH_MATCH",
+        "severity": "info",
+        "confidence": "observed",
+        "affected": "\\\\?\\C:\\Windows",
+        "evidence": "Kernel e winload.efi apresentam arquitetura x64.",
+        "next_action": "Verifique os arquivos de inicialização da instalação.",
+        "blocks_repair": false
+      },
+      {
+        "id": "EFI_ASSOCIATION_UNRESOLVED",
+        "severity": "warning",
+        "confidence": "missing_evidence",
+        "affected": "\\\\?\\C:\\Windows",
+        "evidence": "Nenhuma ESP encontrada no mesmo disco.",
+        "next_action": "Confirme o identificador da ESP e a referência do BCD.",
+        "blocks_repair": true
+      },
+      {
+        "id": "EFI_IMAGE_PATH_MISSING",
+        "severity": "warning",
+        "confidence": "missing_evidence",
+        "affected": "\\\\?\\C:\\EFI\\Microsoft\\Boot\\bootmgfw.efi",
+        "evidence": "Expected path is absent from this root",
+        "next_action": "Compare com a ESP correta e confira os caminhos esperados.",
+        "blocks_repair": false
+      },
+      {
+        "id": "EFI_IMAGE_PATH_MISSING",
+        "severity": "warning",
+        "confidence": "missing_evidence",
+        "affected": "\\\\?\\C:\\EFI\\Boot\\bootx64.efi",
+        "evidence": "Expected path is absent from this root",
+        "next_action": "Compare com a ESP correta e confira os caminhos esperados.",
+        "blocks_repair": false
+      },
+      {
+        "id": "BCD_PATH_MISSING",
+        "severity": "warning",
+        "confidence": "missing_evidence",
+        "affected": "\\\\?\\C:\\EFI\\Microsoft\\Boot\\BCD",
+        "evidence": "Expected path is absent from this root",
+        "next_action": "Compare com a ESP correta e confira os caminhos esperados.",
+        "blocks_repair": false
+      },
+      {
+        "id": "BCD_PATH_MISSING",
+        "severity": "warning",
+        "confidence": "missing_evidence",
+        "affected": "\\\\?\\C:\\Boot\\BCD",
+        "evidence": "Expected path is absent from this root",
+        "next_action": "Compare com a ESP correta e confira os caminhos esperados.",
+        "blocks_repair": false
+      }
+    ],
+    "associations": [
+      {
+        "installation": "\\\\?\\C:\\Windows",
+        "disk_id": "gpt:b8150c40-7502-45e8-aefe-c918ac9dac9e",
+        "disk_number": 1,
+        "windows_partition": {
+          "number": 1,
+          "id": "224dc341-ffc2-4c6b-9cd6-bcb93aaeff50",
+          "offset": 1048576,
+          "length": 803209216,
+          "kind": "ebd0a0a2-b9e5-4433-87c0-68b6b72699c7",
+          "efi": false
+        },
+        "efi_partitions": [],
+        "recovery_partitions": [],
+        "mounted_efi": [],
+        "bcd_reference_verified": false
+      }
+    ]
+  },
+  "transactions": [],
+  "repair_plans": [],
+  "repair_attempts": [],
+  "decisions": [],
+  "session_errors": [],
+  "limitations": [
+    "No hardware health or bootability verdict is inferred from enumeration",
+    "WinPE RAM-disk exports are volatile; choose a persistent authorized destination",
+    "Selected relative paths and volume identities are local recovery metadata; review before sharing"
+  ]
+}

@@ -1,0 +1,59 @@
+dvd 2c77521b-0881-4a00-a7e6-fbce0c63d5df /home/cainhooow/.cache/archrescue/769806d801c44fdeb2e6b542c01e2f40/prep.iso
+dvd 3334ae7d-33af-4f65-9235-fa99ee4cc33b /home/cainhooow/.cache/archrescue/769806d801c44fdeb2e6b542c01e2f40/stage.iso
+dvd 57a954f7-2ee4-4816-886a-b4fd63defd2d /home/cainhooow/.cache/archrescue/769806d801c44fdeb2e6b542c01e2f40/check.iso
+dvd b949f3bf-2508-4b01-a280-04537a5ed652 /home/cainhooow/.cache/archrescue/769806d801c44fdeb2e6b542c01e2f40/deploy.iso
+dvd 1a901f5c-28d6-47bc-a754-ee2b2732d7d6 /home/cainhooow/.cache/archrescue/769806d801c44fdeb2e6b542c01e2f40/lock.iso
+dvd b34f10d1-095b-41d1-8526-74a1844bb086 /home/cainhooow/.cache/archrescue/769806d801c44fdeb2e6b542c01e2f40/deploy2.iso
+dvd 220f1804-520a-45a0-a98e-a52b39e5fe35 /home/cainhooow/.cache/archrescue/769806d801c44fdeb2e6b542c01e2f40/time.iso
+dvd c06c781b-0bf7-4c14-9d34-9cb3d576a87b /home/cainhooow/.cache/archrescue/769806d801c44fdeb2e6b542c01e2f40/deploy3.iso
+dvd dcc09fc6-8597-4fa5-b639-18cfe643efb6 /home/cainhooow/.cache/archrescue/769806d801c44fdeb2e6b542c01e2f40/post-install.iso
+dvd 6e522b84-f356-424a-9127-8f4b0cdd604b /home/cainhooow/.cache/archrescue/769806d801c44fdeb2e6b542c01e2f40/probe.iso
+dvd 092a4e3b-7524-49f0-a3a7-c4f6b303b161 /home/cainhooow/.cache/archrescue/769806d801c44fdeb2e6b542c01e2f40/deploy-retry.iso
+dvd 5f1fbe10-1d83-4d08-b132-4b095398f61d /home/cainhooow/.cache/archrescue/769806d801c44fdeb2e6b542c01e2f40/installed-qa.iso
+dvd e0480eff-e1a4-4172-954d-d94fb72e9efb /home/cainhooow/.cache/archrescue/769806d801c44fdeb2e6b542c01e2f40/installed-qa2.iso
+dvd 169f0779-b01a-49b0-858e-5fa867a77b74 /home/cainhooow/.cache/archrescue/769806d801c44fdeb2e6b542c01e2f40/winpe-regression.iso
+dvd c69f1ce6-745f-4162-8129-872e8f3e954d /home/cainhooow/.cache/archrescue/769806d801c44fdeb2e6b542c01e2f40/negative.iso
+Removed owned link /home/cainhooow/.cache/archrescue/769806d801c44fdeb2e6b542c01e2f40/host-tools/usr/bin/osirrox -> xorriso
+Removed owned link /home/cainhooow/.cache/archrescue/769806d801c44fdeb2e6b542c01e2f40/host-tools/usr/bin/xorrecord -> xorriso
+Removed owned link /home/cainhooow/.cache/archrescue/769806d801c44fdeb2e6b542c01e2f40/host-tools/usr/bin/xorrisofs -> xorriso
+Removed owned link /home/cainhooow/.cache/archrescue/769806d801c44fdeb2e6b542c01e2f40/host-tools/usr/bin/mount.lowntfs-3g -> /usr/bin/lowntfs-3g
+Removed owned link /home/cainhooow/.cache/archrescue/769806d801c44fdeb2e6b542c01e2f40/host-tools/usr/bin/mount.ntfs -> /usr/bin/ntfs-3g
+Removed owned link /home/cainhooow/.cache/archrescue/769806d801c44fdeb2e6b542c01e2f40/host-tools/usr/bin/mount.ntfs-3g -> /usr/bin/ntfs-3g
+Removed owned link /home/cainhooow/.cache/archrescue/769806d801c44fdeb2e6b542c01e2f40/host-tools/usr/bin/dosfsck -> fsck.fat
+Removed owned link /home/cainhooow/.cache/archrescue/769806d801c44fdeb2e6b542c01e2f40/host-tools/usr/bin/dosfslabel -> fatlabel
+Removed owned link /home/cainhooow/.cache/archrescue/769806d801c44fdeb2e6b542c01e2f40/host-tools/usr/bin/fsck.msdos -> fsck.fat
+Removed owned link /home/cainhooow/.cache/archrescue/769806d801c44fdeb2e6b542c01e2f40/host-tools/usr/bin/fsck.vfat -> fsck.fat
+Removed owned link /home/cainhooow/.cache/archrescue/769806d801c44fdeb2e6b542c01e2f40/host-tools/usr/bin/mkdosfs -> mkfs.fat
+Removed owned link /home/cainhooow/.cache/archrescue/769806d801c44fdeb2e6b542c01e2f40/host-tools/usr/bin/mkfs.msdos -> mkfs.fat
+Removed owned link /home/cainhooow/.cache/archrescue/769806d801c44fdeb2e6b542c01e2f40/host-tools/usr/bin/mkfs.vfat -> mkfs.fat
+Removed owned link /home/cainhooow/.cache/archrescue/769806d801c44fdeb2e6b542c01e2f40/host-tools/usr/bin/i686-w64-mingw32-cc -> i686-w64-mingw32-gcc
+Removed owned link /home/cainhooow/.cache/archrescue/769806d801c44fdeb2e6b542c01e2f40/host-tools/usr/bin/x86_64-w64-mingw32-cc -> x86_64-w64-mingw32-gcc
+Removed owned link /home/cainhooow/.cache/archrescue/769806d801c44fdeb2e6b542c01e2f40/host-tools/usr/bin/mkfs.ntfs -> /usr/bin/mkntfs
+Removed owned link /home/cainhooow/.cache/archrescue/769806d801c44fdeb2e6b542c01e2f40/host-tools/usr/lib/libburn.so -> libburn.so.4.111.0
+Removed owned link /home/cainhooow/.cache/archrescue/769806d801c44fdeb2e6b542c01e2f40/host-tools/usr/lib/libburn.so.4 -> libburn.so.4.111.0
+Removed owned link /home/cainhooow/.cache/archrescue/769806d801c44fdeb2e6b542c01e2f40/host-tools/usr/lib/libisofs.so -> libisofs.so.6.94.0
+Removed owned link /home/cainhooow/.cache/archrescue/769806d801c44fdeb2e6b542c01e2f40/host-tools/usr/lib/libisofs.so.6 -> libisofs.so.6.94.0
+Removed owned link /home/cainhooow/.cache/archrescue/769806d801c44fdeb2e6b542c01e2f40/host-tools/usr/lib/libisoburn.so -> libisoburn.so.1.115.0
+Removed owned link /home/cainhooow/.cache/archrescue/769806d801c44fdeb2e6b542c01e2f40/host-tools/usr/lib/libisoburn.so.1 -> libisoburn.so.1.115.0
+Removed owned link /home/cainhooow/.cache/archrescue/769806d801c44fdeb2e6b542c01e2f40/host-tools/usr/lib/gcc/i686-w64-mingw32/16.2.0/plugin/libcc1plugin.so -> libcc1plugin.so.0.0.0
+Removed owned link /home/cainhooow/.cache/archrescue/769806d801c44fdeb2e6b542c01e2f40/host-tools/usr/lib/gcc/i686-w64-mingw32/16.2.0/plugin/libcc1plugin.so.0 -> libcc1plugin.so.0.0.0
+Removed owned link /home/cainhooow/.cache/archrescue/769806d801c44fdeb2e6b542c01e2f40/host-tools/usr/lib/gcc/i686-w64-mingw32/16.2.0/plugin/libcp1plugin.so -> libcp1plugin.so.0.0.0
+Removed owned link /home/cainhooow/.cache/archrescue/769806d801c44fdeb2e6b542c01e2f40/host-tools/usr/lib/gcc/i686-w64-mingw32/16.2.0/plugin/libcp1plugin.so.0 -> libcp1plugin.so.0.0.0
+Removed owned link /home/cainhooow/.cache/archrescue/769806d801c44fdeb2e6b542c01e2f40/host-tools/usr/lib/gcc/x86_64-w64-mingw32/16.2.0/plugin/libcc1plugin.so -> libcc1plugin.so.0.0.0
+Removed owned link /home/cainhooow/.cache/archrescue/769806d801c44fdeb2e6b542c01e2f40/host-tools/usr/lib/gcc/x86_64-w64-mingw32/16.2.0/plugin/libcc1plugin.so.0 -> libcc1plugin.so.0.0.0
+Removed owned link /home/cainhooow/.cache/archrescue/769806d801c44fdeb2e6b542c01e2f40/host-tools/usr/lib/gcc/x86_64-w64-mingw32/16.2.0/plugin/libcp1plugin.so -> libcp1plugin.so.0.0.0
+Removed owned link /home/cainhooow/.cache/archrescue/769806d801c44fdeb2e6b542c01e2f40/host-tools/usr/lib/gcc/x86_64-w64-mingw32/16.2.0/plugin/libcp1plugin.so.0 -> libcp1plugin.so.0.0.0
+Removed owned link /home/cainhooow/.cache/archrescue/769806d801c44fdeb2e6b542c01e2f40/host-tools/usr/lib/libntfs-3g.so -> libntfs-3g.so.91.0.0
+Removed owned link /home/cainhooow/.cache/archrescue/769806d801c44fdeb2e6b542c01e2f40/host-tools/usr/lib/libntfs-3g.so.91 -> libntfs-3g.so.91.0.0
+Removed owned link /home/cainhooow/.cache/archrescue/769806d801c44fdeb2e6b542c01e2f40/host-tools/usr/share/man/man8/mount.lowntfs-3g.8.gz -> ntfs-3g.8.gz
+Removed owned link /home/cainhooow/.cache/archrescue/769806d801c44fdeb2e6b542c01e2f40/host-tools/usr/share/man/man8/mount.ntfs-3g.8.gz -> ntfs-3g.8.gz
+Removed owned link /home/cainhooow/.cache/archrescue/769806d801c44fdeb2e6b542c01e2f40/host-tools/usr/share/man/man8/dosfsck.8.gz -> fsck.fat.8.gz
+Removed owned link /home/cainhooow/.cache/archrescue/769806d801c44fdeb2e6b542c01e2f40/host-tools/usr/share/man/man8/dosfslabel.8.gz -> fatlabel.8.gz
+Removed owned link /home/cainhooow/.cache/archrescue/769806d801c44fdeb2e6b542c01e2f40/host-tools/usr/share/man/man8/fsck.msdos.8.gz -> fsck.fat.8.gz
+Removed owned link /home/cainhooow/.cache/archrescue/769806d801c44fdeb2e6b542c01e2f40/host-tools/usr/share/man/man8/fsck.vfat.8.gz -> fsck.fat.8.gz
+Removed owned link /home/cainhooow/.cache/archrescue/769806d801c44fdeb2e6b542c01e2f40/host-tools/usr/share/man/man8/mkdosfs.8.gz -> mkfs.fat.8.gz
+Removed owned link /home/cainhooow/.cache/archrescue/769806d801c44fdeb2e6b542c01e2f40/host-tools/usr/share/man/man8/mkfs.msdos.8.gz -> mkfs.fat.8.gz
+Removed owned link /home/cainhooow/.cache/archrescue/769806d801c44fdeb2e6b542c01e2f40/host-tools/usr/share/man/man8/mkfs.vfat.8.gz -> mkfs.fat.8.gz
+Removed owned link /home/cainhooow/.cache/archrescue/769806d801c44fdeb2e6b542c01e2f40/host-tools/usr/share/man/man8/mkfs.ntfs.8.gz -> mkntfs.8.gz
+Removed owned link /home/cainhooow/.cache/archrescue/769806d801c44fdeb2e6b542c01e2f40/host-tools/usr/i686-w64-mingw32/lib/libatomic_asneeded.a -> libatomic.a
+Removed owned link /home/cainhooow/.cache/archrescue/769806d801c44fdeb2e6b542c01e2f40/host-tools/usr/x86_64-w64-mingw32/lib/libatomic_asneeded.a -> libatomic.a

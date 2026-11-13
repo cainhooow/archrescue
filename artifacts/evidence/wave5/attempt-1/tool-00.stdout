@@ -1,0 +1,34 @@
+
+Microsoft DiskPart version 10.0.26100.1
+
+Copyright (C) Microsoft Corporation.
+On computer: MININT-T8N9MPL
+
+Disk 0 is now the selected disk.
+
+DiskPart succeeded in creating the specified partition.
+
+
+    0 percent completed
+  100 percent completed
+
+
+DiskPart successfully formatted the volume.
+
+DiskPart successfully assigned the drive letter or mount point.
+
+DiskPart succeeded in creating the specified partition.
+
+DiskPart succeeded in creating the specified partition.
+
+
+    0 percent completed
+    0 percent completed
+  100 percent completed
+
+
+DiskPart successfully formatted the volume.
+
+DiskPart successfully assigned the drive letter or mount point.
+
+Leaving DiskPart...

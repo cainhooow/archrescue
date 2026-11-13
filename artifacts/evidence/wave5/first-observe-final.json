@@ -1,0 +1,22 @@
+{
+  "vm_uuid": "a39042de-8dde-4018-94df-dae7da4042b7",
+  "target": {
+    "number": 0,
+    "identity": "gpt:a9ae696a-9bad-421c-9865-2f6627829644",
+    "device_path": "\\\\?\\scsi#disk&ven_vbox&prod_harddisk#4&2617aeae&0&020000#{53f56307-b6bf-11d0-94f2-00a0c91efb8b}",
+    "capacity": 85899345920,
+    "bus": 11,
+    "removable": false,
+    "read_only": false,
+    "style": "GPT",
+    "partitions": [],
+    "errors": []
+  },
+  "attachment": {
+    "serial": "572e8c3f200346baa6d5",
+    "product": "VBOX HARDDISK",
+    "bus": 11,
+    "logical_sector": 512,
+    "physical_sector": 512
+  }
+}

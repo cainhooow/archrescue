@@ -1,0 +1,223 @@
+   Compiling proc-macro2 v1.0.107
+   Compiling quote v1.0.47
+   Compiling semver v1.0.28
+   Compiling zeroize v1.9.1
+   Compiling subtle v2.6.1
+   Compiling signature v2.2.0
+   Compiling ed25519 v2.2.3
+   Compiling rustc_version v0.4.1
+   Compiling curve25519-dalek v4.1.3
+   Compiling syn v3.0.10
+   Compiling syn v2.0.119
+   Compiling serde_derive v1.0.229
+   Compiling curve25519-dalek-derive v0.1.1
+   Compiling serde v1.0.229
+   Compiling ed25519-dalek v2.2.0
+   Compiling archrescue-core v0.0.1 (/home/cainhooow/Projetos/archrescue/crates/core)
+   Compiling archrescue-storage v0.0.1 (/home/cainhooow/Projetos/archrescue/crates/storage)
+   Compiling archrescue-windows-detection v0.0.1 (/home/cainhooow/Projetos/archrescue/crates/windows-detection)
+   Compiling archrescue-backup v0.0.1 (/home/cainhooow/Projetos/archrescue/crates/backup)
+   Compiling archrescue-integrity v0.0.1 (/home/cainhooow/Projetos/archrescue/crates/integrity)
+   Compiling archrescue-diagnostics v0.0.1 (/home/cainhooow/Projetos/archrescue/crates/diagnostics)
+   Compiling archrescue-evidence v0.0.1 (/home/cainhooow/Projetos/archrescue/crates/evidence)
+   Compiling archrescue-restore v0.0.1 (/home/cainhooow/Projetos/archrescue/crates/restore)
+   Compiling archrescue-deployment v0.0.1 (/home/cainhooow/Projetos/archrescue/crates/deployment)
+   Compiling archrescue-boot-shell v0.0.1 (/home/cainhooow/Projetos/archrescue/apps/boot-shell)
+   Compiling archrescue-restore-agent v0.0.1 (/home/cainhooow/Projetos/archrescue/apps/restore-agent)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 18.45s
+     Running unittests src/lib.rs (/home/cainhooow/.cache/archrescue/cargo-target/debug/deps/archrescue_backup-63f30b27bc11d42d)
+
+running 19 tests
+test tests::distinct_unicode_case_collisions_are_rejected ... ok
+test tests::cancellation_before_preflight_writes_nothing ... ok
+test tests::existing_destination_never_overwritten ... ok
+test tests::distinct_ascii_case_collisions_are_rejected ... ok
+test tests::insufficient_space_uses_actual_free_space ... ok
+test tests::portable_paths_reject_traversal_and_devices ... ok
+test tests::same_volume_rejected_before_writes ... ok
+test tests::symlink_source_and_destination_ancestors_are_rejected ... ok
+test tests::cancellation_reports_exact_partial_bytes ... ok
+test tests::transaction_rejects_duplicate_selection_and_moved_operation ... ok
+test tests::destination_corruption_is_caught_by_readback ... ok
+test tests::transaction_refuses_changed_source_destination_conflict_and_corrupt_manifest ... ok
+test tests::nested_destination_rejected ... ok
+test tests::unreadable_source_is_not_silently_skipped ... ok
+test tests::partway_conflict_reports_partial_result ... ok
+test tests::overlapping_selections_are_rejected_without_a_collision ... ok
+test tests::destination_write_error_after_progress_leaves_unverified_partial ... ok
+test tests::verified_copy_preserves_hierarchy_empty_dirs_and_source ... ok
+test tests::transaction_restarts_partial_and_rechecks_published_files ... ok
+
+test result: ok. 19 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.60s
+
+     Running unittests src/main.rs (/home/cainhooow/.cache/archrescue/cargo-target/debug/deps/archrescue_boot_shell-e60ee5ab9456ec43)
+
+running 1 test
+test paths::tests::windows_namespaces_are_presented_without_changing_the_original ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (/home/cainhooow/.cache/archrescue/cargo-target/debug/deps/archrescue_core-bc5b070866a0f063)
+
+running 2 tests
+test tests::cancellation_is_terminal ... ok
+test tests::completion_cannot_skip_verification ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (/home/cainhooow/.cache/archrescue/cargo-target/debug/deps/archrescue_deployment-567747a12f64e210)
+
+running 12 tests
+test lab::tests::changed_layout_capacity_or_write_protection_fails_closed ... ok
+test lab::tests::registration_rejects_protected_disk_overlap ... ok
+test plan::tests::changed_or_ambiguous_target_is_rejected ... ok
+test media::tests::image_sizes_use_the_hosts_number_grouping ... ok
+test media::tests::inventory_preserves_missing_fields_and_rejects_wrong_index ... ok
+test media::tests::inventory_uses_the_indexed_image_version ... ok
+test media::tests::malformed_or_truncated_image_is_rejected_before_dism ... ok
+test plan::tests::existing_data_requires_preservation ... ok
+test plan::tests::insufficient_capacity_and_unsupported_image_are_explicit ... ok
+test lab::tests::signed_registration_still_requires_review_and_freshness ... ok
+test plan::tests::immutable_preview_is_deterministic_and_detects_alterations ... ok
+test lab::tests::signature_binds_every_host_claim ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+
+     Running unittests src/lib.rs (/home/cainhooow/.cache/archrescue/cargo-target/debug/deps/archrescue_diagnostics-649ceb83022dfd30)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (/home/cainhooow/.cache/archrescue/cargo-target/debug/deps/archrescue_evidence-f7d7a8931e00b160)
+
+running 1 test
+test repair::tests::dry_run_blocks_missing_backup_and_rejects_mismatched_authorization ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/contracts.rs (/home/cainhooow/.cache/archrescue/cargo-target/debug/deps/contracts-e79554d5a1bb2db5)
+
+running 10 tests
+test corroborated_candidate_has_architecture_not_invented_version ... ok
+test directory_named_windows_is_not_an_installation ... ok
+test explorer_lists_actual_names_sizes_and_directories ... ok
+test malformed_registry_marker_is_rejected ... ok
+test malformed_pe_header_is_rejected ... ok
+test unreadable_boot_configuration_is_reported ... ok
+test no_windows_is_an_empty_result ... ok
+test diagnosis_classifies_candidates_loader_mismatch_windows_old_and_invalid_bcd ... ok
+test missing_and_malformed_bcd_are_not_healthy ... ok
+test report_export_roundtrips_and_preserves_source ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+     Running unittests src/lib.rs (/home/cainhooow/.cache/archrescue/cargo-target/debug/deps/archrescue_integrity-0d69dbc9dc9bae39)
+
+running 7 tests
+test tests::historical_errors_require_a_recognized_operation_and_package ... ok
+test tests::cancellation_never_returns_clean_status ... ok
+test tests::missing_or_unqualified_windows_never_reports_clean ... ok
+test tests::qualifies_observed_compatibility_version_without_accepting_older_windows ... ok
+test tests::rejects_truncation_and_wrong_machine_without_reading_payload ... ok
+test tests::reparse_like_entries_are_inconclusive_instead_of_missing ... ok
+test tests::metadata_sample_distinguishes_malformed_xml_and_compression ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (/home/cainhooow/.cache/archrescue/cargo-target/debug/deps/archrescue_restore-6987afa95cfb1f11)
+
+running 13 tests
+test execution::tests::short_copy_records_actual_bytes_without_verification ... ok
+test execution::tests::partial_write_failure_retains_the_actual_written_count ... ok
+test tests::corrupt_and_unsupported_manifest_fail_preflight ... ok
+test tests::rejects_a_symlink_in_a_mapped_destination ... ok
+test tests::late_destination_conflict_is_never_overwritten ... ok
+test tests::authorization_is_invalidated_when_known_folder_identity_changes ... ok
+test tests::cancellation_stops_before_the_next_file ... ok
+test tests::copy_after_preflight_rejects_new_hash_mismatch_and_cleans_staging ... ok
+test tests::checksummed_manifest_still_rejects_traversal_and_unknown_versions ... ok
+test tests::rejects_wrong_sid_traversal_external_mapping_and_unavailable_path ... ok
+test tests::abort_skip_and_rename_preserve_existing_content ... ok
+test tests::tampered_and_missing_payload_fail_preflight ... ok
+test tests::verified_restore_preserves_unicode_empty_and_multichunk_files ... ok
+
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 6.56s
+
+     Running unittests src/main.rs (/home/cainhooow/.cache/archrescue/cargo-target/debug/deps/archrescue_restore_agent-bb9dce5ebbac4930)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (/home/cainhooow/.cache/archrescue/cargo-target/debug/deps/archrescue_storage-01f9a42a3a77ccae)
+
+running 6 tests
+test layout::tests::excessive_partition_count_rejected ... ok
+test layout::tests::gpt_efi_layout_is_decoded_from_bytes ... ok
+test layout::tests::invalid_boolean_bytes_are_never_reinterpreted ... ok
+test tests::malformed_space_rejected ... ok
+test tests::shared_extent_rejected ... ok
+test layout::tests::truncated_and_out_of_bounds_layout_rejected ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (/home/cainhooow/.cache/archrescue/cargo-target/debug/deps/archrescue_windows_detection-ceaeb9d803e1f0cb)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests archrescue_backup
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests archrescue_core
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests archrescue_deployment
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests archrescue_diagnostics
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests archrescue_evidence
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests archrescue_integrity
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests archrescue_restore
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests archrescue_storage
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests archrescue_windows_detection
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s

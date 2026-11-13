@@ -1,0 +1,6 @@
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Checking archrescue-deployment v0.0.1 (/home/cainhooow/Projetos/archrescue/crates/deployment)
+    Checking archrescue-boot-shell v0.0.1 (/home/cainhooow/Projetos/archrescue/apps/boot-shell)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.18s

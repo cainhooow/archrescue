@@ -1,0 +1,9 @@
+select disk 0
+create partition efi size=300 offset=1024
+format quick fs=fat32 label=SYSTEM
+assign letter=S
+create partition msr size=16 offset=308224
+create partition primary offset=324608
+format quick fs=ntfs label=Windows
+assign letter=W
+exit

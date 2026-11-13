@@ -1,0 +1,114 @@
+{
+  "version": 1,
+  "backup_operation": "ar-18e785c27264be68-6b8-0",
+  "manifest_version": 1,
+  "manifest_sha256": "b6b04eb1a5c8d4ed8ca044a5ef55857f922ad67ab8a08b1efbba906454e304fa",
+  "source_hint": "\\\\?\\C:\\Users\\Original",
+  "target_sid": "S-1-5-21-3082017920-1407072025-4162156510-1001",
+  "target_profile": "\\\\?\\C:\\Users\\RecoveryQA",
+  "profile_identity": "a2c746d5:000100000001a267:31290151:3981823894",
+  "known_folders": {
+    "Desktop": [
+      "\\\\?\\C:\\Users\\RecoveryQA\\Desktop",
+      "a2c746d5:000100000001a271:31290151:3982173080"
+    ],
+    "Documents": [
+      "\\\\?\\C:\\Users\\RecoveryQA\\Documents",
+      "a2c746d5:000100000001a270:31290151:3982173080"
+    ],
+    "Downloads": [
+      "\\\\?\\C:\\Users\\RecoveryQA\\Downloads",
+      "a2c746d5:000100000001a26f:31290151:3982173080"
+    ],
+    "Pictures": [
+      "\\\\?\\C:\\Users\\RecoveryQA\\Pictures",
+      "a2c746d5:000100000001a26b:31290151:3982173080"
+    ]
+  },
+  "mappings": [
+    {
+      "source": "Documents",
+      "folder": "Documents"
+    },
+    {
+      "source": "Desktop",
+      "folder": "Desktop"
+    },
+    {
+      "source": "Downloads",
+      "folder": "Downloads"
+    },
+    {
+      "source": "Pictures",
+      "folder": "Pictures"
+    }
+  ],
+  "conflict_policy": "Abort",
+  "files": [
+    {
+      "source": {
+        "relative": "Desktop\\conflict.txt",
+        "bytes": 22,
+        "sha256": "7e85747b4ce5ce3da09edd20c2c4f146a2d8c873a0d76466871854bfdb4b023b"
+      },
+      "target_relative": "Desktop\\conflict.txt",
+      "action": "Conflict"
+    },
+    {
+      "source": {
+        "relative": "Documents\\nested\\ação.txt",
+        "bytes": 14,
+        "sha256": "ebb55fec443fe53e84d0674ac0801a5afe57e804fd99de02f791d8d59fba368c"
+      },
+      "target_relative": "Documents\\nested\\ação.txt",
+      "action": "Copy"
+    },
+    {
+      "source": {
+        "relative": "Documents\\notes.txt",
+        "bytes": 24,
+        "sha256": "c74a73c293e935eeec767f55f28dba2bf17e631497f465a66598adcfc2aaac63"
+      },
+      "target_relative": "Documents\\notes.txt",
+      "action": "Copy"
+    },
+    {
+      "source": {
+        "relative": "Downloads\\sample.bin",
+        "bytes": 3100000,
+        "sha256": "0c311fe914874d8df645bde0f709e8a8de191f110030f0a8ed27f5cff7b7fb0f"
+      },
+      "target_relative": "Downloads\\sample.bin",
+      "action": "Copy"
+    },
+    {
+      "source": {
+        "relative": "Pictures\\grid.bmp",
+        "bytes": 58,
+        "sha256": "801b37600aa2c117c49639f81f1e072e205c5ad18380808f471c5430c7a4f8a7"
+      },
+      "target_relative": "Pictures\\grid.bmp",
+      "action": "Copy"
+    }
+  ],
+  "directories": [
+    "Desktop",
+    "Documents",
+    "Documents\\empty-folder",
+    "Documents\\nested",
+    "Downloads",
+    "Pictures"
+  ],
+  "unsupported_directories": [],
+  "planned_bytes": 3100096,
+  "required_bytes": 3755456,
+  "blocked_by_conflicts": true,
+  "authorization_required": true,
+  "fingerprint": "52ca7fcb2f22ea9436123acec543b423fb145ada2fbedd06427321ed30b68ea1",
+  "recovery": {
+    "recovery_operation": "3a748a97-0c55-4938-8915-256b85fb2567",
+    "deployment_plan_sha256": "7afa018d0fe2e962fef946389b275e29a70c3c16790e03690e7347e92419289c",
+    "backup_operation": "ar-18e785c27264be68-6b8-0",
+    "backup_manifest_sha256": "b6b04eb1a5c8d4ed8ca044a5ef55857f922ad67ab8a08b1efbba906454e304fa"
+  }
+}

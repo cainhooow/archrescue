@@ -1,0 +1,251 @@
+{
+  "schema_version": 1,
+  "operation_id": "9c7083ad-f5e4-454c-ae5c-95d258152b62",
+  "plan_fingerprint": "7afa018d0fe2e962fef946389b275e29a70c3c16790e03690e7347e92419289c",
+  "media_identity": {
+    "path": "\\\\?\\H:\\sources\\install.wim",
+    "image_type": "Wim",
+    "container_bytes": 4853776048,
+    "sha256": "667bf57e11b902b72fc5cb6dccf25f67409542871f9b049d5966e8a8eb299099",
+    "images": [
+      {
+        "index": 1,
+        "name": "Windows 10 Home",
+        "edition": "Core",
+        "architecture": "x64",
+        "version": "10.0.19041",
+        "expanded_bytes": 15028050819,
+        "installation": "Client"
+      },
+      {
+        "index": 2,
+        "name": "Windows 10 Home Single Language",
+        "edition": "CoreSingleLanguage",
+        "architecture": "x64",
+        "version": "10.0.19041",
+        "expanded_bytes": 15013353508,
+        "installation": "Client"
+      },
+      {
+        "index": 3,
+        "name": "Windows 10 Education",
+        "edition": "Education",
+        "architecture": "x64",
+        "version": "10.0.19041",
+        "expanded_bytes": 15355447071,
+        "installation": "Client"
+      },
+      {
+        "index": 4,
+        "name": "Windows 10 Pro",
+        "edition": "Professional",
+        "architecture": "x64",
+        "version": "10.0.19041",
+        "expanded_bytes": 15349902922,
+        "installation": "Client"
+      },
+      {
+        "index": 5,
+        "name": "Windows 10 Pro Education",
+        "edition": "ProfessionalEducation",
+        "architecture": "x64",
+        "version": "10.0.19041",
+        "expanded_bytes": 15355385489,
+        "installation": "Client"
+      },
+      {
+        "index": 6,
+        "name": "Windows 10 Pro for Workstations",
+        "edition": "ProfessionalWorkstation",
+        "architecture": "x64",
+        "version": "10.0.19041",
+        "expanded_bytes": 15355416280,
+        "installation": "Client"
+      }
+    ]
+  },
+  "selected_image": {
+    "index": 4,
+    "name": "Windows 10 Pro",
+    "edition": "Professional",
+    "architecture": "x64",
+    "version": "10.0.19041",
+    "expanded_bytes": 15349902922,
+    "installation": "Client"
+  },
+  "target_disk_identity": {
+    "number": 0,
+    "identity": "gpt:a9ae696a-9bad-421c-9865-2f6627829644",
+    "device_path": "\\\\?\\scsi#disk&ven_vbox&prod_harddisk#4&2617aeae&0&020000#{53f56307-b6bf-11d0-94f2-00a0c91efb8b}",
+    "capacity": 85899345920,
+    "bus": 11,
+    "removable": false,
+    "read_only": false,
+    "style": "GPT",
+    "partitions": [],
+    "errors": []
+  },
+  "disposable_lab_registration": {
+    "schema_version": 1,
+    "purpose": "archrescue-disposable-uefi-v1",
+    "operation_id": "9c7083ad-f5e4-454c-ae5c-95d258152b62",
+    "issued_unix": 1794532425,
+    "expires_unix": 1794536025,
+    "plan_fingerprint": "7afa018d0fe2e962fef946389b275e29a70c3c16790e03690e7347e92419289c",
+    "vm_uuid": "a39042de-8dde-4018-94df-dae7da4042b7",
+    "target_vdi_uuid": "572e8c3f-2003-46ba-a6d5-163ab2dbe3fd",
+    "target_backing_file": "/home/cainhooow/.cache/archrescue/769806d801c44fdeb2e6b542c01e2f40/target.vdi",
+    "controller": "SATA",
+    "port": 2,
+    "device": 0,
+    "target_gpt_id": "gpt:a9ae696a-9bad-421c-9865-2f6627829644",
+    "target_serial": "572e8c3f200346baa6d5",
+    "target_capacity": 85899345920,
+    "initial_layout": "empty-gpt",
+    "source_gpt_id": "gpt:b8150c40-7502-45e8-aefe-c918ac9dac9e",
+    "backup_gpt_id": "gpt:a0797c76-4a36-47b9-877e-86be00d6fa0c",
+    "evidence_gpt_id": "gpt:0a1843ca-6dd1-426b-a0bf-925d525acffe",
+    "backup_operation": "ar-18e785c27264be68-6b8-0",
+    "backup_manifest_sha256": "b6b04eb1a5c8d4ed8ca044a5ef55857f922ad67ab8a08b1efbba906454e304fa"
+  },
+  "preflight_result": {
+    "vm_uuid": "a39042de-8dde-4018-94df-dae7da4042b7",
+    "target": {
+      "number": 0,
+      "identity": "gpt:a9ae696a-9bad-421c-9865-2f6627829644",
+      "device_path": "\\\\?\\scsi#disk&ven_vbox&prod_harddisk#4&2617aeae&0&020000#{53f56307-b6bf-11d0-94f2-00a0c91efb8b}",
+      "capacity": 85899345920,
+      "bus": 11,
+      "removable": false,
+      "read_only": false,
+      "style": "GPT",
+      "partitions": [],
+      "errors": []
+    },
+    "attachment": {
+      "serial": "572e8c3f200346baa6d5",
+      "product": "VBOX HARDDISK",
+      "bus": 11,
+      "logical_sector": 512,
+      "physical_sector": 512
+    }
+  },
+  "execution_state": "running",
+  "started_step": "partition",
+  "completed_steps": [
+    "preflight"
+  ],
+  "failed_step": null,
+  "observed_target_state": null,
+  "output_evidence": [
+    {
+      "executable": "X:\\windows\\system32\\diskpart.exe",
+      "version": "6.2.26100.1",
+      "arguments": [
+        {
+          "Windows": [
+            47,
+            115
+          ]
+        },
+        {
+          "Windows": [
+            92,
+            92,
+            63,
+            92,
+            69,
+            58,
+            92,
+            97,
+            114,
+            99,
+            104,
+            114,
+            101,
+            115,
+            99,
+            117,
+            101,
+            45,
+            100,
+            101,
+            112,
+            108,
+            111,
+            121,
+            109,
+            101,
+            110,
+            116,
+            45,
+            57,
+            99,
+            55,
+            48,
+            56,
+            51,
+            97,
+            100,
+            45,
+            102,
+            53,
+            101,
+            52,
+            45,
+            52,
+            53,
+            52,
+            99,
+            45,
+            97,
+            101,
+            53,
+            99,
+            45,
+            57,
+            53,
+            100,
+            50,
+            53,
+            56,
+            49,
+            53,
+            50,
+            98,
+            54,
+            50,
+            92,
+            112,
+            97,
+            114,
+            116,
+            105,
+            116,
+            105,
+            111,
+            110,
+            46,
+            116,
+            120,
+            116
+          ]
+        }
+      ],
+      "started_unix": 1794532603,
+      "finished_unix": null,
+      "exit_code": null,
+      "stdout_file": "tool-00.stdout",
+      "stderr_file": "tool-00.stderr"
+    }
+  ],
+  "verified_paths": [],
+  "restore": {
+    "recovery_operation": "9c7083ad-f5e4-454c-ae5c-95d258152b62",
+    "deployment_plan_sha256": "7afa018d0fe2e962fef946389b275e29a70c3c16790e03690e7347e92419289c",
+    "backup_operation": "ar-18e785c27264be68-6b8-0",
+    "backup_manifest_sha256": "b6b04eb1a5c8d4ed8ca044a5ef55857f922ad67ab8a08b1efbba906454e304fa"
+  },
+  "errors": [],
+  "manual_intervention_required": false
+}

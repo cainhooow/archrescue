@@ -3547,3 +3547,20 @@ See the [Wave 3 UI and Windows integrity report](docs/qa/WAVE-3-UI-WINDOWS-INTEG
 | AR-14 / AR-QA-M50 | Linux and both Windows cross-target checks passed. WinPE validated the core workflows. Full installed-Windows regression and additional picker and EFI fixtures remain open. The human-review milestone stays at the existing evidence-backed 50% gate. |
 
 Seven existing ClickUp descriptions were updated and verified by readback. See the [Wave 4 report](docs/qa/WAVE-4-INTELLIGENT-RECOVERY-UX.md) for the acceptance matrix, hashes and runtime limitations.
+
+## 19. Wave 5 engineering update — 2026-11-13
+
+| Roadmap area | Evidence-backed state |
+|---|---|
+| AR-03 / AR-06 deployment safety | A signed host registration and independent WinPE checks bound the reviewed plan to a fresh VirtualBox GPT disk. WinPE applied Windows 10 Pro x64, verified the GPT, EFI and BCD, and the disposable guest booted Windows 10 Pro 22H2 build 19045.2965. |
+| AR-05 backup | ArchRescue preserved five representative files on a separate GPT/NTFS VDI. Independent host readback matched source and payload hashes and sizes. |
+| AR-07 Restore Agent | The installed `RecoveryQA` account restored five files through the existing agent and four actual Known Folder mappings. Independent readback matched all three copies, including the Unicode path, and confirmed the conflicting file was preserved. |
+| AR-02 GUI | The QA build includes a target-specific confirmation and backend status. A complete GUI execution walkthrough remains open. |
+| AR-14 QA | The first full laboratory recovery passed. Linux, both Windows cross-target checks, and 71 native tests each in installed Windows and WinPE passed. The complete destructive negative runtime matrix remains open. |
+
+The [Wave 5 report](docs/qa/WAVE-5-FIRST-COMPLETE-RECOVERY.md) records the
+execution, boot, restore, negative cases and regression results. ClickUp
+reconciliation is pending for existing AR-03, AR-05, AR-06, AR-07 and AR-14
+tasks after the connector reached its daily limit and the browser required
+sign-in. The evidence-backed 50% human-review milestone and separate WinPE/ADK
+distribution gate remain in place.

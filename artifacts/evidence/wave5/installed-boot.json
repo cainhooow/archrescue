@@ -1,0 +1,14 @@
+﻿{
+    "hostname":  "AR-WAVE5-QA",
+    "username":  "RecoveryQA",
+    "sid":  "S-1-5-21-3082017920-1407072025-4162156510-1001",
+    "firmware":  2,
+    "caption":  "Microsoft Windows 10 Pro",
+    "version":  "10.0.19045",
+    "build":  "19045",
+    "ubr":  2965,
+    "display_version":  "22H2",
+    "disk_guid":  "{a9ae696a-9bad-421c-9865-2f6627829644}",
+    "disk_serial":  "86bf627bd46d478a8b5e",
+    "explorer_running":  true
+}

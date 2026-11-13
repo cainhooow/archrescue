@@ -1,0 +1,135 @@
+{
+  "directory": "\\\\?\\D:\\ArchRescue\\archrescue-backup-ar-18e785c27264be68-6b8-0",
+  "source_root": "\\\\?\\C:\\Users\\Original",
+  "manifest": {
+    "schema_version": 1,
+    "operation_id": "ar-18e785c27264be68-6b8-0",
+    "created_unix": 1794550046,
+    "source_identity": {
+      "filesystem_id": "gpt:b8150c40-7502-45e8-aefe-c918ac9dac9e;224dc341-ffc2-4c6b-9cd6-bcb93aaeff50;1048576;803209216;4c417139;NTFS",
+      "directory": "Users\\Original"
+    },
+    "destination_identity": {
+      "filesystem_id": "gpt:a0797c76-4a36-47b9-877e-86be00d6fa0c;f6c8b2e1-c4ae-4d2c-9991-2baa1fd15864;1048576;803209216;5e418686;NTFS",
+      "directory": "ArchRescue"
+    },
+    "source_hint": "\\\\?\\C:\\Users\\Original",
+    "source_at_creation": {
+      "volume": "\\\\?\\Volume{224dc341-ffc2-4c6b-9cd6-bcb93aaeff50}\\",
+      "physical_disks": [
+        1
+      ]
+    },
+    "destination_at_creation": {
+      "volume": "\\\\?\\Volume{f6c8b2e1-c4ae-4d2c-9991-2baa1fd15864}\\",
+      "physical_disks": [
+        2
+      ]
+    },
+    "selections": [
+      "Documents",
+      "Desktop",
+      "Downloads",
+      "Pictures"
+    ],
+    "directories": [
+      "Desktop",
+      "Documents",
+      "Documents\\empty-folder",
+      "Documents\\nested",
+      "Downloads",
+      "Pictures"
+    ],
+    "files": [
+      {
+        "relative": "Desktop\\conflict.txt",
+        "bytes": 22,
+        "sha256": "7e85747b4ce5ce3da09edd20c2c4f146a2d8c873a0d76466871854bfdb4b023b"
+      },
+      {
+        "relative": "Documents\\nested\\ação.txt",
+        "bytes": 14,
+        "sha256": "ebb55fec443fe53e84d0674ac0801a5afe57e804fd99de02f791d8d59fba368c"
+      },
+      {
+        "relative": "Documents\\notes.txt",
+        "bytes": 24,
+        "sha256": "c74a73c293e935eeec767f55f28dba2bf17e631497f465a66598adcfc2aaac63"
+      },
+      {
+        "relative": "Downloads\\sample.bin",
+        "bytes": 3100000,
+        "sha256": "0c311fe914874d8df645bde0f709e8a8de191f110030f0a8ed27f5cff7b7fb0f"
+      },
+      {
+        "relative": "Pictures\\grid.bmp",
+        "bytes": 58,
+        "sha256": "801b37600aa2c117c49639f81f1e072e205c5ad18380808f471c5430c7a4f8a7"
+      }
+    ],
+    "planned_bytes": 3100118,
+    "plan_fingerprint": "b6b04eb1a5c8d4ed8ca044a5ef55857f922ad67ab8a08b1efbba906454e304fa"
+  },
+  "status": {
+    "operation_id": "ar-18e785c27264be68-6b8-0",
+    "plan_fingerprint": "b6b04eb1a5c8d4ed8ca044a5ef55857f922ad67ab8a08b1efbba906454e304fa",
+    "updated_unix": 1794550047,
+    "state": "COMPLETED",
+    "resumed": false,
+    "error": null
+  },
+  "progress": {
+    "operation_id": "ar-18e785c27264be68-6b8-0",
+    "stage": "Validando origem e destino",
+    "elapsed_seconds": 0,
+    "planned_bytes": 3100118,
+    "acknowledged_bytes": 3100118,
+    "verified_bytes": 3100118,
+    "verified_files": 5,
+    "skipped_files": 5,
+    "failed_files": 0,
+    "partial_files": 0
+  },
+  "files": [
+    {
+      "plan_fingerprint": "b6b04eb1a5c8d4ed8ca044a5ef55857f922ad67ab8a08b1efbba906454e304fa",
+      "index": 0,
+      "updated_unix": 1794550046,
+      "state": "VERIFIED",
+      "acknowledged_bytes": 22,
+      "error": null
+    },
+    {
+      "plan_fingerprint": "b6b04eb1a5c8d4ed8ca044a5ef55857f922ad67ab8a08b1efbba906454e304fa",
+      "index": 1,
+      "updated_unix": 1794550046,
+      "state": "VERIFIED",
+      "acknowledged_bytes": 14,
+      "error": null
+    },
+    {
+      "plan_fingerprint": "b6b04eb1a5c8d4ed8ca044a5ef55857f922ad67ab8a08b1efbba906454e304fa",
+      "index": 2,
+      "updated_unix": 1794550046,
+      "state": "VERIFIED",
+      "acknowledged_bytes": 24,
+      "error": null
+    },
+    {
+      "plan_fingerprint": "b6b04eb1a5c8d4ed8ca044a5ef55857f922ad67ab8a08b1efbba906454e304fa",
+      "index": 3,
+      "updated_unix": 1794550046,
+      "state": "VERIFIED",
+      "acknowledged_bytes": 3100000,
+      "error": null
+    },
+    {
+      "plan_fingerprint": "b6b04eb1a5c8d4ed8ca044a5ef55857f922ad67ab8a08b1efbba906454e304fa",
+      "index": 4,
+      "updated_unix": 1794550046,
+      "state": "VERIFIED",
+      "acknowledged_bytes": 58,
+      "error": null
+    }
+  ]
+}

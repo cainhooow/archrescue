@@ -1,0 +1,128 @@
+{
+  "schema_version": 1,
+  "media": {
+    "path": "\\\\?\\H:\\sources\\install.wim",
+    "image_type": "Wim",
+    "container_bytes": 4853776048,
+    "sha256": "667bf57e11b902b72fc5cb6dccf25f67409542871f9b049d5966e8a8eb299099",
+    "images": [
+      {
+        "index": 1,
+        "name": "Windows 10 Home",
+        "edition": "Core",
+        "architecture": "x64",
+        "version": "10.0.19041",
+        "expanded_bytes": 15028050819,
+        "installation": "Client"
+      },
+      {
+        "index": 2,
+        "name": "Windows 10 Home Single Language",
+        "edition": "CoreSingleLanguage",
+        "architecture": "x64",
+        "version": "10.0.19041",
+        "expanded_bytes": 15013353508,
+        "installation": "Client"
+      },
+      {
+        "index": 3,
+        "name": "Windows 10 Education",
+        "edition": "Education",
+        "architecture": "x64",
+        "version": "10.0.19041",
+        "expanded_bytes": 15355447071,
+        "installation": "Client"
+      },
+      {
+        "index": 4,
+        "name": "Windows 10 Pro",
+        "edition": "Professional",
+        "architecture": "x64",
+        "version": "10.0.19041",
+        "expanded_bytes": 15349902922,
+        "installation": "Client"
+      },
+      {
+        "index": 5,
+        "name": "Windows 10 Pro Education",
+        "edition": "ProfessionalEducation",
+        "architecture": "x64",
+        "version": "10.0.19041",
+        "expanded_bytes": 15355385489,
+        "installation": "Client"
+      },
+      {
+        "index": 6,
+        "name": "Windows 10 Pro for Workstations",
+        "edition": "ProfessionalWorkstation",
+        "architecture": "x64",
+        "version": "10.0.19041",
+        "expanded_bytes": 15355416280,
+        "installation": "Client"
+      }
+    ]
+  },
+  "selected_image": {
+    "index": 4,
+    "name": "Windows 10 Pro",
+    "edition": "Professional",
+    "architecture": "x64",
+    "version": "10.0.19041",
+    "expanded_bytes": 15349902922,
+    "installation": "Client"
+  },
+  "target": {
+    "disk": {
+      "number": 0,
+      "identity": "gpt:a9ae696a-9bad-421c-9865-2f6627829644",
+      "device_path": "\\\\?\\scsi#disk&ven_vbox&prod_harddisk#4&2617aeae&0&020000#{53f56307-b6bf-11d0-94f2-00a0c91efb8b}",
+      "capacity": 85899345920,
+      "bus": 11,
+      "removable": false,
+      "read_only": false,
+      "style": "GPT",
+      "partitions": [],
+      "errors": []
+    },
+    "volumes": [],
+    "discovery": {
+      "installations": [],
+      "probes": [],
+      "errors": []
+    },
+    "firmware": "UEFI",
+    "storage_health": "Desconhecida",
+    "writable": true,
+    "encryption": "Sem partições observadas",
+    "preservation": null
+  },
+  "intent": "Clean",
+  "result": "Supported",
+  "findings": [
+    {
+      "result": "Supported",
+      "reason": "Estado de saúde indisponível no dispositivo"
+    }
+  ],
+  "next_action": "Revise e exporte o plano para análise técnica",
+  "minimum_bytes": 68719476736,
+  "intended_partitions": [
+    "EFI (FAT32, 300 MiB)",
+    "MSR (16 MiB)",
+    "Windows (NTFS)"
+  ],
+  "observed_efi_partitions": [],
+  "existing_data_at_risk": false,
+  "planned_modifications": [
+    "Criar partições no GPT vazio, aplicar a imagem e configurar o boot UEFI"
+  ],
+  "expected_final_state": "Windows instalado em GPT e inicializável em UEFI",
+  "authorization_required": "Exige plano revalidado, confirmação vinculada ao SHA-256 e execução futura restrita a laboratório descartável",
+  "fingerprint": "7afa018d0fe2e962fef946389b275e29a70c3c16790e03690e7347e92419289c",
+  "lab_layout": {
+    "efi_mib": 300,
+    "msr_mib": 16,
+    "windows_offset_mib": 317,
+    "minimum_windows_bytes": 68719476736
+  }
+}

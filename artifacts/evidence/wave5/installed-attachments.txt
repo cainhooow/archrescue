@@ -1,0 +1,8 @@
+firmware="EFI"
+VMState="running"
+VMStateChangeTime="2026-11-13T01:28:12.328000000"
+"SATA-ImageUUID-2-0"="86bf627b-d46d-478a-8b5e-ed3395e46e9b"
+"SATA-ImageUUID-3-0"="055911b2-9c8b-494b-ac48-e10e342f2aa5"
+"SATA-ImageUUID-4-0"="efdfeade-624a-40ff-a17d-13c332d51da6"
+"SATA-ImageUUID-5-0"="fbb3a713-49cd-48e8-abc2-be531667120b"
+"IDE-ImageUUID-0-0"="092a4e3b-7524-49f0-a3a7-c4f6b303b161"

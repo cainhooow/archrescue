@@ -1,0 +1,167 @@
+===== archrescue-boot-shell.exit =====
+OK
+===== archrescue-boot-shell.log =====
+
+running 4 tests
+test gui::renderer::framebuffer::tests::dib_rows_preserve_rgb_and_composited_alpha ... ok
+test gui::renderer::text::tests::empty_label_is_safe_to_draw ... ok
+test paths::tests::windows_namespaces_are_presented_without_changing_the_original ... ok
+test gui::renderer::framebuffer::tests::software_frames_reuse_gdi_storage_at_smaller_sizes ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.09s
+
+===== archrescue-restore-agent.exit =====
+OK
+===== archrescue-restore-agent.log =====
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+===== archrescue_backup.exit =====
+OK
+===== archrescue_backup.log =====
+
+running 17 tests
+test tests::cancellation_before_preflight_writes_nothing ... ok
+test tests::case_alias_selections_are_rejected_on_default_ntfs ... ok
+test tests::cancellation_reports_exact_partial_bytes ... ok
+test tests::destination_corruption_is_caught_by_readback ... ok
+test tests::distinct_unicode_case_collisions_are_rejected ... ok
+test tests::existing_destination_never_overwritten ... ok
+test tests::insufficient_space_uses_actual_free_space ... ok
+test tests::nested_destination_rejected ... ok
+test tests::overlapping_selections_are_rejected_without_a_collision ... ok
+test tests::partway_conflict_reports_partial_result ... ok
+test tests::portable_paths_reject_traversal_and_devices ... ok
+test tests::same_volume_rejected_before_writes ... ok
+test tests::destination_write_error_after_progress_leaves_unverified_partial ... ok
+test tests::transaction_rejects_duplicate_selection_and_moved_operation ... ok
+test tests::transaction_refuses_changed_source_destination_conflict_and_corrupt_manifest ... ok
+test tests::verified_copy_preserves_hierarchy_empty_dirs_and_source ... ok
+test tests::transaction_restarts_partial_and_rechecks_published_files ... ok
+
+test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.72s
+
+===== archrescue_core.exit =====
+OK
+===== archrescue_core.log =====
+
+running 2 tests
+test tests::completion_cannot_skip_verification ... ok
+test tests::cancellation_is_terminal ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+===== archrescue_deployment.exit =====
+OK
+===== archrescue_deployment.log =====
+
+running 12 tests
+test lab::tests::changed_layout_capacity_or_write_protection_fails_closed ... ok
+test lab::tests::registration_rejects_protected_disk_overlap ... ok
+test lab::tests::signed_registration_still_requires_review_and_freshness ... ok
+test media::tests::image_sizes_use_the_hosts_number_grouping ... ok
+test media::tests::inventory_preserves_missing_fields_and_rejects_wrong_index ... ok
+test media::tests::inventory_uses_the_indexed_image_version ... ok
+test media::tests::malformed_or_truncated_image_is_rejected_before_dism ... ok
+test plan::tests::changed_or_ambiguous_target_is_rejected ... ok
+test plan::tests::existing_data_requires_preservation ... ok
+test plan::tests::immutable_preview_is_deterministic_and_detects_alterations ... ok
+test plan::tests::insufficient_capacity_and_unsupported_image_are_explicit ... ok
+test lab::tests::signature_binds_every_host_claim ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s
+
+===== archrescue_diagnostics.exit =====
+OK
+===== archrescue_diagnostics.log =====
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+===== archrescue_evidence.exit =====
+OK
+===== archrescue_evidence.log =====
+
+running 2 tests
+test repair::windows::tests::loader_and_both_devices_must_be_in_one_bcd_entry ... ok
+test repair::tests::dry_run_blocks_missing_backup_and_rejects_mismatched_authorization ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+===== archrescue_integrity.exit =====
+OK
+===== archrescue_integrity.log =====
+
+running 6 tests
+test tests::cancellation_never_returns_clean_status ... ok
+test tests::historical_errors_require_a_recognized_operation_and_package ... ok
+test tests::metadata_sample_distinguishes_malformed_xml_and_compression ... ok
+test tests::qualifies_observed_compatibility_version_without_accepting_older_windows ... ok
+test tests::rejects_truncation_and_wrong_machine_without_reading_payload ... ok
+test tests::missing_or_unqualified_windows_never_reports_clean ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.12s
+
+===== archrescue_restore.exit =====
+OK
+===== archrescue_restore.log =====
+
+running 13 tests
+test execution::tests::partial_write_failure_retains_the_actual_written_count ... ok
+test execution::tests::short_copy_records_actual_bytes_without_verification ... ok
+test tests::authorization_is_invalidated_when_known_folder_identity_changes ... ok
+test tests::abort_skip_and_rename_preserve_existing_content ... ok
+test tests::cancellation_stops_before_the_next_file ... ok
+test tests::copy_after_preflight_rejects_new_hash_mismatch_and_cleans_staging ... ok
+test tests::checksummed_manifest_still_rejects_traversal_and_unknown_versions ... ok
+test tests::corrupt_and_unsupported_manifest_fail_preflight ... ok
+test tests::late_destination_conflict_is_never_overwritten ... ok
+Junction created for C:\WinPETestSource\ar-18e7aebeb4cdd01c-6c8-64\new-profile\My Documents\empty folder <<===>> C:\WinPETestSource\ar-18e7aebeb4cdd01c-6c8-64\source
+test tests::rejects_windows_directory_junction_escape ... ok
+test tests::rejects_wrong_sid_traversal_external_mapping_and_unavailable_path ... ok
+test tests::tampered_and_missing_payload_fail_preflight ... ok
+test tests::verified_restore_preserves_unicode_empty_and_multichunk_files ... ok
+
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 15.16s
+
+===== archrescue_storage.exit =====
+OK
+===== archrescue_storage.log =====
+
+running 6 tests
+test layout::tests::excessive_partition_count_rejected ... ok
+test layout::tests::gpt_efi_layout_is_decoded_from_bytes ... ok
+test layout::tests::invalid_boolean_bytes_are_never_reinterpreted ... ok
+test layout::tests::truncated_and_out_of_bounds_layout_rejected ... ok
+test tests::malformed_space_rejected ... ok
+test tests::shared_extent_rejected ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+===== archrescue_windows_detection.exit =====
+OK
+===== archrescue_windows_detection.log =====
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+===== contracts.exit =====
+OK
+===== contracts.log =====
+
+running 9 tests
+test corroborated_candidate_has_architecture_not_invented_version ... ok
+test directory_named_windows_is_not_an_installation ... ok
+test explorer_lists_actual_names_sizes_and_directories ... ok
+test malformed_pe_header_is_rejected ... ok
+test malformed_registry_marker_is_rejected ... ok
+test diagnosis_classifies_candidates_loader_mismatch_windows_old_and_invalid_bcd ... ok
+test no_windows_is_an_empty_result ... ok
+test missing_and_malformed_bcd_are_not_healthy ... ok
+test report_export_roundtrips_and_preserves_source ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.11s

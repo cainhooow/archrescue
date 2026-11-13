@@ -1,0 +1,4 @@
+source pre-deployment NTFS 6186edf35cda96544968799d3bac0b7ab115187c76eb1af2c69b17794170ea09 post-restore NTFS 9202ced74b65507f1ac3f706e7284027f6d66abc0aea482f32d4b13e0b2985d1
+/home/cainhooow/.cache/archrescue/769806d801c44fdeb2e6b542c01e2f40/read-source.ntfs /home/cainhooow/.cache/archrescue/769806d801c44fdeb2e6b542c01e2f40/source-final.ntfs differ: byte 8241, line 17
+backup pre-deployment NTFS fe86e9b853600d0dac3a3280af151799dc9007000491288dbd85895564b8ebc0 post-restore NTFS 28dcfa86c5fbed515c11e5e7501804c134e3dac5a18a4c52d759548c88b48776
+/home/cainhooow/.cache/archrescue/769806d801c44fdeb2e6b542c01e2f40/read-backup.ntfs /home/cainhooow/.cache/archrescue/769806d801c44fdeb2e6b542c01e2f40/backup-final.ntfs differ: byte 8241, line 17
