@@ -41,6 +41,8 @@ pub enum Update {
     #[cfg(all(feature = "lab-deployment", target_arch = "x86_64"))]
     LabProgress(archrescue_deployment::lab::windows::Step),
     #[cfg(all(feature = "lab-deployment", target_arch = "x86_64"))]
+    LabReviewed(Box<Plan>, Result<()>),
+    #[cfg(all(feature = "lab-deployment", target_arch = "x86_64"))]
     LabFinished(Box<Result<archrescue_deployment::lab::windows::Evidence>>),
 }
 
@@ -421,6 +423,36 @@ pub fn select_disk(app: &mut App, disk: String) {
     invalidate_plan(app);
 }
 
+pub fn revalidate_resources(app: &mut App, report: &Report) -> bool {
+    let mut changed = false;
+    if app
+        .deployment
+        .source
+        .as_ref()
+        .is_some_and(|source| source.revalidate().is_err())
+    {
+        app.deployment.source = None;
+        app.deployment.media = None;
+        changed = true;
+    }
+    if let Some(id) = &app.deployment.disk {
+        let mut disks = report
+            .inventory
+            .disks
+            .iter()
+            .filter(|disk| disk.identity == *id);
+        if disks
+            .next()
+            .is_none_or(|disk| disk.read_only != Some(false))
+            || disks.next().is_some()
+        {
+            app.deployment.disk = None;
+            changed = true;
+        }
+    }
+    changed
+}
+
 pub fn invalidate_plan(app: &mut App) {
     app.deployment.plan = None;
     app.deployment.lab_status = None;
@@ -520,17 +552,31 @@ pub unsafe fn update(hwnd: HWND, app: &mut App, event: Update) {
                         .join("\n");
                     (
                         summary,
-                        format!(
-                            "{}\n{}",
-                            paths::display(&evidence.path, app.technician),
-                            errors
-                        ),
+                        format!("{}\n{}", paths::display(&evidence.path, true), errors),
                     )
                 }
                 Err(error) => ("Implantação bloqueada", error.to_string()),
             };
             app.deployment.lab_status = Some(format!("{summary}\n{detail}"));
             set(hwnd, STATUS, summary);
+        }
+        #[cfg(all(feature = "lab-deployment", target_arch = "x86_64"))]
+        Update::LabReviewed(plan, result) => {
+            if app.refresh_pending {
+                return;
+            }
+            match result {
+                Ok(()) => app.confirmation = Some(confirmation::Confirmation::Deployment(plan)),
+                Err(error) => {
+                    app.error_status = true;
+                    let message = format!(
+                        "Confira o registro assinado e a assinatura na pasta de evidências. {}",
+                        error_message(&error)
+                    );
+                    app.deployment.lab_status = Some(message.clone());
+                    set(hwnd, STATUS, &message);
+                }
+            }
         }
         Update::Plan(plan) => {
             app.deployment.lab_status = None;
@@ -613,7 +659,17 @@ pub unsafe fn action(hwnd: HWND, app: &mut App, id: usize, notification: u32) ->
         INSTALL => {
             if !app.busy && lab_ready(app) {
                 if let Some(plan) = app.deployment.plan.clone() {
-                    app.confirmation = Some(confirmation::Confirmation::Deployment(Box::new(plan)));
+                    let backup = app.session.backup.clone().expect("lab backup");
+                    let destination = app.session.destination(DEPLOY).expect("lab evidence");
+                    set(
+                        hwnd,
+                        STATUS,
+                        "Conferindo o registro assinado da pasta de evidências…",
+                    );
+                    work(app, move || {
+                        let result = review_registration(&plan, &backup, &destination);
+                        Event::Deployment(Update::LabReviewed(Box::new(plan), result))
+                    });
                 }
             }
         }
@@ -664,6 +720,8 @@ pub unsafe fn action(hwnd: HWND, app: &mut App, id: usize, notification: u32) ->
                 let result = (|| {
                     let backup_path = backup.revalidate()?;
                     let directory = destination.revalidate()?;
+                    let mut sources = sources;
+                    sources.push(backup.location.clone());
                     crate::resources::writable(&directory, &sources, 0)?;
                     export_handoff(&backup_path, &directory, &backup.fingerprint, &cancel)
                 })();
@@ -780,6 +838,45 @@ pub fn lab_status(app: &App) -> &str {
             "Execução indisponível nesta versão"
         }
     })
+}
+
+#[cfg(all(feature = "lab-deployment", target_arch = "x86_64"))]
+fn review_registration(
+    plan: &Plan,
+    backup: &crate::resources::Backup,
+    destination: &Location,
+) -> Result<()> {
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    use archrescue_deployment::lab::windows::read_registration;
+    use archrescue_storage::windows::mounted_partition;
+
+    let evidence = destination.revalidate()?;
+    let backup_path = backup.revalidate()?;
+    let registration = read_registration(
+        &evidence.join("registration.json"),
+        &evidence.join("registration.sig"),
+    )?;
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|_| Error::new(ErrorKind::Environment, "Relógio do WinPE indisponível."))?;
+    registration.validate(plan, &registration.confirmation(), now.as_secs())?;
+    if !mounted_partition(&evidence)?
+        .disk_id
+        .eq_ignore_ascii_case(&registration.evidence_gpt_id)
+        || !mounted_partition(&backup_path)?
+            .disk_id
+            .eq_ignore_ascii_case(&registration.backup_gpt_id)
+        || registration.backup_operation != backup.operation
+        || registration.backup_manifest_sha256 != backup.fingerprint
+    {
+        return Err(Error::new(
+            ErrorKind::Permission,
+            "O registro não corresponde ao disco de evidências e ao backup selecionado.",
+        ));
+    }
+
+    Ok(())
 }
 
 #[cfg(all(feature = "lab-deployment", target_arch = "x86_64"))]

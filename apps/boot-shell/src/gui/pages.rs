@@ -118,18 +118,28 @@ pub unsafe fn refresh_sources(hwnd: HWND, app: &mut App, report: &Report) {
         })
         .map(|probe| probe.root.clone())
         .collect();
-    let combo = control(hwnd, ROOT);
-    SendMessageW(combo, CB_RESETCONTENT, 0, 0);
-    for root in &app.roots {
-        let label = wide(&format!(
-            "Origem  ·  {}",
-            paths::display(root, app.technician)
-        ));
-        SendMessageW(combo, CB_ADDSTRING, 0, label.as_ptr() as isize);
-    }
     app.root_index = previous
         .and_then(|root| app.roots.iter().position(|item| item == &root))
         .unwrap_or(usize::MAX);
+    render_sources(hwnd, app);
+}
+
+pub unsafe fn render_sources(hwnd: HWND, app: &App) {
+    let combo = control(hwnd, ROOT);
+    SendMessageW(combo, CB_RESETCONTENT, 0, 0);
+    for root in &app.roots {
+        let label = app
+            .session
+            .catalog
+            .windows
+            .iter()
+            .find(|candidate| candidate.installation.volume == *root)
+            .map_or_else(
+                || format!("Indisponível · {}", paths::display(root, app.technician)),
+                |windows| windows.label(app.technician),
+            );
+        SendMessageW(combo, CB_ADDSTRING, 0, wide(&label).as_ptr() as isize);
+    }
     SendMessageW(combo, CB_SETCURSEL, app.root_index, 0);
 }
 
@@ -197,7 +207,17 @@ pub unsafe fn action(hwnd: HWND, app: &mut App, id: usize, notification: u32) ->
 }
 
 unsafe fn start(hwnd: HWND, app: &mut App) {
-    let Some(root) = app.roots.get(app.root_index).cloned() else {
+    let Some(windows) = app
+        .session
+        .available_windows()
+        .filter(|candidate| app.roots.get(app.root_index) == Some(&candidate.installation.volume))
+        .cloned()
+    else {
+        set(
+            hwnd,
+            STATUS,
+            "Escolha uma instalação Windows corroborada e disponível.",
+        );
         return;
     };
     let reference = deployment::reference(hwnd, app);
@@ -205,6 +225,10 @@ unsafe fn start(hwnd: HWND, app: &mut App) {
     app.cancel = cancel.clone();
     let sender = app.tx.clone();
     work(app, move || {
+        let root = match windows.revalidate() {
+            Ok(root) => root,
+            Err(error) => return Event::Failure(error),
+        };
         let mut scan = archrescue_integrity::scan(
             &root,
             archrescue_integrity::ScanMode::PassiveOffline,
@@ -237,10 +261,11 @@ pub unsafe fn render_page(hwnd: HWND, app: &App) -> bool {
         control(hwnd, ROOT),
         (!app.busy && !app.roots.is_empty()) as i32,
     );
-    EnableWindow(
-        control(hwnd, SCAN),
-        (!app.busy && !app.roots.is_empty()) as i32,
-    );
+    let corroborated = app
+        .session
+        .available_windows()
+        .is_some_and(|windows| app.roots.get(app.root_index) == Some(&windows.installation.volume));
+    EnableWindow(control(hwnd, SCAN), (!app.busy && corroborated) as i32);
     EnableWindow(control(hwnd, PROTECT), (!app.busy) as i32);
 
     if !structure {
@@ -259,7 +284,12 @@ pub unsafe fn render_page(hwnd: HWND, app: &App) -> bool {
     SendMessageW(list, LB_RESETCONTENT, 0, 0);
     let rows = rows(app);
     for row in &rows {
-        SendMessageW(list, LB_ADDSTRING, 0, wide(&row.label).as_ptr() as isize);
+        SendMessageW(
+            list,
+            LB_ADDSTRING,
+            0,
+            wide(&paths::text(&row.label, app.technician)).as_ptr() as isize,
+        );
     }
     SendMessageW(
         list,

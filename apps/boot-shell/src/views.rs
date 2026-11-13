@@ -6,9 +6,7 @@ use archrescue_core::State;
 use archrescue_evidence::Report;
 
 pub fn repair(plan: Option<&archrescue_evidence::repair::RepairPlan>, technician: bool) -> String {
-    let mut text = String::from(
-        "REPARAR BOOT UEFI\n\nConfira a partição EFI sugerida e escolha onde preservar os arquivos. A execução do BCDBoot é reservada ao clone registrado e à autorização do plano no laboratório.\n",
-    );
+    let mut text = String::new();
     let Some(plan) = plan else {
         return text;
     };
@@ -101,7 +99,7 @@ pub fn session(report: &Report, technician: bool) -> String {
 
     if technician {
         text.push_str("\n\n");
-        text.push_str(&report.readable());
+        text.push_str(&report.technical_text());
     }
 
     text

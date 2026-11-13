@@ -9,6 +9,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::BootReport;
 
+#[cfg(any(windows, test))]
+pub mod efi;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Confidence {
@@ -289,41 +292,34 @@ fn associate(result: &mut Diagnosis, root: &Path, installation: &Path, inventory
         })
         .cloned()
         .collect();
-    let mut mounted_efi = Vec::new();
-    for volume in &inventory.volumes {
-        if volume.physical_disks != [source.disk_number] {
-            continue;
-        }
-        let Some(path) = volume.paths.first() else {
-            continue;
-        };
-        if let Ok(target) = mounted_partition(path) {
-            if target.partition.efi && target.disk_id == source.disk_id {
-                mounted_efi.push(path.clone());
-            }
-        }
-    }
+    use efi::Resolution;
 
-    let (id, confidence, evidence) = match efi_partitions.len() {
-        0 => (
+    let mut mounted_efi = Vec::new();
+    let (id, confidence, evidence) = match efi::resolve(&source, inventory) {
+        Resolution::Identified { root, .. } => {
+            mounted_efi.push(root);
+            (
+                "EFI_SAME_DISK_CANDIDATE",
+                Confidence::Observed,
+                "Uma ESP acessível no mesmo disco. Referências do BCD continuam sem comprovação."
+                    .into(),
+            )
+        }
+        Resolution::Missing => (
             "EFI_ASSOCIATION_UNRESOLVED",
             Confidence::MissingEvidence,
-            "Nenhuma ESP encontrada no mesmo disco.",
+            "Nenhuma ESP encontrada no mesmo disco.".into(),
         ),
-        1 if mounted_efi.len() == 1 => (
-            "EFI_SAME_DISK_CANDIDATE",
-            Confidence::Observed,
-            "Uma ESP acessível no mesmo disco. Referências do BCD continuam sem comprovação.",
-        ),
-        1 => (
-            "EFI_NOT_ACCESSIBLE",
-            Confidence::MissingEvidence,
-            "Uma ESP no mesmo disco sem caminho acessível no inventário.",
-        ),
-        _ => (
+        Resolution::Inaccessible(reason) => {
+            ("EFI_NOT_ACCESSIBLE", Confidence::MissingEvidence, reason)
+        }
+        Resolution::Unsupported(reason) => {
+            ("EFI_TOPOLOGY_UNSUPPORTED", Confidence::Unsupported, reason)
+        }
+        Resolution::Ambiguous => (
             "EFI_AMBIGUOUS",
             Confidence::Unsupported,
-            "Múltiplas ESPs no disco da instalação.",
+            "Há múltiplas ESPs ou identidades EFI divergentes no disco da instalação.".into(),
         ),
     };
     result.record(
@@ -331,7 +327,7 @@ fn associate(result: &mut Diagnosis, root: &Path, installation: &Path, inventory
         confidence,
         installation,
         evidence,
-        "Confirme o identificador da ESP e a referência do BCD.",
+        "Confira o disco de origem e atualize o diagnóstico se a conexão mudar.",
         confidence != Confidence::Observed,
     );
 

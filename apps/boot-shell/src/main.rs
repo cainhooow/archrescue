@@ -5,7 +5,7 @@ mod deployment;
 mod gui;
 mod i18n;
 mod integrity;
-#[cfg(any(windows, test))]
+#[cfg(windows)]
 mod paths;
 #[cfg(windows)]
 mod resources;

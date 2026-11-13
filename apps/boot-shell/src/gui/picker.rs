@@ -36,6 +36,10 @@ pub enum Purpose {
     Media,
     DeploymentDisk,
     Backup,
+    Resume,
+    ResumeSource,
+    DataCheckpoint,
+    EfiCheckpoint,
     Handoff,
     Plan,
     ConsoleLog,
@@ -46,17 +50,25 @@ impl Purpose {
         match self {
             Self::Source => "Escolher pasta de origem",
             Self::Windows => "Escolher Windows",
-            Self::Efi => "Escolher partição de inicialização",
+            Self::Efi => "Consultar partições EFI",
             Self::SaveFiles => "Escolher onde salvar",
             Self::Preserve => "Escolher onde preservar",
             Self::Report => "Escolher onde salvar o relatório",
             Self::Media => "Escolher Windows para instalar",
             Self::DeploymentDisk => "Escolher disco de instalação",
             Self::Backup => "Escolher backup",
+            Self::Resume => "Escolher checkpoint para retomar",
+            Self::ResumeSource => "Localizar a pasta original do checkpoint",
+            Self::DataCheckpoint => "Escolher checkpoint dos dados",
+            Self::EfiCheckpoint => "Escolher checkpoint da ESP",
             Self::Handoff => "Escolher onde salvar a referência",
             Self::Plan => "Escolher onde salvar o plano",
             Self::ConsoleLog => "Escolher onde salvar o log",
         }
+    }
+
+    pub fn repair_checkpoint(self) -> bool {
+        matches!(self, Self::DataCheckpoint | Self::EfiCheckpoint)
     }
 
     fn writes(self) -> bool {
@@ -100,6 +112,7 @@ pub struct Request {
     sources: Vec<Location>,
     minimum_bytes: u64,
     technician: bool,
+    resume_source: Option<storage::RecoveryLocation>,
 }
 
 impl Request {
@@ -108,9 +121,9 @@ impl Request {
         report: &Report,
         catalog: &resources::Catalog,
         selected_windows: Option<&Windows>,
-        sources: Vec<Location>,
-        minimum_bytes: u64,
+        (sources, minimum_bytes): (Vec<Location>, u64),
         technician: bool,
+        resume_source: Option<storage::RecoveryLocation>,
     ) -> Self {
         let mut request = Self {
             purpose,
@@ -118,6 +131,7 @@ impl Request {
             sources,
             minimum_bytes,
             technician,
+            resume_source,
         };
 
         match purpose {
@@ -133,6 +147,33 @@ impl Request {
                         target: Target::Selection(Selection::Windows(Box::new(windows.clone()))),
                     });
                 }
+                for probe in &report.installations.probes {
+                    use archrescue_windows_detection::ProbeState;
+
+                    let reason = match probe.state {
+                        ProbeState::Inaccessible => {
+                            "Volume inacessível. Confira conexão, permissões e BitLocker."
+                        }
+                        ProbeState::Incomplete => "Marcadores do Windows ausentes ou inválidos.",
+                        ProbeState::Candidate
+                            if !catalog
+                                .windows
+                                .iter()
+                                .any(|windows| windows.installation.volume == probe.root) =>
+                        {
+                            "A identidade do volume não pôde ser confirmada."
+                        }
+                        _ => continue,
+                    };
+                    request.rows.push(Row {
+                        label: format!(
+                            "Windows indisponível · {}",
+                            paths::display(&probe.root, technician)
+                        ),
+                        detail: reason.into(),
+                        target: Target::Unavailable,
+                    });
+                }
             }
             Purpose::Efi => {
                 let association =
@@ -142,17 +183,19 @@ impl Request {
                         })
                     });
                 if let Some(association) = association {
-                    let ambiguous = association.efi_partitions.len() != 1;
-                    for path in &association.mounted_efi {
+                    for partition in &association.efi_partitions {
+                        let identity = if technician {
+                            partition
+                                .id
+                                .as_ref()
+                                .map_or_else(String::new, |id| format!(" · {id}"))
+                        } else {
+                            String::new()
+                        };
                         request.rows.push(Row {
-                            label: format!("Partição EFI · Disco {} · {}", association.disk_number, paths::display(path, technician)),
-                            detail: if ambiguous {
-                                "Mais de uma ESP no disco. A associação permanece ambígua e o plano pode ser bloqueado.".into()
-                            } else {
-                                "Mesmo disco GPT. Referência do BCD ainda precisa ser comprovada.".into()
-                            },
-                            target: catalog.efi.iter().find(|(candidate, _)| candidate == path)
-                                .map_or(Target::Unavailable, |(_, location)| Target::Located(location.clone())),
+                            label: format!("Disco {} · Partição {} · {}", association.disk_number, partition.number, resources::size(partition.length)),
+                            detail: format!("Partição EFI no disco do Windows{identity}. Consulte o estado da associação na página Reparar."),
+                            target: Target::Unavailable,
                         });
                     }
                 }
@@ -169,8 +212,19 @@ impl Request {
                         .filter(|candidate| candidate.identity == disk.identity)
                         .count()
                         == 1;
-                    let usable =
-                        unique && disk.identity.starts_with("gpt:") && disk.read_only != Some(true);
+                    let protected = request
+                        .sources
+                        .iter()
+                        .any(|source| source.disk_number() == Some(number));
+                    let reason = if protected {
+                        Some("Disco protegido pela origem, pelo backup ou pelo ambiente em execução.")
+                    } else if disk.read_only != Some(false) {
+                        Some("Disco somente leitura ou gravação indisponível.")
+                    } else if !unique || !disk.identity.starts_with("gpt:") {
+                        Some("Requer disco GPT com identidade única.")
+                    } else {
+                        None
+                    };
                     let details = if technician {
                         format!(
                             "{} · {}",
@@ -188,12 +242,11 @@ impl Request {
                             disk.capacity
                                 .map_or_else(|| "Capacidade indisponível".into(), resources::size)
                         ),
-                        detail: if usable {
-                            details
-                        } else {
-                            format!("{details} · Requer GPT com identidade única e disco gravável.")
-                        },
-                        target: if usable {
+                        detail: reason.map_or_else(
+                            || details.clone(),
+                            |reason| format!("{details} · {reason}"),
+                        ),
+                        target: if reason.is_none() {
                             Target::Selection(Selection::Disk(disk.identity.clone()))
                         } else {
                             Target::Unavailable
@@ -202,7 +255,9 @@ impl Request {
                 }
             }
             _ => {
-                if purpose == Purpose::Backup {
+                if matches!(purpose, Purpose::Backup | Purpose::Resume)
+                    || purpose.repair_checkpoint()
+                {
                     request
                         .rows
                         .extend(catalog.backups.iter().map(|(entry, location)| Row {
@@ -244,25 +299,32 @@ impl Request {
                         .iter()
                         .find(|(id, _)| id == &volume.identity)
                         .map(|(_, path)| path.clone());
-                    let blocked = purpose.writes()
-                        && report.inventory.disks.iter().any(|disk| {
-                            disk.read_only == Some(true)
-                                && disk
-                                    .number
-                                    .is_some_and(|number| volume.physical_disks.contains(&number))
-                        });
-                    let detail = if blocked {
-                        "Disco somente leitura.".into()
-                    } else if path.is_none() {
-                        "Sistema de arquivos inacessível.".into()
-                    } else {
-                        "Selecione ou abra para consultar as pastas.".into()
-                    };
+                    let blocked = path.as_ref().and_then(|path| {
+                        if purpose.writes() {
+                            resources::writable(&path.path, &request.sources, minimum_bytes)
+                                .err()
+                                .map(|error| error.context)
+                        } else if request.resume_source.as_ref().is_some_and(|source| {
+                            path.recorded_location()
+                                .is_none_or(|root| root.filesystem_id != source.filesystem_id)
+                        }) {
+                            Some("Este volume tem outra identidade de origem.".into())
+                        } else {
+                            None
+                        }
+                    });
+                    let detail = blocked.clone().unwrap_or_else(|| {
+                        if path.is_none() {
+                            "Sistema de arquivos inacessível.".into()
+                        } else {
+                            "Selecione ou abra para consultar as pastas.".into()
+                        }
+                    });
 
                     request.rows.push(Row {
                         label: resources::volume_description(volume, &report.inventory, technician),
                         detail,
-                        target: if blocked {
+                        target: if blocked.is_some() {
                             Target::Unavailable
                         } else {
                             path.map_or(Target::Unavailable, Target::Located)
@@ -290,6 +352,17 @@ impl Request {
                     .ok_or_else(|| {
                         unavailable("O disco foi removido ou tem identidade ambígua.")
                     })?;
+                for source in &self.sources {
+                    let path = source.revalidate()?;
+                    if storage::identity(&path).is_ok_and(|volume| {
+                        disk.number
+                            .is_some_and(|number| volume.physical_disks.contains(&number))
+                    }) {
+                        return Err(unavailable(
+                            "Disco protegido por uma seleção de recuperação.",
+                        ));
+                    }
+                }
                 storage::windows::require_writable_disk(&disk.device_path)?;
 
                 Ok(Selection::Disk(id))
@@ -308,7 +381,10 @@ impl Request {
 
     fn choose_location(&self, location: Location) -> Result<Selection> {
         match self.purpose {
-            Purpose::Backup => {
+            purpose
+                if matches!(purpose, Purpose::Backup | Purpose::Resume)
+                    || purpose.repair_checkpoint() =>
+            {
                 let checkpoint = transaction::checkpoint(&location.path);
                 if let Some(error) = checkpoint.error {
                     return Err(error);
@@ -321,6 +397,13 @@ impl Request {
                     operation: manifest.operation_id,
                     fingerprint: manifest.plan_fingerprint,
                 }))
+            }
+            Purpose::ResumeSource
+                if self.resume_source.as_ref() != location.recorded_location() =>
+            {
+                Err(unavailable(
+                    "Esta pasta tem outra identidade. Localize o volume e a pasta originais.",
+                ))
             }
             Purpose::Media if !location.path.is_file() || !image_file(&location.path) => Err(
                 unavailable("Escolha WIM ou ESD. Para ISO, use mídia montada externamente."),
@@ -763,7 +846,12 @@ unsafe fn refresh(hwnd: HWND, dialog: &Dialog<'_>, model: &mut Model) {
     model.visible.clear();
     for (index, row) in model.rows.iter().enumerate() {
         if row.label.to_lowercase().contains(&query)
-            && SendMessageW(list, LB_ADDSTRING, 0, wide(&row.label).as_ptr() as LPARAM) >= 0
+            && SendMessageW(
+                list,
+                LB_ADDSTRING,
+                0,
+                wide(&paths::text(&row.label, dialog.request.technician)).as_ptr() as LPARAM,
+            ) >= 0
         {
             model.visible.push(index);
         }
@@ -852,7 +940,11 @@ unsafe fn command(
         FILTER if notification == EN_CHANGE => refresh(hwnd, dialog, model),
         LIST if notification == LBN_SELCHANGE => {
             if let Some(row) = row {
-                set(hwnd, DETAILS, &row.detail);
+                set(
+                    hwnd,
+                    DETAILS,
+                    &paths::text(&row.detail, dialog.request.technician),
+                );
             }
             controls(hwnd, dialog, model);
         }
@@ -980,7 +1072,11 @@ unsafe fn receive(hwnd: HWND, dialog: &Dialog<'_>, model: &mut Model) {
             EndDialog(hwnd, 1);
         }
         Update::Open(Err(error), _) | Update::Choose(Err(error)) => {
-            set(hwnd, DETAILS, &error_message(&error));
+            set(
+                hwnd,
+                DETAILS,
+                &paths::text(&error_message(&error), dialog.request.technician),
+            );
             controls(hwnd, dialog, model);
             SetFocus(control(hwnd, LIST));
         }

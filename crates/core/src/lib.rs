@@ -7,6 +7,7 @@ use std::{
 };
 
 use serde::{Deserialize, Serialize};
+pub mod presentation;
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const BUILD_ID: &str = match option_env!("ARCHRESCUE_BUILD_ID") {

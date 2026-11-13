@@ -183,7 +183,14 @@ fn report_export_roundtrips_and_preserves_source() {
     .unwrap();
 
     let output = Fixture::new();
-    let report = archrescue_evidence::Report::collect(std::slice::from_ref(&fixture.root));
+    let mut report = archrescue_evidence::Report::collect(std::slice::from_ref(&fixture.root));
+    report
+        .decisions
+        .push(r"Recusado: \\?\E:\Dados\Lúcia".into());
+    report.console_audit.push(serde_json::json!({
+        "stdout": r"Volume em \\?\UNC\servidor\pasta",
+        "stderr": r"Falha em \DeViCe\HarddiskVolume2",
+    }));
 
     let path = archrescue_evidence::export(&report, &output.root).unwrap();
     let json = fs::read(path.join("report.json")).unwrap();
@@ -191,9 +198,15 @@ fn report_export_roundtrips_and_preserves_source() {
 
     assert_eq!(decoded.schema_version, 1);
     assert_eq!(decoded.installations.installations.len(), 1);
-    assert!(fs::read_to_string(path.join("report.txt"))
-        .unwrap()
-        .contains("Technical report"));
+    assert_eq!(decoded.decisions, report.decisions);
+    assert_eq!(decoded.console_audit, report.console_audit);
+    let text = fs::read_to_string(path.join("report.txt")).unwrap();
+    assert!(text.contains("Relatório da sessão"));
+    assert!(text.contains("Lúcia"));
+    assert!(text.contains("servidor"));
+    assert!(!text.contains(r"\\?\"));
+    assert!(!text.to_ascii_lowercase().contains(r"\device\"));
+    assert!(report.technical_text().contains(r"\\?\"));
 
     assert_eq!(
         before,

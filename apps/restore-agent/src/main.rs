@@ -1,3 +1,6 @@
+#[cfg(windows)]
+mod guided;
+
 use std::{
     fs::File,
     io::Read,
@@ -10,6 +13,7 @@ use archrescue_restore::{ConflictPolicy, Folder, Mapping, Profile, RecoveryBindi
 
 const HELP: &str = "Agente de Restauração ArchRescue
   --version
+  gui
   perfil
   previa BACKUP SID POLÍTICA PASTA_ORIGEM PASTA_CONHECIDA [...]
   restaurar BACKUP SID POLÍTICA AUTORIZAR-RESTAURACAO:SHA256 PASTA_ORIGEM PASTA_CONHECIDA [...]
@@ -41,6 +45,11 @@ fn run() -> Result<()> {
         .first()
         .and_then(|value| value.to_str())
         .unwrap_or("--help");
+    #[cfg(windows)]
+    if args.is_empty() || (command == "gui" && args.len() == 1) {
+        return guided::run();
+    }
+
     let cancel = AtomicBool::new(false);
     match command {
         "--help" if args.len() <= 1 => println!("{HELP}"),

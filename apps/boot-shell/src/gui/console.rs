@@ -183,7 +183,7 @@ pub unsafe fn action(hwnd: HWND, app: &mut App, id: usize) -> bool {
                 return true;
             };
             let sources = app.session.sources(PAGE);
-            let output = app.console.output.clone();
+            let output = paths::text(&app.console.output, app.technician).into_owned();
             work(app, move || {
                 let result = (|| {
                     let path = destination.revalidate()?;

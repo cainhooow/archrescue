@@ -179,6 +179,16 @@ pub unsafe fn arrange(hwnd: HWND, app: &App) {
     );
 
     place(hwnd, DISK_DETAILS, x, area.actions(), 168, 30);
+    if section == DASHBOARD {
+        place(
+            hwnd,
+            CHOOSE_WINDOWS,
+            x + 182,
+            area.actions(),
+            (width - 182).min(460),
+            30,
+        );
+    }
 
     let top = area.body_top(section);
     let bottom = area.body_bottom(section);
@@ -288,9 +298,9 @@ pub unsafe fn arrange(hwnd: HWND, app: &App) {
                 hwnd,
                 CONTENT,
                 x + 12,
-                top + 222,
+                top + 245,
                 left - 24,
-                bottom - top - 232,
+                bottom - top - 255,
             );
             place(
                 hwnd,
@@ -299,6 +309,22 @@ pub unsafe fn arrange(hwnd: HWND, app: &App) {
                 top + 121,
                 right_width - 26,
                 30,
+            );
+            place(
+                hwnd,
+                session::DATA_CHECKPOINT,
+                right + 13,
+                top + 190,
+                right_width - 26,
+                28,
+            );
+            place(
+                hwnd,
+                session::EFI_CHECKPOINT,
+                right + 13,
+                top + 227,
+                right_width - 26,
+                28,
             );
         }
         VERIFY_PAGE => {

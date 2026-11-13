@@ -11,8 +11,8 @@ pub(super) enum Confirmation {
     Resume {
         source: Location,
         checkpoint: PathBuf,
-        fingerprint: Option<String>,
-        expected_destination: Option<archrescue_storage::RecoveryLocation>,
+        fingerprint: String,
+        expected_destination: archrescue_storage::RecoveryLocation,
         recorded_state: Option<archrescue_core::State>,
     },
 }
@@ -69,7 +69,25 @@ impl Confirmation {
                                 .clone()
                                 .unwrap_or_else(|| format!("Índice {}", plan.selected_image.index)),
                         ),
-                        ("Disco GPT", plan.target.disk.identity.clone()),
+                        (
+                            "Disco de instalação",
+                            if technician {
+                                format!(
+                                    "Disco {} · {}",
+                                    plan.target.disk.number.unwrap_or_default(),
+                                    plan.target.disk.identity
+                                )
+                            } else {
+                                format!(
+                                    "Disco {} · {}",
+                                    plan.target.disk.number.unwrap_or_default(),
+                                    plan.target.disk.capacity.map_or_else(
+                                        || "Capacidade indisponível".into(),
+                                        crate::resources::size
+                                    )
+                                )
+                            },
+                        ),
                     ],
                     notice: (
                         "Os dados do disco alvo serão apagados",
@@ -129,13 +147,27 @@ impl Confirmation {
         };
         if let Some(report) = &mut app.report {
             let decision = if accepted { approved } else { refused };
-            let [(first, first_path), (second, second_path)] = &prompt.paths;
+            let [(first, _), (second, _)] = &prompt.paths;
+            let (first_path, second_path) = match &self {
+                Self::Start(preview) => {
+                    (preview.source.label(true), preview.destination.label(true))
+                }
+                Self::Resume {
+                    source,
+                    checkpoint,
+                    ..
+                } => (paths::display(checkpoint, true), source.label(true)),
+                #[cfg(all(feature = "lab-deployment", target_arch = "x86_64"))]
+                Self::Deployment(plan) => {
+                    (prompt.paths[0].1.clone(), plan.target.disk.identity.clone())
+                }
+            };
             report.decisions.push(format!(
                 "{decision}. {}\n{first}: {first_path}\n{second}: {second_path}",
                 prompt.question,
             ));
         }
-        if !accepted || app.busy {
+        if !accepted || app.busy || app.refresh_pending {
             return;
         }
 
@@ -162,18 +194,12 @@ impl Confirmation {
                 expected_destination,
                 ..
             } => {
-                if app.session.source.as_ref() != Some(&source) {
-                    set(
-                        hwnd,
-                        STATUS,
-                        "A origem foi alterada. Selecione o checkpoint novamente.",
-                    );
-                    return;
-                }
                 begin_backup(hwnd, &mut app, move |cancel, progress| {
-                    let source = source.revalidate()?;
+                    let source_path = source.revalidate()?;
                     let manifest = transaction::manifest(&checkpoint)?;
-                    if fingerprint.as_ref() != Some(&manifest.plan_fingerprint) {
+                    if fingerprint != manifest.plan_fingerprint
+                        || source.recorded_location() != Some(&manifest.source_identity)
+                    {
                         return Err(Error::new(
                             ErrorKind::Conflict,
                             "O checkpoint selecionado mudou.",
@@ -183,13 +209,14 @@ impl Confirmation {
                         Error::new(ErrorKind::Validation, "Checkpoint sem pasta de destino.")
                     })?;
                     let destination = Location::capture(parent)?;
-                    if destination.recorded_location() != expected_destination.as_ref() {
+                    if destination.recorded_location() != Some(&expected_destination) {
                         return Err(Error::new(
                             ErrorKind::Conflict,
                             "O destino original do checkpoint mudou.",
                         ));
                     }
-                    transaction::resume(&source, &checkpoint, cancel, progress)
+                    crate::resources::writable(&destination.path, &[source], 0)?;
+                    transaction::resume(&source_path, &checkpoint, cancel, progress)
                 });
             }
         }

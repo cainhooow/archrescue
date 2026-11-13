@@ -109,10 +109,13 @@ dependencies = [
 name = "archrescue-restore-agent"
 version = "0.0.1"
 dependencies = [
+ "archrescue-backup",
  "archrescue-core",
  "archrescue-restore",
+ "archrescue-storage",
  "serde",
  "serde_json",
+ "windows-sys",
 ]
 
 [[package]]

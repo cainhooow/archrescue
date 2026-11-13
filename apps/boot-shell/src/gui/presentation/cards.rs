@@ -27,7 +27,7 @@ pub(super) fn render(dc: &mut Scene<'_>, area: &Layout, theme: &Theme, app: &App
         BACKUP => cards.backup(app),
         VERIFY_PAGE => cards.verify(app, bottom),
         REPORTS => cards.report(app, top, bottom),
-        REPAIR_PAGE => cards.repair(app, top, bottom),
+        REPAIR_PAGE => cards.repair(top, bottom),
         deployment::DEPLOY => cards.deployment(app, top, bottom),
         deployment::RESTORE => cards.handoff(app),
         _ if pages::structured(app.section) => {
@@ -336,7 +336,7 @@ impl Cards<'_, '_> {
                 width - px(if badge { 260 } else { 82 }),
                 px(26),
             ),
-            &display_path(&installation.path),
+            &paths::friendly(&installation.path),
             MUTED,
         );
         if badge {
@@ -406,7 +406,7 @@ impl Cards<'_, '_> {
         let path = volume
             .paths
             .first()
-            .map_or_else(|| "Sem caminho".into(), |path| display_path(path));
+            .map_or_else(|| "Sem caminho".into(), |path| paths::friendly(path));
         let detail = match (volume.filesystem.as_deref(), &volume.space) {
             (Some(fs), Some(_)) => format!("{fs} · espaço consultado"),
             (Some(fs), None) => format!("{fs} · espaço indisponível"),
@@ -872,7 +872,7 @@ impl Cards<'_, '_> {
             self.notice(
                 rect(right, top + 158, right_width, 115),
                 "Falha na exportação",
-                &error.context,
+                &paths::text(&error.context, app.technician),
                 (ERROR_SURFACE, CRITICAL),
             );
         } else if let Some(path) = &app.report_export {
@@ -895,7 +895,7 @@ impl Cards<'_, '_> {
         }
     }
 
-    fn repair(&mut self, app: &App, top: i32, bottom: i32) {
+    fn repair(&mut self, top: i32, bottom: i32) {
         let x = self.area.left();
         let (left, right, right_width) = self.area.columns(60);
         self.panel(rect(x, top, left, 200));
@@ -915,14 +915,7 @@ impl Cards<'_, '_> {
             "Execução do reparo",
         );
         self.paragraph(rect(right + 13, top + 40, right_width - 26, 75), "Somente laboratório. O BCDBoot exige clone registrado, preservação verificada e autorização vinculada ao plano.", WARNING);
-        if app.report.is_some() && app.session.available_windows().is_none() {
-            self.notice(
-                    rect(right, top + 174, right_width, 98),
-                    "Candidato offline necessário",
-                    "Escolha uma instalação Windows identificada para revisar a partição de inicialização.",
-                    (WARNING_SURFACE, WARNING),
-                );
-        }
+        self.panel(rect(right, top + 172, right_width, 95));
     }
 
     fn deployment(&mut self, app: &App, top: i32, bottom: i32) {
@@ -1015,7 +1008,7 @@ impl Cards<'_, '_> {
             self.notice(
                 rect(x, top + 208, self.area.body_width(), 78),
                 "Falha ao preparar a referência",
-                &error.context,
+                &paths::text(&error.context, app.technician),
                 (ERROR_SURFACE, CRITICAL),
             );
         } else if let Some(path) = &app.handoff_export {
@@ -1039,17 +1032,6 @@ fn bytes(value: u64) -> String {
     } else {
         format!("{value} bytes")
     }
-}
-
-fn display_path(path: &std::path::Path) -> String {
-    let path = paths::friendly(path);
-    if let Some(unc) = path.strip_prefix(r"\\?\UNC\") {
-        return format!(r"\\{unc}");
-    }
-    path.strip_prefix(r"\\?\")
-        .filter(|rest| rest.as_bytes().get(1) == Some(&b':'))
-        .unwrap_or(&path)
-        .to_owned()
 }
 
 fn partition_style(partition: &Partition) -> (&str, COLORREF) {

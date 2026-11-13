@@ -185,9 +185,7 @@ pub fn safe_existing(path: &Path) -> Result<PathBuf> {
     match fs::canonicalize(path) {
         Ok(path) => Ok(path),
         #[cfg(windows)]
-        Err(error) if error.raw_os_error() == Some(3) && path.components().count() == 2 => {
-            windows::canonicalize_efi_root(path)
-        }
+        Err(error) if error.raw_os_error() == Some(3) => windows::canonicalize_efi_path(path),
         Err(error) => Err(Error::io("Canonicalize path", error)),
     }
 }

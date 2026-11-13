@@ -75,16 +75,30 @@ pub(super) fn identify(plan: &mut RepairPlan) -> Result<()> {
     let disk = same_id
         .next()
         .ok_or_else(|| blocked("Disco alvo não encontrado no inventário"))?;
-    if same_id.next().is_some()
-        || disk.number != Some(source.disk_number)
-        || disk
-            .partitions
-            .iter()
-            .filter(|partition| partition.efi)
-            .count()
-            != 1
-    {
+    if same_id.next().is_some() || disk.number != Some(source.disk_number) {
         return Err(blocked("Identidade de disco ou ESP ambígua"));
+    }
+
+    use archrescue_diagnostics::recovery::efi::{self, Resolution};
+
+    let Resolution::Identified {
+        volume,
+        partition,
+        ..
+    } = efi::discover(&source_root, &inventory)
+    else {
+        return Err(blocked(
+            "A topologia atual não identifica uma única ESP acessível.",
+        ));
+    };
+    if !volume.eq_ignore_ascii_case(&efi.volume_guid)
+        || partition.id != efi.partition.id
+        || partition.offset != efi.partition.offset
+        || partition.length != efi.partition.length
+    {
+        return Err(blocked(
+            "A ESP selecionada diverge da partição identificada.",
+        ));
     }
 
     require_separate(&identity(&source_root)?, &identity(&destination)?)?;
@@ -126,6 +140,11 @@ pub(super) fn identify(plan: &mut RepairPlan) -> Result<()> {
         windows_volume_guid: source.volume_guid,
         efi_volume_guid: efi.volume_guid,
     };
+
+    plan.target = Some(target.clone());
+    plan.windows_root = source_root.clone();
+    plan.efi_root = efi_root.clone();
+    plan.backup_destination = destination.clone();
 
     plan.command = vec![
         system_root()?
@@ -171,11 +190,6 @@ pub(super) fn identify(plan: &mut RepairPlan) -> Result<()> {
         plan.blockers
             .push("Cenário exige BCD ou gerenciador de boot ausente ou inválido na ESP".into());
     }
-
-    plan.target = Some(target);
-    plan.windows_root = source_root;
-    plan.efi_root = efi_root;
-    plan.backup_destination = destination;
 
     Ok(())
 }

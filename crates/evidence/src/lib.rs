@@ -94,10 +94,43 @@ impl Report {
     }
 
     pub fn readable(&self) -> String {
+        self.render_text(false)
+    }
+
+    pub fn technical_text(&self) -> String {
+        self.render_text(true)
+    }
+
+    fn display_evidence(&self, text: &str) -> String {
+        archrescue_core::presentation::assisted(text, |guid| {
+            let volume = self.inventory.volumes.iter().find(|volume| {
+                volume
+                    .identity
+                    .get(11..47)
+                    .is_some_and(|id| id.eq_ignore_ascii_case(guid))
+            })?;
+            if let Some(path) = volume.paths.first() {
+                let path = archrescue_core::presentation::path(path);
+                return Some(path.trim_end_matches('\\').into());
+            }
+            let [disk] = volume.physical_disks.as_slice() else {
+                return None;
+            };
+            Some(format!("Volume sem letra · Disco {disk}"))
+        })
+        .into_owned()
+    }
+
+    fn render_text(&self, technician: bool) -> String {
         let mut text = format!(
-            "ArchRescue {} — Technical report\nBuild: {}\nRuntime: {} / {}\nSchema: {}\n\
+            "ArchRescue {} — {}\nBuild: {}\nRuntime: {} / {}\nSchema: {}\n\
              Disks: {} | Volumes: {} | Windows candidates: {}\n\n",
             self.version,
+            if technician {
+                "Technical report"
+            } else {
+                "Relatório da sessão"
+            },
             self.build_id,
             self.runtime_os,
             self.architecture,
@@ -160,13 +193,41 @@ impl Report {
             }
         }
 
+        if !technician {
+            text = self.display_evidence(&text);
+        }
         text.push_str("\nStructured evidence (including errors and limitations):\n");
-        match serde_json::to_string_pretty(self) {
+        let evidence = serde_json::to_value(self).and_then(|mut value| {
+            if !technician {
+                render_evidence_strings(&mut value, &|text| self.display_evidence(text));
+            }
+            serde_json::to_string_pretty(&value)
+        });
+        match evidence {
             Ok(json) => text.push_str(&json),
             Err(error) => text.push_str(&format!("Serialization failed: {error}")),
         }
 
         text
+    }
+}
+
+fn render_evidence_strings(value: &mut serde_json::Value, display: &impl Fn(&str) -> String) {
+    use serde_json::Value;
+
+    match value {
+        Value::String(text) => *text = display(text),
+        Value::Array(items) => {
+            for item in items {
+                render_evidence_strings(item, display);
+            }
+        }
+        Value::Object(fields) => {
+            for item in fields.values_mut() {
+                render_evidence_strings(item, display);
+            }
+        }
+        _ => {}
     }
 }
 

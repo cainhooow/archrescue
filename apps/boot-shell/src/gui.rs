@@ -117,8 +117,10 @@ enum Event {
     Progress(Progress),
     Preview(Preview),
     Checkpoints(Vec<CheckpointEntry>),
+    RepairCheckpoint(picker::Purpose, crate::resources::Backup),
     Backup(Box<TransactionReport>),
-    Repair(Box<repair::RepairPlan>),
+    Efi(u64, Location, session::Efi),
+    Repair(u64, Box<repair::RepairPlan>),
     Exported(PathBuf),
     PlanExported(PathBuf),
     HandoffExported(PathBuf),
@@ -164,6 +166,7 @@ struct App {
     report_export: Option<PathBuf>,
     handoff_export: Option<PathBuf>,
     scanning: bool,
+    repair_discovery_pending: bool,
     roots: Vec<PathBuf>,
     root_index: usize,
     row_index: usize,
@@ -184,6 +187,8 @@ struct WindowState {
     hovered: Cell<HWND>,
     selected_page: Cell<usize>,
     confirming: Cell<bool>,
+    technician: Cell<bool>,
+    status: RefCell<String>,
 }
 
 unsafe fn invalidate_scene(hwnd: HWND) {
@@ -201,6 +206,16 @@ unsafe fn control(hwnd: HWND, id: usize) -> HWND {
 }
 
 unsafe fn set(hwnd: HWND, id: usize, text: &str) {
+    let state = (GetWindowLongPtrW(hwnd, GWLP_USERDATA) as *const WindowState).as_ref();
+    if let Some(state) = state.filter(|_| id == STATUS) {
+        state.status.replace(text.to_owned());
+    }
+    let mode = state.is_some_and(|state| state.technician.get());
+    let text = if matches!(id, STATUS | CONTENT) {
+        paths::text(text, mode)
+    } else {
+        std::borrow::Cow::Borrowed(text)
+    };
     let control = control(hwnd, id);
     let text = wide(&text.replace("\r\n", "\n").replace('\n', "\r\n"));
 
@@ -336,7 +351,7 @@ unsafe fn render(hwnd: HWND, app: &App) {
     show(
         hwnd,
         CHOOSE_WINDOWS,
-        protect || repair || app.section == DIAGNOSIS,
+        protect || repair || matches!(app.section, DIAGNOSIS | DASHBOARD),
     );
     show(hwnd, CHOOSE_BACKUP, verify);
     show(
@@ -375,6 +390,15 @@ unsafe fn render(hwnd: HWND, app: &App) {
     show(hwnd, VERIFY, verify);
     show(hwnd, REPAIR, repair);
     show(hwnd, REPAIR_UNAVAILABLE, repair);
+    for id in [session::DATA_CHECKPOINT, session::EFI_CHECKPOINT] {
+        show(hwnd, id, repair);
+        EnableWindow(
+            control(hwnd, id),
+            (!app.busy
+                && app.session.efi.location().is_some()
+                && app.session.destination(REPAIR_PAGE).is_ok()) as i32,
+        );
+    }
     EnableWindow(control(hwnd, REPAIR_UNAVAILABLE), 0);
     EnableWindow(
         control(hwnd, PREVIOUS),
@@ -410,7 +434,6 @@ unsafe fn render(hwnd: HWND, app: &App) {
         ESP,
         CHECKPOINTS,
         REFRESH,
-        REPAIR,
         FILES,
     ] {
         EnableWindow(control(hwnd, id), (!app.busy) as i32);
@@ -426,7 +449,13 @@ unsafe fn render(hwnd: HWND, app: &App) {
     );
     EnableWindow(
         control(hwnd, RESUME),
-        (!app.busy && app.checkpoints.is_some()) as i32,
+        (!app.busy && app.report.is_some()) as i32,
+    );
+    EnableWindow(
+        control(hwnd, REPAIR),
+        (!app.busy
+            && app.session.efi.location().is_some()
+            && app.session.destination(REPAIR_PAGE).is_ok()) as i32,
     );
     EnableWindow(control(hwnd, CANCEL), (app.busy && app.cancellable) as i32);
     EnableWindow(
@@ -490,7 +519,13 @@ unsafe fn render(hwnd: HWND, app: &App) {
         return;
     };
     let text = match app.section {
-        REPAIR_PAGE => crate::views::repair(app.current_repair.as_ref(), app.technician),
+        REPAIR_PAGE => format!(
+            "{}
+
+{}",
+            app.session.efi.details(app.technician),
+            crate::views::repair(app.current_repair.as_ref(), app.technician),
+        ),
         VERIFY_PAGE if app.session.backup.is_some() => {
             let backup = app.session.backup.as_ref().unwrap();
             let status = match &app.session.backup_verification {
@@ -533,6 +568,14 @@ unsafe fn refresh(hwnd: HWND, app: &mut App) {
     if app.report.is_none() {
         set(hwnd, STATUS, i18n::LOADING);
     }
+    app.current_repair = None;
+    app.session.invalidate_repair();
+    app.report_export = None;
+    app.handoff_export = None;
+    app.preview = None;
+    app.checkpoints = None;
+    app.session.resume = None;
+    deployment::invalidate_plan(app);
     let generation = app.session.catalog.generation + 1;
     let registered = app.session.registered.clone();
     work(app, move || {
@@ -642,6 +685,13 @@ unsafe fn update_backup_selection(hwnd: HWND, app: &App) {
 unsafe fn stage(hwnd: HWND, app: &mut App, section: usize) {
     app.section = section;
     app.row_index = 0;
+    if section == REPAIR_PAGE && app.current_repair.is_none() {
+        if app.busy {
+            app.repair_discovery_pending = true;
+        } else {
+            session::discover_efi(hwnd, app);
+        }
+    }
     if section == BACKUP && app.session.source.is_none() && !app.busy {
         if let Some(windows) = app.session.available_windows().cloned() {
             session::recommended(hwnd, app, windows);
@@ -675,6 +725,15 @@ unsafe fn action(hwnd: HWND, app: &mut App, id: usize, notification: u32) {
         }
         TECHNICIAN => {
             app.technician = !app.technician;
+            if let Some(state) =
+                (GetWindowLongPtrW(hwnd, GWLP_USERDATA) as *const WindowState).as_ref()
+            {
+                state.technician.set(app.technician);
+                let status = state.status.borrow().clone();
+                set(hwnd, STATUS, &status);
+            }
+            pages::render_sources(hwnd, app);
+            render_file_rows(hwnd, app);
             render(hwnd, app);
             return;
         }
@@ -686,7 +745,7 @@ unsafe fn action(hwnd: HWND, app: &mut App, id: usize, notification: u32) {
         _ => {}
     }
 
-    if pages::action(hwnd, app, id, notification) || app.busy {
+    if app.refresh_pending || pages::action(hwnd, app, id, notification) || app.busy {
         return;
     }
 
@@ -700,6 +759,8 @@ unsafe fn action(hwnd: HWND, app: &mut App, id: usize, notification: u32) {
         CHOOSE_BACKUP => session::request(app, picker::Purpose::Backup),
         ADDRESS => session::request(app, picker::Purpose::Source),
         ESP => session::request(app, picker::Purpose::Efi),
+        session::DATA_CHECKPOINT => session::request(app, picker::Purpose::DataCheckpoint),
+        session::EFI_CHECKPOINT => session::request(app, picker::Purpose::EfiCheckpoint),
         DEST => {
             let purpose = match app.section {
                 BACKUP => picker::Purpose::SaveFiles,
@@ -815,7 +876,7 @@ fn start_backup(app: &mut App) {
 
 unsafe fn list_checkpoints(hwnd: HWND, app: &mut App) {
     let Ok(destination) = app.session.destination(BACKUP) else {
-        session::request(app, picker::Purpose::Backup);
+        session::request(app, picker::Purpose::Resume);
         return;
     };
     work(app, move || {
@@ -832,6 +893,10 @@ unsafe fn list_checkpoints(hwnd: HWND, app: &mut App) {
 }
 
 unsafe fn resume_backup(hwnd: HWND, app: &mut App) {
+    if app.checkpoints.is_none() {
+        session::request(app, picker::Purpose::Resume);
+        return;
+    }
     let selection = selected_indices(hwnd);
     let Some(entry) = app.checkpoints.as_ref().and_then(|entries| {
         let [index] = selection.as_slice() else {
@@ -842,30 +907,50 @@ unsafe fn resume_backup(hwnd: HWND, app: &mut App) {
         set(hwnd, STATUS, "Selecione um único checkpoint.");
         return;
     };
+    resolve_resume(hwnd, app, entry.clone());
+}
+
+unsafe fn resolve_resume(hwnd: HWND, app: &mut App, entry: CheckpointEntry) {
     if let Some(error) = &entry.error {
         set(hwnd, STATUS, &error_message(error));
         return;
     }
-
-    let Some(source) = app.session.source.clone() else {
-        set(hwnd, STATUS, "Escolha a pasta original para retomar.");
+    let Some(manifest) = &entry.manifest else {
+        set(hwnd, STATUS, "Escolha uma operação com manifesto válido.");
         return;
     };
-    let checkpoint = entry.directory.clone();
-    let expected_destination = entry
-        .manifest
-        .as_ref()
-        .map(|manifest| manifest.destination_identity.clone());
-    let fingerprint = entry
-        .manifest
-        .as_ref()
-        .map(|manifest| manifest.plan_fingerprint.clone());
+    let roots = app
+        .session
+        .catalog
+        .volumes
+        .iter()
+        .map(|(_, root)| root.clone())
+        .collect::<Vec<_>>();
+    match crate::resources::resume_source(&roots, &manifest.source_identity) {
+        Ok(Some(source)) => confirm_resume(app, entry, source),
+        Ok(None) => {
+            set(
+                hwnd,
+                STATUS,
+                "Localize a pasta original ou reconecte seu volume e atualize.",
+            );
+            app.session.resume = Some(entry);
+            session::request(app, picker::Purpose::ResumeSource);
+        }
+        Err(error) => set(hwnd, STATUS, &error_message(&error)),
+    }
+}
+
+fn confirm_resume(app: &mut App, entry: CheckpointEntry, source: Location) {
+    let Some(manifest) = entry.manifest else {
+        return;
+    };
     app.confirmation = Some(confirmation::Confirmation::Resume {
         source,
-        checkpoint,
-        fingerprint,
-        expected_destination,
-        recorded_state: entry.status.as_ref().map(|status| status.state),
+        checkpoint: entry.directory,
+        fingerprint: manifest.plan_fingerprint,
+        expected_destination: manifest.destination_identity,
+        recorded_state: entry.status.map(|status| status.state),
     });
 }
 
@@ -970,25 +1055,42 @@ unsafe fn preview_repair(hwnd: HWND, app: &mut App) {
         );
         return;
     };
-    let Some(efi) = app
-        .session
-        .efi
-        .clone()
-        .or_else(|| app.session.suggested_efi.clone())
-    else {
-        set(hwnd, STATUS, "Não foi possível identificar com segurança a partição de inicialização. Consulte as candidatas.");
+    let Some(efi) = app.session.efi.location().cloned() else {
         return;
     };
+    let generation = app.session.catalog.generation;
+    let data = app.session.repair_data.clone();
+    let efi_checkpoint = app.session.repair_efi.clone();
     work(app, move || {
         let result = (|| {
             let windows_root = windows.revalidate()?;
-            let esp = efi.revalidate()?;
+            let fresh = session::Efi::discover(&windows);
+            let esp = fresh
+                .location()
+                .filter(|fresh| fresh.same_location(&efi))
+                .ok_or_else(|| {
+                    Error::new(
+                        ErrorKind::Conflict,
+                        "A partição de inicialização mudou. Atualize o diagnóstico.",
+                    )
+                })?
+                .revalidate()?;
             let destination = destination.revalidate()?;
             crate::resources::writable(&destination, &[windows.location, efi], 64 * 1024 * 1024)?;
-            repair::plan(&windows_root, &esp, &destination, None, None)
+            let data = data.map(|backup| backup.revalidate()).transpose()?;
+            let efi_checkpoint = efi_checkpoint
+                .map(|backup| backup.revalidate())
+                .transpose()?;
+            repair::plan(
+                &windows_root,
+                &esp,
+                &destination,
+                data.as_deref(),
+                efi_checkpoint.as_deref(),
+            )
         })();
         match result {
-            Ok(plan) => Event::Repair(Box::new(plan)),
+            Ok(plan) => Event::Repair(generation, Box::new(plan)),
             Err(error) => Event::Failure(error),
         }
     });
@@ -1095,7 +1197,15 @@ Gravados {}/{} bytes · Verificados {} bytes · {} arquivos · {} falhas",
                     .as_ref()
                     .map_or(0, |old| old.inventory.volumes.len());
                 let stale = app.session.replace_catalog(catalog);
-                app.session.suggest_efi(&report);
+                let changed = app.session.revalidate_selections()
+                    | deployment::revalidate_resources(app, &report);
+                if stale {
+                    app.session.source = None;
+                }
+                if app.session.source.is_none() {
+                    app.entries.clear();
+                    app.listing_loaded = false;
+                }
                 pages::refresh_sources(hwnd, app, &report);
                 if let Some(old) = app.report.take() {
                     report.integrity = old.integrity;
@@ -1112,6 +1222,8 @@ Gravados {}/{} bytes · Verificados {} bytes · {} arquivos · {} falhas",
                 app.session.backup_verification = None;
                 let status = if stale {
                     "O Windows selecionado está indisponível. Atualize ou escolha outro."
+                } else if changed {
+                    "Um recurso selecionado mudou. Confira a origem, o backup e o destino."
                 } else if new_volumes > old_volumes {
                     "Volumes encontrados. Inventário e diagnóstico atualizados."
                 } else if new_volumes < old_volumes {
@@ -1122,6 +1234,7 @@ Gravados {}/{} bytes · Verificados {} bytes · {} arquivos · {} falhas",
                 let warning = app.session.catalog.warnings.first();
                 if old_volumes != new_volumes
                     || stale
+                    || changed
                     || warning.is_some()
                     || app
                         .report
@@ -1129,6 +1242,13 @@ Gravados {}/{} bytes · Verificados {} bytes · {} arquivos · {} falhas",
                         .is_some_and(|report| report.transactions.is_empty())
                 {
                     set(hwnd, STATUS, warning.map_or(status, String::as_str));
+                }
+                if app.section == REPAIR_PAGE && !app.refresh_pending {
+                    app.repair_discovery_pending = false;
+                    app.busy = false;
+                    session::discover_efi(hwnd, app);
+                    render(hwnd, app);
+                    continue;
                 }
             }
             Event::Listing(location, entries, recommended) => {
@@ -1150,6 +1270,20 @@ Gravados {}/{} bytes · Verificados {} bytes · {} arquivos · {} falhas",
                 set(hwnd, STATUS, "Revise o plano e confirme em Iniciar backup.");
             }
             Event::Checkpoints(entries) => show_checkpoints(hwnd, app, entries),
+            Event::RepairCheckpoint(purpose, backup) if !app.refresh_pending => {
+                if purpose == picker::Purpose::DataCheckpoint {
+                    app.session.repair_data = Some(backup);
+                } else {
+                    app.session.repair_efi = Some(backup);
+                }
+                app.current_repair = None;
+                set(
+                    hwnd,
+                    STATUS,
+                    "Checkpoint verificado com a origem e o conteúdo publicado.",
+                );
+            }
+            Event::RepairCheckpoint(_, _) => {}
             Event::Backup(result) => {
                 app.preview = None;
                 app.section = VERIFY_PAGE;
@@ -1179,13 +1313,34 @@ Gravados {}/{} bytes · Verificados {} bytes · {} arquivos · {} falhas",
                     report.transactions.push(*result);
                 }
             }
-            Event::Repair(plan) => {
+            Event::Efi(generation, source, efi) => {
+                if app
+                    .session
+                    .accepts_efi(generation, &source, app.refresh_pending)
+                {
+                    let identified = efi.location().is_some();
+                    app.session.accept_efi(efi);
+                    set(
+                        hwnd,
+                        STATUS,
+                        if identified {
+                            "ESP identificada. Confira os requisitos de preservação."
+                        } else {
+                            "Confira o resultado da identificação e atualize o diagnóstico."
+                        },
+                    );
+                }
+            }
+            Event::Repair(generation, plan)
+                if !app.refresh_pending && generation == app.session.catalog.generation =>
+            {
                 app.current_repair = Some((*plan).clone());
                 if let Some(report) = &mut app.report {
                     report.repair_plans.push(*plan);
                 }
                 set(hwnd, STATUS, "Prévia do reparo disponível.");
             }
+            Event::Repair(_, _) => {}
             Event::Exported(path) => {
                 set(
                     hwnd,
@@ -1279,7 +1434,7 @@ unsafe fn show_checkpoints(hwnd: HWND, app: &mut App, entries: Vec<CheckpointEnt
         if entries.is_empty() {
             "Nenhum checkpoint neste destino."
         } else {
-            "Escolha a pasta original, selecione um checkpoint e use Retomar."
+            "Selecione um checkpoint e use Retomar para localizar a origem."
         },
     );
     app.checkpoints = Some(entries);
@@ -1291,6 +1446,23 @@ unsafe fn show_listing(hwnd: HWND, app: &mut App, location: Location, entries: V
     app.entries = entries;
     app.listing_loaded = true;
 
+    render_file_rows(hwnd, app);
+    set(
+        hwnd,
+        STATUS,
+        if app.entries.is_empty() {
+            "Pasta vazia."
+        } else {
+            "Listagem concluída. Ctrl/Shift para selecionar; clique duplo para abrir uma pasta."
+        },
+    );
+}
+
+unsafe fn render_file_rows(hwnd: HWND, app: &App) {
+    if app.checkpoints.is_some() {
+        return;
+    }
+    let selected = selected_indices(hwnd);
     SendMessageW(control(hwnd, FILES), LB_RESETCONTENT, 0, 0);
 
     for entry in &app.entries {
@@ -1307,6 +1479,7 @@ unsafe fn show_listing(hwnd: HWND, app: &mut App, location: Location, entries: V
         } else {
             paths::friendly(&entry.name)
         };
+        let detail = paths::text(&detail, app.technician);
         let text = format!("{name}\t{kind}\t{detail}");
 
         SendMessageW(
@@ -1317,15 +1490,9 @@ unsafe fn show_listing(hwnd: HWND, app: &mut App, location: Location, entries: V
         );
     }
 
-    set(
-        hwnd,
-        STATUS,
-        if app.entries.is_empty() {
-            "Pasta vazia."
-        } else {
-            "Listagem concluída. Ctrl/Shift para selecionar; clique duplo para abrir uma pasta."
-        },
-    );
+    for index in selected {
+        SendMessageW(control(hwnd, FILES), LB_SETSEL, 1, index as isize);
+    }
 }
 
 unsafe extern "system" fn procedure(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> LRESULT {
@@ -1504,8 +1671,19 @@ unsafe extern "system" fn procedure(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM
             if app.refresh_pending && !app.busy && !state.confirming.get() {
                 app.refresh_pending = false;
                 refresh(hwnd, app);
+            } else if app.repair_discovery_pending && !app.busy && !state.confirming.get() {
+                app.repair_discovery_pending = false;
+                if app.section == REPAIR_PAGE {
+                    session::discover_efi(hwnd, app);
+                    render(hwnd, app);
+                }
             }
             state.selected_page.set(app.section);
+            if let Some(confirmation) = app.confirmation.take() {
+                drop(app_borrow);
+                confirmation.ask(hwnd, state);
+                return 0;
+            }
             if state.render_failed.get() && !app.busy {
                 PostMessageW(hwnd, WM_CLOSE, 0, 0);
             }
@@ -1573,6 +1751,7 @@ pub fn run() -> Result<()> {
                 report_export: None,
                 handoff_export: None,
                 scanning: false,
+                repair_discovery_pending: false,
                 roots: vec![],
                 root_index: 0,
                 row_index: 0,
@@ -1590,6 +1769,8 @@ pub fn run() -> Result<()> {
             hovered: Cell::new(null_mut()),
             selected_page: Cell::new(DASHBOARD),
             confirming: Cell::new(false),
+            technician: Cell::new(false),
+            status: RefCell::new(i18n::LOADING.into()),
         });
 
         let class = wide("ArchRescueRecovery");
@@ -1674,6 +1855,8 @@ pub fn run() -> Result<()> {
             (VERIFY, "Verificar novamente"),
             (REPAIR, "Gerar prévia do reparo"),
             (REPAIR_UNAVAILABLE, "Executar BCDBoot"),
+            (session::DATA_CHECKPOINT, "Escolher backup de dados"),
+            (session::EFI_CHECKPOINT, "Escolher backup EFI"),
             (CANCEL, "Cancelar"),
             (EXPORT, "Exportar relatório"),
         ] {

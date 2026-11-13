@@ -29,9 +29,22 @@ enum Identity {
 pub struct Location {
     pub path: PathBuf,
     identity: Identity,
+    disk_partition: Option<(u32, u32)>,
 }
 
 impl Location {
+    #[cfg(test)]
+    pub fn test_location(path: &str, filesystem_id: &str) -> Self {
+        Self {
+            path: path.into(),
+            identity: Identity::Partition(RecoveryLocation {
+                filesystem_id: filesystem_id.into(),
+                directory: PathBuf::new(),
+            }),
+            disk_partition: None,
+        }
+    }
+
     pub fn capture(path: &Path) -> Result<Self> {
         let path = storage::safe_existing(path)?;
         let identity = match storage::recovery_location(&path) {
@@ -39,9 +52,17 @@ impl Location {
             Err(error) => optical_identity(&path).ok_or(error)?,
         };
 
+        let disk_partition = if matches!(identity, Identity::Partition(_)) {
+            storage::windows::mounted_partition(&path)
+                .ok()
+                .map(|partition| (partition.disk_number, partition.partition.number))
+        } else {
+            None
+        };
         Ok(Self {
             path,
             identity,
+            disk_partition,
         })
     }
 
@@ -78,8 +99,21 @@ impl Location {
         }
     }
 
+    pub fn disk_number(&self) -> Option<u32> {
+        self.disk_partition.map(|(disk, _)| disk)
+    }
+
     pub fn label(&self, technician: bool) -> String {
-        paths::display(&self.path, technician)
+        if technician {
+            return paths::display(&self.path, true);
+        }
+        archrescue_core::presentation::assisted(&self.path.to_string_lossy(), |_| {
+            let (disk, partition) = self.disk_partition?;
+            Some(format!(
+                "Volume sem letra · Disco {disk} · Partição {partition}"
+            ))
+        })
+        .into_owned()
     }
 }
 
@@ -154,7 +188,16 @@ impl Windows {
 
     pub fn label(&self, technician: bool) -> String {
         let build = self.installation.version.as_deref().unwrap_or("offline");
-        format!("Windows {build} · {}", self.location.label(technician))
+        let context = self
+            .location
+            .disk_partition
+            .map_or_else(String::new, |(disk, partition)| {
+                format!(" · Disco {disk} · Partição {partition}")
+            });
+        format!(
+            "Windows {build}{context} · {}",
+            self.location.label(technician)
+        )
     }
 }
 
@@ -188,7 +231,6 @@ pub struct Catalog {
     pub backups: Vec<(CheckpointEntry, Location)>,
     pub media: Vec<Location>,
     pub volumes: Vec<(String, Location)>,
-    pub efi: Vec<(PathBuf, Location)>,
     pub warnings: Vec<String>,
 }
 
@@ -205,14 +247,6 @@ impl Catalog {
                     location,
                 }),
                 Err(error) => catalog.warnings.push(error.context),
-            }
-        }
-
-        for association in &report.diagnosis.associations {
-            for path in &association.mounted_efi {
-                if let Ok(location) = Location::capture(path) {
-                    catalog.efi.push((path.clone(), location));
-                }
             }
         }
 
@@ -324,6 +358,35 @@ impl Catalog {
                     .map(|manifest| manifest.created_unix),
             )
         });
+    }
+}
+
+pub fn resume_source(
+    volumes: &[Location],
+    recorded: &RecoveryLocation,
+) -> Result<Option<Location>> {
+    let mut matches = Vec::new();
+    for root in volumes {
+        let Some(location) = root.recorded_location() else {
+            continue;
+        };
+        if location.filesystem_id != recorded.filesystem_id
+            || !location.directory.as_os_str().is_empty()
+        {
+            continue;
+        }
+        let root_path = root.revalidate()?;
+        let source = Location::capture(&root_path.join(&recorded.directory))?;
+        if source.recorded_location() == Some(recorded) {
+            matches.push(source);
+        }
+    }
+
+    match matches.len() {
+        0 => Ok(None),
+        1 => Ok(matches.pop()),
+        _ => Err(Error::new(ErrorKind::Conflict,
+            "Mais de um volume corresponde à identidade da origem. Desconecte a cópia duplicada e atualize.")),
     }
 }
 
