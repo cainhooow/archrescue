@@ -1,0 +1,11 @@
+UUID:           e8f7939f-0b27-4c9f-901b-e655c99803ba
+Parent UUID:    base
+State:          locked read
+Type:           readonly
+Location:       /home/cainhooow/Projetos/archrescue/artifacts/windows/7355215/archrescue-0.0.1-x64.iso
+Storage format: RAW
+Format variant: fixed default
+Capacity:       389 MBytes
+Size on disk:   389 MBytes
+Encryption:     disabled
+In use by VMs:  W10Val (UUID: 147958bc-a550-4bf1-af59-50981fec149e)

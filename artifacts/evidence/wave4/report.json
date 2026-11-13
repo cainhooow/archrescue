@@ -1,0 +1,591 @@
+{
+  "schema_version": 1,
+  "version": "0.0.1",
+  "build_id": "wave4-runtime-validation",
+  "runtime_os": "windows",
+  "architecture": "x86_64",
+  "generated_unix": 1794546488,
+  "inventory": {
+    "disks": [
+      {
+        "number": 0,
+        "identity": "gpt:1f930ba0-8b34-4d64-a603-2026a5a37324",
+        "device_path": "\\\\?\\scsi#disk&ven_vbox&prod_harddisk#4&2617aeae&0&010000#{53f56307-b6bf-11d0-94f2-00a0c91efb8b}",
+        "capacity": 402653184,
+        "bus": 11,
+        "removable": false,
+        "read_only": true,
+        "style": "GPT",
+        "partitions": [
+          {
+            "number": 1,
+            "id": "230516d2-5392-44d4-9898-977b14fdb309",
+            "offset": 65536,
+            "length": 402522112,
+            "kind": "ebd0a0a2-b9e5-4433-87c0-68b6b72699c7",
+            "efi": false
+          }
+        ],
+        "errors": []
+      },
+      {
+        "number": 1,
+        "identity": "gpt:14b9c8db-bd21-4dd7-a3e6-f5c7b1224a89",
+        "device_path": "\\\\?\\scsi#disk&ven_vbox&prod_harddisk#4&2617aeae&0&020000#{53f56307-b6bf-11d0-94f2-00a0c91efb8b}",
+        "capacity": 402653184,
+        "bus": 11,
+        "removable": false,
+        "read_only": false,
+        "style": "GPT",
+        "partitions": [
+          {
+            "number": 1,
+            "id": "1522e129-a23f-4e9d-bf07-939b85a50d96",
+            "offset": 65536,
+            "length": 402522112,
+            "kind": "ebd0a0a2-b9e5-4433-87c0-68b6b72699c7",
+            "efi": false
+          }
+        ],
+        "errors": []
+      }
+    ],
+    "volumes": [
+      {
+        "identity": "\\\\?\\Volume{230516d2-5392-44d4-9898-977b14fdb309}\\",
+        "paths": [
+          "C:\\"
+        ],
+        "filesystem": "NTFS",
+        "space": {
+          "total": 402518016,
+          "available": 362778624,
+          "free": 362778624,
+          "used": 39739392
+        },
+        "physical_disks": [
+          0
+        ],
+        "errors": []
+      },
+      {
+        "identity": "\\\\?\\Volume{1522e129-a23f-4e9d-bf07-939b85a50d96}\\",
+        "paths": [
+          "D:\\"
+        ],
+        "filesystem": "NTFS",
+        "space": {
+          "total": 402518016,
+          "available": 385806336,
+          "free": 385806336,
+          "used": 16711680
+        },
+        "physical_disks": [
+          1
+        ],
+        "errors": []
+      },
+      {
+        "identity": "\\\\?\\Volume{d9b257fc-684e-4dcb-ab79-03cfa2f6b750}\\",
+        "paths": [
+          "X:\\"
+        ],
+        "filesystem": "NTFS",
+        "space": {
+          "total": 538371072,
+          "available": 534769664,
+          "free": 534769664,
+          "used": 3601408
+        },
+        "physical_disks": [
+          4294967295
+        ],
+        "errors": []
+      },
+      {
+        "identity": "\\\\?\\Volume{99f2f59b-df1f-11f1-971c-806e6f6e6963}\\",
+        "paths": [
+          "E:\\"
+        ],
+        "filesystem": "UDF",
+        "space": {
+          "total": 407939072,
+          "available": 0,
+          "free": 0,
+          "used": 407939072
+        },
+        "physical_disks": [],
+        "errors": [
+          {
+            "kind": "IO",
+            "context": "Read-only device query: Incorrect function. (os error 1)",
+            "os_code": 1
+          }
+        ]
+      },
+      {
+        "identity": "\\\\?\\Volume{99f2f59c-df1f-11f1-971c-806e6f6e6963}\\",
+        "paths": [
+          "F:\\"
+        ],
+        "filesystem": "CDFS",
+        "space": {
+          "total": 8204288,
+          "available": 0,
+          "free": 0,
+          "used": 8204288
+        },
+        "physical_disks": [],
+        "errors": [
+          {
+            "kind": "IO",
+            "context": "Read-only device query: Incorrect function. (os error 1)",
+            "os_code": 1
+          }
+        ]
+      }
+    ],
+    "errors": []
+  },
+  "installations": {
+    "installations": [
+      {
+        "path": "\\\\?\\C:\\Windows",
+        "volume": "\\\\?\\C:\\",
+        "architecture": "x64",
+        "version": "10.0.26100.1",
+        "loader_architecture": null,
+        "recovery_files": [],
+        "confidence": "candidate: corroborated filesystem markers",
+        "evidence": [
+          "SYSTEM and SOFTWARE have regf signatures",
+          "ntoskrnl.exe has a valid PE signature and supported machine type"
+        ],
+        "limitations": [
+          "Registry hive contents and kernel signatures are not authenticated; this is not proof of a healthy or bootable installation",
+          "Version, when present, is the offline kernel file version; registry edition, activation and servicing state are unresolved"
+        ]
+      }
+    ],
+    "probes": [
+      {
+        "root": "\\\\?\\C:\\",
+        "state": "candidate",
+        "windows_old": false
+      },
+      {
+        "root": "\\\\?\\D:\\",
+        "state": "absent",
+        "windows_old": false
+      },
+      {
+        "root": "\\\\?\\X:\\",
+        "state": "running_environment",
+        "windows_old": false
+      },
+      {
+        "root": "\\\\?\\E:\\",
+        "state": "absent",
+        "windows_old": false
+      },
+      {
+        "root": "\\\\?\\F:\\",
+        "state": "absent",
+        "windows_old": false
+      }
+    ],
+    "errors": [
+      {
+        "kind": "UNSUPPORTED",
+        "context": "Running Windows/WinPE environment excluded from offline discovery",
+        "os_code": null
+      }
+    ]
+  },
+  "boot": {
+    "observations": [
+      {
+        "path": "\\\\?\\C:\\EFI\\Microsoft\\Boot\\bootmgfw.efi",
+        "status": "missing",
+        "detail": "Expected path is absent from this root"
+      },
+      {
+        "path": "\\\\?\\C:\\EFI\\Boot\\bootx64.efi",
+        "status": "missing",
+        "detail": "Expected path is absent from this root"
+      },
+      {
+        "path": "\\\\?\\C:\\EFI\\Microsoft\\Boot\\BCD",
+        "status": "missing",
+        "detail": "Expected path is absent from this root"
+      },
+      {
+        "path": "\\\\?\\C:\\Boot\\BCD",
+        "status": "missing",
+        "detail": "Expected path is absent from this root"
+      },
+      {
+        "path": "\\\\?\\D:\\EFI\\Microsoft\\Boot\\bootmgfw.efi",
+        "status": "missing",
+        "detail": "Expected path is absent from this root"
+      },
+      {
+        "path": "\\\\?\\D:\\EFI\\Boot\\bootx64.efi",
+        "status": "missing",
+        "detail": "Expected path is absent from this root"
+      },
+      {
+        "path": "\\\\?\\D:\\EFI\\Microsoft\\Boot\\BCD",
+        "status": "missing",
+        "detail": "Expected path is absent from this root"
+      },
+      {
+        "path": "\\\\?\\D:\\Boot\\BCD",
+        "status": "missing",
+        "detail": "Expected path is absent from this root"
+      },
+      {
+        "path": "\\\\?\\X:\\EFI\\Microsoft\\Boot\\bootmgfw.efi",
+        "status": "missing",
+        "detail": "Expected path is absent from this root"
+      },
+      {
+        "path": "\\\\?\\X:\\EFI\\Boot\\bootx64.efi",
+        "status": "missing",
+        "detail": "Expected path is absent from this root"
+      },
+      {
+        "path": "\\\\?\\X:\\EFI\\Microsoft\\Boot\\BCD",
+        "status": "missing",
+        "detail": "Expected path is absent from this root"
+      },
+      {
+        "path": "\\\\?\\X:\\Boot\\BCD",
+        "status": "missing",
+        "detail": "Expected path is absent from this root"
+      },
+      {
+        "path": "\\\\?\\E:\\EFI\\Microsoft\\Boot\\bootmgfw.efi",
+        "status": "readable",
+        "detail": "DOS image signature present; signature trust and firmware reference not verified"
+      },
+      {
+        "path": "\\\\?\\E:\\EFI\\Boot\\bootx64.efi",
+        "status": "readable",
+        "detail": "DOS image signature present; signature trust and firmware reference not verified"
+      },
+      {
+        "path": "\\\\?\\E:\\EFI\\Microsoft\\Boot\\BCD",
+        "status": "readable",
+        "detail": "Registry signature present; BCD enumeration requires temporary storage on a verified separate disk: Io: Read-only device query: Incorrect function. (os error 1)"
+      },
+      {
+        "path": "\\\\?\\E:\\Boot\\BCD",
+        "status": "readable",
+        "detail": "Registry signature present; BCD enumeration requires temporary storage on a verified separate disk: Io: Read-only device query: Incorrect function. (os error 1)"
+      },
+      {
+        "path": "\\\\?\\F:\\EFI\\Microsoft\\Boot\\bootmgfw.efi",
+        "status": "missing",
+        "detail": "Expected path is absent from this root"
+      },
+      {
+        "path": "\\\\?\\F:\\EFI\\Boot\\bootx64.efi",
+        "status": "missing",
+        "detail": "Expected path is absent from this root"
+      },
+      {
+        "path": "\\\\?\\F:\\EFI\\Microsoft\\Boot\\BCD",
+        "status": "missing",
+        "detail": "Expected path is absent from this root"
+      },
+      {
+        "path": "\\\\?\\F:\\Boot\\BCD",
+        "status": "missing",
+        "detail": "Expected path is absent from this root"
+      }
+    ],
+    "errors": [],
+    "limitations": [
+      "Only supplied accessible roots are examined. Unmounted EFI partitions are not mounted or modified.",
+      "File presence does not establish correct firmware boot order or valid BCD device references."
+    ]
+  },
+  "operations": [],
+  "diagnosis": {
+    "findings": [
+      {
+        "id": "WINDOWS_CANDIDATE",
+        "severity": "info",
+        "confidence": "observed",
+        "affected": "\\\\?\\C:\\",
+        "evidence": "Assinaturas SYSTEM e SOFTWARE e cabeçalho do kernel observados.",
+        "next_action": "Confira a instalação e o disco antes de escolher um alvo.",
+        "blocks_repair": false
+      },
+      {
+        "id": "WINDOWS_ABSENT",
+        "severity": "info",
+        "confidence": "observed",
+        "affected": "\\\\?\\D:\\",
+        "evidence": "Nenhum diretório Windows na raiz consultada.",
+        "next_action": "Confira a instalação e o disco antes de escolher um alvo.",
+        "blocks_repair": false
+      },
+      {
+        "id": "RUNNING_ENVIRONMENT_EXCLUDED",
+        "severity": "warning",
+        "confidence": "unsupported",
+        "affected": "\\\\?\\X:\\",
+        "evidence": "Ambiente Windows em execução excluído da busca offline.",
+        "next_action": "Confira a instalação e o disco antes de escolher um alvo.",
+        "blocks_repair": true
+      },
+      {
+        "id": "WINDOWS_ABSENT",
+        "severity": "info",
+        "confidence": "observed",
+        "affected": "\\\\?\\E:\\",
+        "evidence": "Nenhum diretório Windows na raiz consultada.",
+        "next_action": "Confira a instalação e o disco antes de escolher um alvo.",
+        "blocks_repair": false
+      },
+      {
+        "id": "WINDOWS_ABSENT",
+        "severity": "info",
+        "confidence": "observed",
+        "affected": "\\\\?\\F:\\",
+        "evidence": "Nenhum diretório Windows na raiz consultada.",
+        "next_action": "Confira a instalação e o disco antes de escolher um alvo.",
+        "blocks_repair": false
+      },
+      {
+        "id": "WINDOWS_LOADER_UNAVAILABLE",
+        "severity": "warning",
+        "confidence": "missing_evidence",
+        "affected": "\\\\?\\C:\\Windows",
+        "evidence": "Cabeçalho PE de winload.efi indisponível.",
+        "next_action": "Verifique os arquivos de inicialização da instalação.",
+        "blocks_repair": true
+      },
+      {
+        "id": "EFI_ASSOCIATION_UNRESOLVED",
+        "severity": "warning",
+        "confidence": "missing_evidence",
+        "affected": "\\\\?\\C:\\Windows",
+        "evidence": "Nenhuma ESP encontrada no mesmo disco.",
+        "next_action": "Confirme o identificador da ESP e a referência do BCD.",
+        "blocks_repair": true
+      },
+      {
+        "id": "EFI_IMAGE_PATH_MISSING",
+        "severity": "warning",
+        "confidence": "missing_evidence",
+        "affected": "\\\\?\\C:\\EFI\\Microsoft\\Boot\\bootmgfw.efi",
+        "evidence": "Expected path is absent from this root",
+        "next_action": "Compare com a ESP correta e confira os caminhos esperados.",
+        "blocks_repair": false
+      },
+      {
+        "id": "EFI_IMAGE_PATH_MISSING",
+        "severity": "warning",
+        "confidence": "missing_evidence",
+        "affected": "\\\\?\\C:\\EFI\\Boot\\bootx64.efi",
+        "evidence": "Expected path is absent from this root",
+        "next_action": "Compare com a ESP correta e confira os caminhos esperados.",
+        "blocks_repair": false
+      },
+      {
+        "id": "BCD_PATH_MISSING",
+        "severity": "warning",
+        "confidence": "missing_evidence",
+        "affected": "\\\\?\\C:\\EFI\\Microsoft\\Boot\\BCD",
+        "evidence": "Expected path is absent from this root",
+        "next_action": "Compare com a ESP correta e confira os caminhos esperados.",
+        "blocks_repair": false
+      },
+      {
+        "id": "BCD_PATH_MISSING",
+        "severity": "warning",
+        "confidence": "missing_evidence",
+        "affected": "\\\\?\\C:\\Boot\\BCD",
+        "evidence": "Expected path is absent from this root",
+        "next_action": "Compare com a ESP correta e confira os caminhos esperados.",
+        "blocks_repair": false
+      },
+      {
+        "id": "EFI_IMAGE_PATH_MISSING",
+        "severity": "warning",
+        "confidence": "missing_evidence",
+        "affected": "\\\\?\\D:\\EFI\\Microsoft\\Boot\\bootmgfw.efi",
+        "evidence": "Expected path is absent from this root",
+        "next_action": "Compare com a ESP correta e confira os caminhos esperados.",
+        "blocks_repair": false
+      },
+      {
+        "id": "EFI_IMAGE_PATH_MISSING",
+        "severity": "warning",
+        "confidence": "missing_evidence",
+        "affected": "\\\\?\\D:\\EFI\\Boot\\bootx64.efi",
+        "evidence": "Expected path is absent from this root",
+        "next_action": "Compare com a ESP correta e confira os caminhos esperados.",
+        "blocks_repair": false
+      },
+      {
+        "id": "BCD_PATH_MISSING",
+        "severity": "warning",
+        "confidence": "missing_evidence",
+        "affected": "\\\\?\\D:\\EFI\\Microsoft\\Boot\\BCD",
+        "evidence": "Expected path is absent from this root",
+        "next_action": "Compare com a ESP correta e confira os caminhos esperados.",
+        "blocks_repair": false
+      },
+      {
+        "id": "BCD_PATH_MISSING",
+        "severity": "warning",
+        "confidence": "missing_evidence",
+        "affected": "\\\\?\\D:\\Boot\\BCD",
+        "evidence": "Expected path is absent from this root",
+        "next_action": "Compare com a ESP correta e confira os caminhos esperados.",
+        "blocks_repair": false
+      },
+      {
+        "id": "EFI_IMAGE_PATH_MISSING",
+        "severity": "warning",
+        "confidence": "missing_evidence",
+        "affected": "\\\\?\\X:\\EFI\\Microsoft\\Boot\\bootmgfw.efi",
+        "evidence": "Expected path is absent from this root",
+        "next_action": "Compare com a ESP correta e confira os caminhos esperados.",
+        "blocks_repair": false
+      },
+      {
+        "id": "EFI_IMAGE_PATH_MISSING",
+        "severity": "warning",
+        "confidence": "missing_evidence",
+        "affected": "\\\\?\\X:\\EFI\\Boot\\bootx64.efi",
+        "evidence": "Expected path is absent from this root",
+        "next_action": "Compare com a ESP correta e confira os caminhos esperados.",
+        "blocks_repair": false
+      },
+      {
+        "id": "BCD_PATH_MISSING",
+        "severity": "warning",
+        "confidence": "missing_evidence",
+        "affected": "\\\\?\\X:\\EFI\\Microsoft\\Boot\\BCD",
+        "evidence": "Expected path is absent from this root",
+        "next_action": "Compare com a ESP correta e confira os caminhos esperados.",
+        "blocks_repair": false
+      },
+      {
+        "id": "BCD_PATH_MISSING",
+        "severity": "warning",
+        "confidence": "missing_evidence",
+        "affected": "\\\\?\\X:\\Boot\\BCD",
+        "evidence": "Expected path is absent from this root",
+        "next_action": "Compare com a ESP correta e confira os caminhos esperados.",
+        "blocks_repair": false
+      },
+      {
+        "id": "EFI_IMAGE_SIGNATURE_OBSERVED",
+        "severity": "info",
+        "confidence": "observed",
+        "affected": "\\\\?\\E:\\EFI\\Microsoft\\Boot\\bootmgfw.efi",
+        "evidence": "DOS image signature present; signature trust and firmware reference not verified",
+        "next_action": "Compare com a ESP correta e confira os caminhos esperados.",
+        "blocks_repair": false
+      },
+      {
+        "id": "EFI_IMAGE_SIGNATURE_OBSERVED",
+        "severity": "info",
+        "confidence": "observed",
+        "affected": "\\\\?\\E:\\EFI\\Boot\\bootx64.efi",
+        "evidence": "DOS image signature present; signature trust and firmware reference not verified",
+        "next_action": "Compare com a ESP correta e confira os caminhos esperados.",
+        "blocks_repair": false
+      },
+      {
+        "id": "BCD_REFERENCES_UNRESOLVED",
+        "severity": "warning",
+        "confidence": "missing_evidence",
+        "affected": "\\\\?\\E:\\EFI\\Microsoft\\Boot\\BCD",
+        "evidence": "Registry signature present; BCD enumeration requires temporary storage on a verified separate disk: Io: Read-only device query: Incorrect function. (os error 1)",
+        "next_action": "Compare com a ESP correta e confira os caminhos esperados.",
+        "blocks_repair": false
+      },
+      {
+        "id": "BCD_REFERENCES_UNRESOLVED",
+        "severity": "warning",
+        "confidence": "missing_evidence",
+        "affected": "\\\\?\\E:\\Boot\\BCD",
+        "evidence": "Registry signature present; BCD enumeration requires temporary storage on a verified separate disk: Io: Read-only device query: Incorrect function. (os error 1)",
+        "next_action": "Compare com a ESP correta e confira os caminhos esperados.",
+        "blocks_repair": false
+      },
+      {
+        "id": "EFI_IMAGE_PATH_MISSING",
+        "severity": "warning",
+        "confidence": "missing_evidence",
+        "affected": "\\\\?\\F:\\EFI\\Microsoft\\Boot\\bootmgfw.efi",
+        "evidence": "Expected path is absent from this root",
+        "next_action": "Compare com a ESP correta e confira os caminhos esperados.",
+        "blocks_repair": false
+      },
+      {
+        "id": "EFI_IMAGE_PATH_MISSING",
+        "severity": "warning",
+        "confidence": "missing_evidence",
+        "affected": "\\\\?\\F:\\EFI\\Boot\\bootx64.efi",
+        "evidence": "Expected path is absent from this root",
+        "next_action": "Compare com a ESP correta e confira os caminhos esperados.",
+        "blocks_repair": false
+      },
+      {
+        "id": "BCD_PATH_MISSING",
+        "severity": "warning",
+        "confidence": "missing_evidence",
+        "affected": "\\\\?\\F:\\EFI\\Microsoft\\Boot\\BCD",
+        "evidence": "Expected path is absent from this root",
+        "next_action": "Compare com a ESP correta e confira os caminhos esperados.",
+        "blocks_repair": false
+      },
+      {
+        "id": "BCD_PATH_MISSING",
+        "severity": "warning",
+        "confidence": "missing_evidence",
+        "affected": "\\\\?\\F:\\Boot\\BCD",
+        "evidence": "Expected path is absent from this root",
+        "next_action": "Compare com a ESP correta e confira os caminhos esperados.",
+        "blocks_repair": false
+      }
+    ],
+    "associations": [
+      {
+        "installation": "\\\\?\\C:\\Windows",
+        "disk_id": "gpt:1f930ba0-8b34-4d64-a603-2026a5a37324",
+        "disk_number": 0,
+        "windows_partition": {
+          "number": 1,
+          "id": "230516d2-5392-44d4-9898-977b14fdb309",
+          "offset": 65536,
+          "length": 402522112,
+          "kind": "ebd0a0a2-b9e5-4433-87c0-68b6b72699c7",
+          "efi": false
+        },
+        "efi_partitions": [],
+        "recovery_partitions": [],
+        "mounted_efi": [],
+        "bcd_reference_verified": false
+      }
+    ]
+  },
+  "transactions": [],
+  "repair_plans": [],
+  "repair_attempts": [],
+  "decisions": [],
+  "session_errors": [],
+  "limitations": [
+    "No hardware health or bootability verdict is inferred from enumeration",
+    "WinPE RAM-disk exports are volatile; choose a persistent authorized destination",
+    "Selected relative paths and volume identities are local recovery metadata; review before sharing"
+  ]
+}

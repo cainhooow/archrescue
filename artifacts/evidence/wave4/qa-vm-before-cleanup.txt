@@ -1,0 +1,6 @@
+VMState="poweroff"
+VMStateChangeTime="2026-11-13T00:20:34.775000000"
+"SATA-ImageUUID-0-0"="e8f7939f-0b27-4c9f-901b-e655c99803ba"
+"SATA-ImageUUID-1-0"="f3c1ac7a-d64f-46f7-9e01-56d34908e4ac"
+"SATA-ImageUUID-2-0"="59fc06a8-6f29-406b-8461-56e9fe18aeeb"
+"SATA-ImageUUID-3-0"="a32ce908-800c-48e5-8d70-8d2de67bfc4e"

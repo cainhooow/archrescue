@@ -1,0 +1,16 @@
+{
+  "payload": [
+    {
+      "path": "/Users/Fixture/Documents/fixture.txt",
+      "bytes": 29,
+      "sha256": "140a49c5b96ec91c9a6fd51d08f36245d1793a88789188a68c4b318ed7e4d5f7"
+    }
+  ],
+  "exports": {
+    "report.json": "91d1c5b4911f51e9b3fa7278ded1ab8d5af9f039e8fccc4a6fba4ce54c257bd3",
+    "report.txt": "0529279314fdc384cad06c521c9518d439be10cf54023dda641e14c5965319c9",
+    "restore-handoff.json": "84dcfea888c7beab12ae09526bf75cc4302fef10063b91199bf7ceaf988afce9"
+  },
+  "operation": "archrescue-backup-ar-18e782639e544e60-660-0",
+  "manifest_sha256": "11334078e9e7a2db74ed0420de6d58994c96cbd80a898f796b0659f0f51082ed"
+}

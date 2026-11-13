@@ -1,0 +1,10 @@
+select disk 0
+convert gpt
+create partition primary
+format fs=ntfs quick label=SOURCE
+assign letter=S
+select disk 1
+convert gpt
+create partition primary
+format fs=ntfs quick label=BACKUP
+assign letter=T

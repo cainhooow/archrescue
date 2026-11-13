@@ -1,0 +1,21 @@
+{
+   "partitiontable": {
+      "label": "gpt",
+      "id": "1F930BA0-8B34-4D64-A603-2026A5A37324",
+      "device": "/home/cainhooow/.cache/archrescue/9751dbfcbe694667a515ecfcb680069b/fixture-1.raw",
+      "unit": "sectors",
+      "firstlba": 34,
+      "lastlba": 786398,
+      "sectorsize": 512,
+      "partitions": [
+         {
+            "node": "/home/cainhooow/.cache/archrescue/9751dbfcbe694667a515ecfcb680069b/fixture-1.raw1",
+            "start": 128,
+            "size": 786176,
+            "type": "EBD0A0A2-B9E5-4433-87C0-68B6B72699C7",
+            "uuid": "230516D2-5392-44D4-9898-977B14FDB309",
+            "name": "Basic data partition"
+         }
+      ]
+   }
+}

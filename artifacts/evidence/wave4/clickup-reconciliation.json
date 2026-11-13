@@ -1,0 +1,51 @@
+[
+  {
+    "id": "1dfqjx6uw4b",
+    "name": "[AR-02] Painel Boot ISO e experiência do usuário",
+    "status": "in progress",
+    "url": "https://app.clickup.com/t/1dfqjx6uw4b",
+    "readback": true
+  },
+  {
+    "id": "1dfqjx6uw4c",
+    "name": "[AR-03] Inventário, discos e hardware",
+    "status": "in progress",
+    "url": "https://app.clickup.com/t/1dfqjx6uw4c",
+    "readback": true
+  },
+  {
+    "id": "1dfqjx6uw4d",
+    "name": "[AR-04] Reparo de inicialização e recuperação do Windows",
+    "status": "in progress",
+    "url": "https://app.clickup.com/t/1dfqjx6uw4d",
+    "readback": true
+  },
+  {
+    "id": "1dfqjx6uw4e",
+    "name": "[AR-05] Backup, cópia de dados e recuperação de arquivos",
+    "status": "in progress",
+    "url": "https://app.clickup.com/t/1dfqjx6uw4e",
+    "readback": true
+  },
+  {
+    "id": "1dfqjx6uw4f",
+    "name": "[AR-06] Instalação limpa e implantação do Windows",
+    "status": "to do",
+    "url": "https://app.clickup.com/t/1dfqjx6uw4f",
+    "readback": true
+  },
+  {
+    "id": "1dfqjx6uw4g",
+    "name": "[AR-07] Restore Agent e migração de contas/perfis",
+    "status": "to do",
+    "url": "https://app.clickup.com/t/1dfqjx6uw4g",
+    "readback": true
+  },
+  {
+    "id": "1dfqjx6uw4p",
+    "name": "[AR-14] QA, laboratório e testes de regressão",
+    "status": "in progress",
+    "url": "https://app.clickup.com/t/1dfqjx6uw4p",
+    "readback": true
+  }
+]

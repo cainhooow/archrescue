@@ -1,0 +1,281 @@
+===== TEST01.EXIT =====
+0
+
+===== TEST01.LOG =====
+
+running 2 tests
+test tests::cancellation_is_terminal ... ok
+test tests::completion_cannot_skip_verification ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+===== TEST02.EXIT =====
+0
+
+===== TEST02.LOG =====
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+===== TEST03.EXIT =====
+0
+
+===== TEST03.LOG =====
+
+running 6 tests
+test layout::tests::excessive_partition_count_rejected ... ok
+test layout::tests::gpt_efi_layout_is_decoded_from_bytes ... ok
+test layout::tests::invalid_boolean_bytes_are_never_reinterpreted ... ok
+test layout::tests::truncated_and_out_of_bounds_layout_rejected ... ok
+test tests::malformed_space_rejected ... ok
+test tests::shared_extent_rejected ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+===== TEST04.EXIT =====
+0
+
+===== TEST04.LOG =====
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+===== TEST05.EXIT =====
+0
+
+===== TEST05.LOG =====
+
+running 6 tests
+test tests::cancellation_never_returns_clean_status ... ok
+test tests::historical_errors_require_a_recognized_operation_and_package ... ok
+test tests::metadata_sample_distinguishes_malformed_xml_and_compression ... ok
+test tests::missing_or_unqualified_windows_never_reports_clean ... ok
+test tests::qualifies_observed_compatibility_version_without_accepting_older_windows ... ok
+test tests::rejects_truncation_and_wrong_machine_without_reading_payload ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+
+===== TEST06.EXIT =====
+0
+
+===== TEST06.LOG =====
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+===== TEST07.EXIT =====
+101
+
+===== TEST07.LOG =====
+
+running 17 tests
+test tests::cancellation_before_preflight_writes_nothing ... ok
+test tests::cancellation_reports_exact_partial_bytes ... ok
+test tests::case_alias_selections_are_rejected_on_default_ntfs ... ok
+test tests::destination_corruption_is_caught_by_readback ... ok
+test tests::destination_write_error_after_progress_leaves_unverified_partial ... ok
+test tests::distinct_unicode_case_collisions_are_rejected ... ok
+test tests::existing_destination_never_overwritten ... ok
+test tests::insufficient_space_uses_actual_free_space ... ok
+test tests::nested_destination_rejected ... ok
+test tests::overlapping_selections_are_rejected_without_a_collision ... ok
+test tests::partway_conflict_reports_partial_result ... ok
+test tests::portable_paths_reject_traversal_and_devices ... ok
+test tests::same_volume_rejected_before_writes ... ok
+test tests::transaction_refuses_changed_source_destination_conflict_and_corrupt_manifest ... FAILED
+test tests::transaction_rejects_duplicate_selection_and_moved_operation ... FAILED
+test tests::transaction_restarts_partial_and_rechecks_published_files ... FAILED
+test tests::verified_copy_preserves_hierarchy_empty_dirs_and_source ... ok
+
+failures:
+
+---- tests::transaction_refuses_changed_source_destination_conflict_and_corrupt_manifest stdout ----
+
+thread 'tests::transaction_refuses_changed_source_destination_conflict_and_corrupt_manifest' (1700) panicked at crates/backup/src/tests.rs:562:6:
+called `Result::unwrap()` on an `Err` value: Error { kind: Io, context: "Open read-only device: The system cannot find the file specified. (os error 2)", os_code: Some(2) }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- tests::transaction_rejects_duplicate_selection_and_moved_operation stdout ----
+
+thread 'tests::transaction_rejects_duplicate_selection_and_moved_operation' (1680) panicked at crates/backup/src/tests.rs:614:6:
+called `Result::unwrap()` on an `Err` value: Error { kind: Io, context: "Open read-only device: The system cannot find the file specified. (os error 2)", os_code: Some(2) }
+
+---- tests::transaction_restarts_partial_and_rechecks_published_files stdout ----
+
+thread 'tests::transaction_restarts_partial_and_rechecks_published_files' (1676) panicked at crates/backup/src/tests.rs:505:89:
+called `Result::unwrap()` on an `Err` value: Error { kind: Io, context: "Canonicalize path: The system cannot find the file specified. (os error 2)", os_code: Some(2) }
+
+
+failures:
+    tests::transaction_refuses_changed_source_destination_conflict_and_corrupt_manifest
+    tests::transaction_rejects_duplicate_selection_and_moved_operation
+    tests::transaction_restarts_partial_and_rechecks_published_files
+
+test result: FAILED. 14 passed; 3 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.31s
+
+
+===== TEST08.EXIT =====
+0
+
+===== TEST08.LOG =====
+
+running 2 tests
+test repair::tests::dry_run_blocks_missing_backup_and_rejects_mismatched_authorization ... ok
+test repair::windows::tests::loader_and_both_devices_must_be_in_one_bcd_entry ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+
+===== TEST09.EXIT =====
+0
+
+===== TEST09.LOG =====
+
+running 9 tests
+test corroborated_candidate_has_architecture_not_invented_version ... ok
+test diagnosis_classifies_candidates_loader_mismatch_windows_old_and_invalid_bcd ... ok
+test directory_named_windows_is_not_an_installation ... ok
+test explorer_lists_actual_names_sizes_and_directories ... ok
+test malformed_pe_header_is_rejected ... ok
+test malformed_registry_marker_is_rejected ... ok
+test missing_and_malformed_bcd_are_not_healthy ... ok
+test no_windows_is_an_empty_result ... ok
+test report_export_roundtrips_and_preserves_source ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s
+
+
+===== TEST10.EXIT =====
+0
+
+===== TEST10.LOG =====
+
+running 8 tests
+test media::tests::image_sizes_use_the_hosts_number_grouping ... ok
+test media::tests::inventory_preserves_missing_fields_and_rejects_wrong_index ... ok
+test media::tests::inventory_uses_the_indexed_image_version ... ok
+test media::tests::malformed_or_truncated_image_is_rejected_before_dism ... ok
+test plan::tests::changed_or_ambiguous_target_is_rejected ... ok
+test plan::tests::existing_data_requires_preservation ... ok
+test plan::tests::immutable_preview_is_deterministic_and_detects_alterations ... ok
+test plan::tests::insufficient_capacity_and_unsupported_image_are_explicit ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+
+===== TEST11.EXIT =====
+101
+
+===== TEST11.LOG =====
+
+running 13 tests
+test execution::tests::partial_write_failure_retains_the_actual_written_count ... ok
+test execution::tests::short_copy_records_actual_bytes_without_verification ... ok
+test tests::abort_skip_and_rename_preserve_existing_content ... FAILED
+test tests::authorization_is_invalidated_when_known_folder_identity_changes ... FAILED
+test tests::cancellation_stops_before_the_next_file ... FAILED
+test tests::checksummed_manifest_still_rejects_traversal_and_unknown_versions ... FAILED
+test tests::copy_after_preflight_rejects_new_hash_mismatch_and_cleans_staging ... FAILED
+test tests::corrupt_and_unsupported_manifest_fail_preflight ... FAILED
+test tests::late_destination_conflict_is_never_overwritten ... FAILED
+test tests::rejects_windows_directory_junction_escape ... FAILED
+test tests::rejects_wrong_sid_traversal_external_mapping_and_unavailable_path ... FAILED
+test tests::tampered_and_missing_payload_fail_preflight ... FAILED
+test tests::verified_restore_preserves_unicode_empty_and_multichunk_files ... FAILED
+
+failures:
+
+---- tests::abort_skip_and_rename_preserve_existing_content stdout ----
+
+thread 'tests::abort_skip_and_rename_preserve_existing_content' (776) panicked at crates/restore/src/tests.rs:42:10:
+called `Result::unwrap()` on an `Err` value: Error { kind: Io, context: "Canonicalize path: The system cannot find the file specified. (os error 2)", os_code: Some(2) }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- tests::authorization_is_invalidated_when_known_folder_identity_changes stdout ----
+
+thread 'tests::authorization_is_invalidated_when_known_folder_identity_changes' (980) panicked at crates/restore/src/tests.rs:42:10:
+called `Result::unwrap()` on an `Err` value: Error { kind: Io, context: "Canonicalize path: The system cannot find the file specified. (os error 2)", os_code: Some(2) }
+
+---- tests::cancellation_stops_before_the_next_file stdout ----
+
+thread 'tests::cancellation_stops_before_the_next_file' (264) panicked at crates/restore/src/tests.rs:42:10:
+called `Result::unwrap()` on an `Err` value: Error { kind: Io, context: "Canonicalize path: The system cannot find the file specified. (os error 2)", os_code: Some(2) }
+
+---- tests::checksummed_manifest_still_rejects_traversal_and_unknown_versions stdout ----
+
+thread 'tests::checksummed_manifest_still_rejects_traversal_and_unknown_versions' (1492) panicked at crates/restore/src/tests.rs:42:10:
+called `Result::unwrap()` on an `Err` value: Error { kind: Io, context: "Canonicalize path: The system cannot find the file specified. (os error 2)", os_code: Some(2) }
+
+---- tests::copy_after_preflight_rejects_new_hash_mismatch_and_cleans_staging stdout ----
+
+thread 'tests::copy_after_preflight_rejects_new_hash_mismatch_and_cleans_staging' (488) panicked at crates/restore/src/tests.rs:42:10:
+called `Result::unwrap()` on an `Err` value: Error { kind: Io, context: "Canonicalize path: The system cannot find the file specified. (os error 2)", os_code: Some(2) }
+
+---- tests::corrupt_and_unsupported_manifest_fail_preflight stdout ----
+
+thread 'tests::corrupt_and_unsupported_manifest_fail_preflight' (400) panicked at crates/restore/src/tests.rs:42:10:
+called `Result::unwrap()` on an `Err` value: Error { kind: Io, context: "Canonicalize path: The system cannot find the file specified. (os error 2)", os_code: Some(2) }
+
+---- tests::late_destination_conflict_is_never_overwritten stdout ----
+
+thread 'tests::late_destination_conflict_is_never_overwritten' (580) panicked at crates/restore/src/tests.rs:42:10:
+called `Result::unwrap()` on an `Err` value: Error { kind: Io, context: "Canonicalize path: The system cannot find the file specified. (os error 2)", os_code: Some(2) }
+
+---- tests::rejects_windows_directory_junction_escape stdout ----
+
+thread 'tests::rejects_windows_directory_junction_escape' (560) panicked at crates/restore/src/tests.rs:42:10:
+called `Result::unwrap()` on an `Err` value: Error { kind: Io, context: "Canonicalize path: The system cannot find the file specified. (os error 2)", os_code: Some(2) }
+
+---- tests::rejects_wrong_sid_traversal_external_mapping_and_unavailable_path stdout ----
+
+thread 'tests::rejects_wrong_sid_traversal_external_mapping_and_unavailable_path' (940) panicked at crates/restore/src/tests.rs:42:10:
+called `Result::unwrap()` on an `Err` value: Error { kind: Io, context: "Canonicalize path: The system cannot find the file specified. (os error 2)", os_code: Some(2) }
+
+---- tests::tampered_and_missing_payload_fail_preflight stdout ----
+
+thread 'tests::tampered_and_missing_payload_fail_preflight' (756) panicked at crates/restore/src/tests.rs:42:10:
+called `Result::unwrap()` on an `Err` value: Error { kind: Io, context: "Canonicalize path: The system cannot find the file specified. (os error 2)", os_code: Some(2) }
+
+---- tests::verified_restore_preserves_unicode_empty_and_multichunk_files stdout ----
+
+thread 'tests::verified_restore_preserves_unicode_empty_and_multichunk_files' (268) panicked at crates/restore/src/tests.rs:42:10:
+called `Result::unwrap()` on an `Err` value: Error { kind: Io, context: "Canonicalize path: The system cannot find the file specified. (os error 2)", os_code: Some(2) }
+
+
+failures:
+    tests::abort_skip_and_rename_preserve_existing_content
+    tests::authorization_is_invalidated_when_known_folder_identity_changes
+    tests::cancellation_stops_before_the_next_file
+    tests::checksummed_manifest_still_rejects_traversal_and_unknown_versions
+    tests::copy_after_preflight_rejects_new_hash_mismatch_and_cleans_staging
+    tests::corrupt_and_unsupported_manifest_fail_preflight
+    tests::late_destination_conflict_is_never_overwritten
+    tests::rejects_windows_directory_junction_escape
+    tests::rejects_wrong_sid_traversal_external_mapping_and_unavailable_path
+    tests::tampered_and_missing_payload_fail_preflight
+    tests::verified_restore_preserves_unicode_empty_and_multichunk_files
+
+test result: FAILED. 2 passed; 11 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.14s
+
+
+===== TEST12.EXIT =====
+0
+
+===== TEST12.LOG =====
+
+running 4 tests
+test gui::renderer::framebuffer::tests::dib_rows_preserve_rgb_and_composited_alpha ... ok
+test gui::renderer::framebuffer::tests::software_frames_reuse_gdi_storage_at_smaller_sizes ... ok
+test gui::renderer::text::tests::empty_label_is_safe_to_draw ... ok
+test paths::tests::windows_namespaces_are_presented_without_changing_the_original ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s

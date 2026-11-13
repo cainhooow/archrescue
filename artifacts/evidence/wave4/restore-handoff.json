@@ -1,0 +1,17 @@
+{
+  "authorization_required": true,
+  "backup": "\\\\?\\D:\\ArchRescue\\archrescue-backup-ar-18e782639e544e60-660-0",
+  "backup_operation": "ar-18e782639e544e60-660-0",
+  "executable": "archrescue-restore-agent.exe",
+  "manifest_sha256": "4218d280aa2f2f005c4c567091535e9e24f2c435472b030becea0695ac4430f8",
+  "manifest_version": 1,
+  "source_directories": [
+    "Users",
+    "Users\\Fixture",
+    "Users\\Fixture\\Documents"
+  ],
+  "source_hint": "\\\\?\\C:\\",
+  "verified_bytes": 29,
+  "verified_files": 1,
+  "version": 1
+}

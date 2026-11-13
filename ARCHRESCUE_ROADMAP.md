@@ -3534,3 +3534,16 @@ The [development wave report](docs/qa/M1-M3-DEVELOPMENT-WAVE.md) contains the de
 See the [Wave 3 UI and Windows integrity report](docs/qa/WAVE-3-UI-WINDOWS-INTEGRITY.md) for the scoped acceptance matrix and ClickUp reconciliation.
 
 **SYNC — 2026-11-11.** ClickUp descriptions for AR-02, AR-03, AR-04, AR-05, AR-06, AR-07 and AR-14 record the verified Wave 3 scope. A connector readback confirmed the notes and existing statuses. See [ClickUp reconciliation](artifacts/evidence/wave3/clickup-reconciliation.json).
+
+## 18. Wave 4 engineering update — 2026-11-12
+
+| Roadmap area | Evidence-backed state |
+|---|---|
+| AR-02 / AR-03 guided recovery | The WinPE shell shares a storage and recovery catalog. Its custom picker accepts typed resource selections. The WinPE fixture exercised a suggested Windows source, a protected disk, an independent folder and keyboard and pointer input. |
+| AR-04 boot repair | The guided page uses same-disk GPT ESP candidates and an independent preservation destination. BCD association, the existing ESP path blocker and repair execution still require qualification. |
+| AR-05 backup | Salvar meus arquivos suggested a profile Documents folder, copied 29 bytes to a second disk and verified the copy. The catalog rediscovered the operation after application restart and the shell reread the payload. |
+| AR-06 / AR-07 deployment and restore | WinPE inspected a real WIM selected from the catalog and exported a verified restoration reference. Installation execution and guided account/folder mapping remain open. |
+| AR-11 / AR-15 diagnostics and evidence | The integrated console ran a read-only network diagnostic and displayed its output and exit code. The guided report export wrote JSON and text. The emergency console remains available. |
+| AR-14 / AR-QA-M50 | Linux and both Windows cross-target checks passed. WinPE validated the core workflows. Full installed-Windows regression and additional picker and EFI fixtures remain open. The human-review milestone stays at the existing evidence-backed 50% gate. |
+
+Seven existing ClickUp descriptions were updated and verified by readback. See the [Wave 4 report](docs/qa/WAVE-4-INTELLIGENT-RECOVERY-UX.md) for the acceptance matrix, hashes and runtime limitations.

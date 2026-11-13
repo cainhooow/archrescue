@@ -1,0 +1,169 @@
+{
+  "source": "/home/cainhooow/.cache/archrescue/9751dbfcbe694667a515ecfcb680069b/tmpwqip3eq2",
+  "destination": "/dev/shm/archrescue-wave4-cli.YoRRow/tmpq6er6q6l",
+  "interruption": {
+    "exit": -9,
+    "observed_partial_bytes": 1900544
+  },
+  "discovery": {
+    "directory": "/dev/shm/archrescue-wave4-cli.YoRRow/tmpq6er6q6l/archrescue-backup-ar-18e76f1b3a58fba6-d106-0",
+    "manifest": {
+      "schema_version": 1,
+      "operation_id": "ar-18e76f1b3a58fba6-d106-0",
+      "created_unix": 1794525139,
+      "source_identity": {
+        "filesystem_id": "unix-dev:50;inode:1217969",
+        "directory": "/home/cainhooow/.cache/archrescue/9751dbfcbe694667a515ecfcb680069b/tmpwqip3eq2"
+      },
+      "destination_identity": {
+        "filesystem_id": "unix-dev:33;inode:5228",
+        "directory": "/dev/shm/archrescue-wave4-cli.YoRRow/tmpq6er6q6l"
+      },
+      "source_hint": "/home/cainhooow/.cache/archrescue/9751dbfcbe694667a515ecfcb680069b/tmpwqip3eq2",
+      "source_at_creation": {
+        "volume": "unix-dev:50",
+        "physical_disks": []
+      },
+      "destination_at_creation": {
+        "volume": "unix-dev:33",
+        "physical_disks": []
+      },
+      "selections": [
+        "01-pronto.txt",
+        "02-recupera\u00e7\u00e3o.bin",
+        "03-vazio"
+      ],
+      "directories": [],
+      "files": [
+        {
+          "relative": "01-pronto.txt",
+          "bytes": 29,
+          "sha256": "081d06fd7e0e8927703c5c95b12933d8164ad67e3dc0c7e033c6e9d4138d696e"
+        },
+        {
+          "relative": "02-recupera\u00e7\u00e3o.bin",
+          "bytes": 268435456,
+          "sha256": "af52f668ea176d8ee2ed6b0e6c8350f4e9c83d2b0a62b23f794675899f0165a3"
+        },
+        {
+          "relative": "03-vazio",
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        }
+      ],
+      "planned_bytes": 268435485,
+      "plan_fingerprint": "e87513e5899b4cb60d2c10eeac928a5709d815eb5e213af15ad760b5ff8aed09"
+    },
+    "status": {
+      "operation_id": "ar-18e76f1b3a58fba6-d106-0",
+      "plan_fingerprint": "e87513e5899b4cb60d2c10eeac928a5709d815eb5e213af15ad760b5ff8aed09",
+      "updated_unix": 1794525140,
+      "state": "RUNNING",
+      "resumed": false,
+      "error": null
+    },
+    "error": null
+  },
+  "resumed": {
+    "directory": "/dev/shm/archrescue-wave4-cli.YoRRow/tmpq6er6q6l/archrescue-backup-ar-18e76f1b3a58fba6-d106-0",
+    "source_root": "/home/cainhooow/.cache/archrescue/9751dbfcbe694667a515ecfcb680069b/tmpwqip3eq2",
+    "manifest": {
+      "schema_version": 1,
+      "operation_id": "ar-18e76f1b3a58fba6-d106-0",
+      "created_unix": 1794525139,
+      "source_identity": {
+        "filesystem_id": "unix-dev:50;inode:1217969",
+        "directory": "/home/cainhooow/.cache/archrescue/9751dbfcbe694667a515ecfcb680069b/tmpwqip3eq2"
+      },
+      "destination_identity": {
+        "filesystem_id": "unix-dev:33;inode:5228",
+        "directory": "/dev/shm/archrescue-wave4-cli.YoRRow/tmpq6er6q6l"
+      },
+      "source_hint": "/home/cainhooow/.cache/archrescue/9751dbfcbe694667a515ecfcb680069b/tmpwqip3eq2",
+      "source_at_creation": {
+        "volume": "unix-dev:50",
+        "physical_disks": []
+      },
+      "destination_at_creation": {
+        "volume": "unix-dev:33",
+        "physical_disks": []
+      },
+      "selections": [
+        "01-pronto.txt",
+        "02-recupera\u00e7\u00e3o.bin",
+        "03-vazio"
+      ],
+      "directories": [],
+      "files": [
+        {
+          "relative": "01-pronto.txt",
+          "bytes": 29,
+          "sha256": "081d06fd7e0e8927703c5c95b12933d8164ad67e3dc0c7e033c6e9d4138d696e"
+        },
+        {
+          "relative": "02-recupera\u00e7\u00e3o.bin",
+          "bytes": 268435456,
+          "sha256": "af52f668ea176d8ee2ed6b0e6c8350f4e9c83d2b0a62b23f794675899f0165a3"
+        },
+        {
+          "relative": "03-vazio",
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        }
+      ],
+      "planned_bytes": 268435485,
+      "plan_fingerprint": "e87513e5899b4cb60d2c10eeac928a5709d815eb5e213af15ad760b5ff8aed09"
+    },
+    "status": {
+      "operation_id": "ar-18e76f1b3a58fba6-d106-0",
+      "plan_fingerprint": "e87513e5899b4cb60d2c10eeac928a5709d815eb5e213af15ad760b5ff8aed09",
+      "updated_unix": 1794525148,
+      "state": "COMPLETED",
+      "resumed": true,
+      "error": null
+    },
+    "progress": {
+      "operation_id": "ar-18e76f1b3a58fba6-d106-0",
+      "stage": "Verificando arquivos publicados",
+      "elapsed_seconds": 1,
+      "planned_bytes": 268435485,
+      "acknowledged_bytes": 268435485,
+      "verified_bytes": 268435485,
+      "verified_files": 3,
+      "skipped_files": 1,
+      "failed_files": 0,
+      "partial_files": 0
+    },
+    "files": [
+      {
+        "plan_fingerprint": "e87513e5899b4cb60d2c10eeac928a5709d815eb5e213af15ad760b5ff8aed09",
+        "index": 0,
+        "updated_unix": 1794525141,
+        "state": "VERIFIED",
+        "acknowledged_bytes": 29,
+        "error": null
+      },
+      {
+        "plan_fingerprint": "e87513e5899b4cb60d2c10eeac928a5709d815eb5e213af15ad760b5ff8aed09",
+        "index": 1,
+        "updated_unix": 1794525145,
+        "state": "VERIFIED",
+        "acknowledged_bytes": 268435456,
+        "error": null
+      },
+      {
+        "plan_fingerprint": "e87513e5899b4cb60d2c10eeac928a5709d815eb5e213af15ad760b5ff8aed09",
+        "index": 2,
+        "updated_unix": 1794525145,
+        "state": "VERIFIED",
+        "acknowledged_bytes": 0,
+        "error": null
+      }
+    ]
+  },
+  "independent_source_payload_and_restore_sha256": {
+    "01-pronto.txt": "081d06fd7e0e8927703c5c95b12933d8164ad67e3dc0c7e033c6e9d4138d696e",
+    "02-recupera\u00e7\u00e3o.bin": "af52f668ea176d8ee2ed6b0e6c8350f4e9c83d2b0a62b23f794675899f0165a3",
+    "03-vazio": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  }
+}
