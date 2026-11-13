@@ -85,7 +85,8 @@ def verify(args):
     for disk, root in [(args.source, source_root), (args.backup, backup_root),
                        (args.installed, target_root)]:
         children = ntfs("ntfsls", "-p", f"/{root}/{empty}", disk).decode().splitlines()
-        require(not children, f"Expected empty directory on {disk}")
+        require(all(child in (".", "..") for child in children),
+                f"Expected empty directory on {disk}")
 
     desktop = relative_path(profile["folders"]["Desktop"])
     conflict = read(args.installed, f"{desktop}/conflict.txt")
