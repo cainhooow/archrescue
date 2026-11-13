@@ -66,9 +66,11 @@ impl Layout {
 
     pub fn navigation(&self, index: usize) -> (i32, i32) {
         let divider = if index >= 7 { self.px(24) } else { 0 };
-        let top = self.px(103) + index as i32 * self.px(48) + divider;
+        let top = self.px(103)
+            + index as i32 * self.px(if self.height < 690 { 43 } else { 48 })
+            + divider;
 
-        (top, self.px(43))
+        (top, self.px(if self.height < 690 { 39 } else { 43 }))
     }
 
     pub fn utilities(&self) -> i32 {
@@ -138,10 +140,7 @@ pub unsafe fn arrange(hwnd: HWND, app: &App) {
         place(hwnd, 100 + page, rail_inset, top, rail_width, height);
     }
 
-    for (index, id) in [TECHNICIAN, REFRESH, CONSOLE, CANCEL]
-        .into_iter()
-        .enumerate()
-    {
+    for (index, id) in [TECHNICIAN, REFRESH, CANCEL].into_iter().enumerate() {
         place(
             hwnd,
             id,
@@ -197,13 +196,20 @@ pub unsafe fn arrange(hwnd: HWND, app: &App) {
         BACKUP => {
             let source_top = area.body_top(DASHBOARD);
             show(hwnd, SOURCE_LABEL, app.preview.is_none());
-            for id in [ADDRESS, OPEN, UP] {
-                show(hwnd, id, app.preview.is_none());
-            }
+            show(hwnd, ADDRESS, app.preview.is_none());
             place(hwnd, SOURCE_LABEL, x, source_top, width - 10, 17);
-            place(hwnd, ADDRESS, x + 8, source_top + 21, width - 170, 24);
-            place(hwnd, OPEN, x + width - 148, source_top + 18, 70, 30);
-            place(hwnd, UP, x + width - 70, source_top + 18, 70, 30);
+            let field = (width - 16) / 3;
+            place(hwnd, CHOOSE_WINDOWS, x, source_top + 20, field, 29);
+            place(hwnd, ADDRESS, x + field + 8, source_top + 20, field, 29);
+            place(
+                hwnd,
+                SELECT_RECOMMENDED,
+                x + 2 * field + 16,
+                source_top + 20,
+                field,
+                29,
+            );
+            show(hwnd, CHOOSE_WINDOWS, app.preview.is_none());
 
             let top = area.backup_top(app);
             let form = area.backup_form(app);
@@ -272,18 +278,19 @@ pub unsafe fn arrange(hwnd: HWND, app: &App) {
             place(hwnd, EXPORT, right + 13, top + 103, right_width - 26, 31);
         }
         REPAIR_PAGE => {
-            place(hwnd, ESP_LABEL, x + 13, top + 42, left - 26, 20);
-            place(hwnd, ESP, x + 19, top + 67, left - 38, 22);
-            place(hwnd, DESTINATION_LABEL, x + 13, top + 98, left - 26, 20);
-            place(hwnd, DEST, x + 19, top + 123, left - 38, 22);
-            place(hwnd, REPAIR, x + 13, top + 158, left - 26, 31);
+            place(hwnd, CHOOSE_WINDOWS, x + 13, top + 39, left - 26, 25);
+            place(hwnd, ESP_LABEL, x + 13, top + 70, left - 26, 18);
+            place(hwnd, ESP, x + 19, top + 91, left - 38, 25);
+            place(hwnd, DESTINATION_LABEL, x + 13, top + 121, left - 26, 20);
+            place(hwnd, DEST, x + 19, top + 144, left - 38, 25);
+            place(hwnd, REPAIR, x + 13, top + 177, left - 26, 31);
             place(
                 hwnd,
                 CONTENT,
                 x + 12,
-                top + 236,
+                top + 222,
                 left - 24,
-                bottom - top - 247,
+                bottom - top - 232,
             );
             place(
                 hwnd,
@@ -296,10 +303,11 @@ pub unsafe fn arrange(hwnd: HWND, app: &App) {
         }
         VERIFY_PAGE => {
             let card_top = area.body_top(DASHBOARD);
-            let has_result = app
-                .report
-                .as_ref()
-                .is_some_and(|report| !report.transactions.is_empty());
+            let has_result = app.session.backup.is_some()
+                || app
+                    .report
+                    .as_ref()
+                    .is_some_and(|report| !report.transactions.is_empty());
             show(hwnd, CONTENT, has_result);
             if has_result {
                 place(
@@ -313,14 +321,24 @@ pub unsafe fn arrange(hwnd: HWND, app: &App) {
             }
             place(
                 hwnd,
+                CHOOSE_BACKUP,
+                right + 13,
+                card_top + 61,
+                right_width - 26,
+                30,
+            );
+            place(
+                hwnd,
                 VERIFY,
                 right + 13,
-                card_top + 98,
+                card_top + 105,
                 right_width - 26,
                 34,
             );
         }
         deployment::DEPLOY | deployment::RESTORE => deployment::layout(hwnd, &area, app),
+        console::PAGE => console::layout(hwnd, &area),
+        DIAGNOSIS => place(hwnd, CHOOSE_WINDOWS, x + width - 220, top - 31, 220, 26),
         _ => {}
     }
 

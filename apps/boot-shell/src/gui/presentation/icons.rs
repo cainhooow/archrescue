@@ -36,6 +36,7 @@ impl Icon {
             REPORTS => Self::Report,
             deployment::DEPLOY => Self::Windows,
             deployment::RESTORE => Self::History,
+            console::PAGE => Self::Terminal,
             _ => Self::Info,
         }
     }

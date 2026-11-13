@@ -11,6 +11,7 @@ const INSET: i32 = 3;
 
 struct Scroll {
     target: HWND,
+    owner: HWND,
     dragging: Cell<Option<i32>>,
     hovering: Cell<bool>,
 }
@@ -36,6 +37,12 @@ fn overlay_id(id: usize) -> usize {
 }
 
 pub unsafe fn attach(parent: HWND, id: usize, target: HWND) -> Result<()> {
+    attach_for(parent, id, target, parent)
+}
+
+pub unsafe fn attach_for(parent: HWND, id: usize, target: HWND, owner: HWND) -> Result<()> {
+    let endpoints = [target, owner];
+    // SAFETY: CreateWindowExW sends WM_NCCREATE synchronously, which copies the HWNDs.
     let scrollbar = CreateWindowExW(
         0,
         wide(CLASS).as_ptr(),
@@ -48,7 +55,7 @@ pub unsafe fn attach(parent: HWND, id: usize, target: HWND) -> Result<()> {
         parent,
         overlay_id(id) as HMENU,
         GetModuleHandleW(null()),
-        target.cast(),
+        endpoints.as_ptr().cast(),
     );
     if scrollbar.is_null() {
         return Err(os_error("Create scrollbar"));
@@ -82,10 +89,14 @@ pub unsafe fn show(parent: HWND, id: usize, visible: bool) {
 
 pub unsafe fn invalidate(parent: HWND) {
     for id in [FILES, CONTENT, BACKUP_SELECTION, pages::ROWS] {
-        let scrollbar = control(parent, overlay_id(id));
-        if !scrollbar.is_null() && IsWindowVisible(scrollbar) != 0 {
-            InvalidateRect(scrollbar, null(), 0);
-        }
+        redraw(parent, id);
+    }
+}
+
+pub unsafe fn redraw(parent: HWND, id: usize) {
+    let scrollbar = control(parent, overlay_id(id));
+    if !scrollbar.is_null() && IsWindowVisible(scrollbar) != 0 {
+        InvalidateRect(scrollbar, null(), 0);
     }
 }
 
@@ -135,7 +146,7 @@ unsafe fn thumb(hwnd: HWND, target: HWND) -> Option<Thumb> {
 
 unsafe fn move_to(target: HWND, position: i32) {
     match GetDlgCtrlID(target) as usize {
-        FILES | pages::ROWS => {
+        FILES | pages::ROWS | picker::LIST => {
             SendMessageW(target, LB_SETTOPINDEX, position.max(0) as usize, 0);
         }
         _ => {
@@ -148,8 +159,10 @@ unsafe fn move_to(target: HWND, position: i32) {
 unsafe extern "system" fn procedure(hwnd: HWND, message: u32, wp: WPARAM, lp: LPARAM) -> LRESULT {
     if message == WM_NCCREATE {
         let creation = &*(lp as *const CREATESTRUCTW);
+        let [target, owner] = *(creation.lpCreateParams as *const [HWND; 2]);
         let scrollbar = Box::new(Scroll {
-            target: creation.lpCreateParams as HWND,
+            target,
+            owner,
             dragging: Cell::new(None),
             hovering: Cell::new(false),
         });
@@ -240,7 +253,7 @@ unsafe fn paint(hwnd: HWND, scrollbar: &Scroll) {
     let dc = BeginPaint(hwnd, &mut paint);
     let mut client = RECT::default();
     GetClientRect(hwnd, &mut client);
-    let state = GetWindowLongPtrW(GetParent(hwnd), GWLP_USERDATA) as *const WindowState;
+    let state = GetWindowLongPtrW(scrollbar.owner, GWLP_USERDATA) as *const WindowState;
     if let Some(state) = state.as_ref() {
         if let Ok(mut frame) = state.control_frame.try_borrow_mut() {
             if frame.reserve(dc, client.right, client.bottom) {

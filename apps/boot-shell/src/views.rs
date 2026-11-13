@@ -5,23 +5,23 @@ use std::fmt::Write;
 use archrescue_core::State;
 use archrescue_evidence::Report;
 
-pub fn repair(report: &Report, technician: bool) -> String {
+pub fn repair(plan: Option<&archrescue_evidence::repair::RepairPlan>, technician: bool) -> String {
     let mut text = String::from(
-        "REPARAR BOOT UEFI\n\nInforme a raiz da ESP e um destino independente. A execução do BCDBoot é reservada ao clone registrado e à autorização do plano no laboratório.\n",
+        "REPARAR BOOT UEFI\n\nConfira a partição EFI sugerida e escolha onde preservar os arquivos. A execução do BCDBoot é reservada ao clone registrado e à autorização do plano no laboratório.\n",
     );
-    let Some(plan) = report.repair_plans.last() else {
+    let Some(plan) = plan else {
         return text;
     };
 
     let _ = writeln!(
         text,
         "\nWindows: {}\nESP: {}\nDestino de preservação: {}\nEspaço temporário: {} bytes\n",
-        plan.windows_root.display(),
-        plan.efi_root.display(),
-        plan.backup_destination.display(),
+        crate::paths::display(&plan.windows_root, technician),
+        crate::paths::display(&plan.efi_root, technician),
+        crate::paths::display(&plan.backup_destination, technician),
         plan.scratch_estimate_bytes,
     );
-    if let Some(target) = &plan.target {
+    if let Some(target) = plan.target.as_ref().filter(|_| technician) {
         let _ = writeln!(
             text,
             "Disco: {}\nPartição EFI: {}",
@@ -63,7 +63,7 @@ pub fn verify(report: &Report, technician: bool) -> String {
         backup.progress.verified_bytes,
         backup.progress.verified_files,
         backup.progress.skipped_files,
-        backup.directory.display(),
+        crate::paths::display(&backup.directory, technician),
     );
     if let Some(error) = &backup.status.error {
         let _ = writeln!(text, "{error}");

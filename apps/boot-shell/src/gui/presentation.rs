@@ -82,7 +82,7 @@ unsafe fn button(
     let page = id
         .checked_sub(100)
         .filter(|page| navigation::ORDER.contains(page));
-    let utility = matches!(id, TECHNICIAN | REFRESH | CONSOLE | CANCEL);
+    let utility = matches!(id, TECHNICIAN | REFRESH | CANCEL);
     let nav = page.is_some() || utility;
     let selected = page.is_some_and(|page| page == navigation::owner(selected_page));
     let primary = matches!(
@@ -103,7 +103,7 @@ unsafe fn button(
         FOOTER
     } else if matches!(
         id,
-        OPEN | UP | DISK_DETAILS | VERIFY | pages::SCAN | pages::PROTECT | pages::REPORT_ACTION
+        ADDRESS | DISK_DETAILS | VERIFY | pages::SCAN | pages::PROTECT | pages::REPORT_ACTION
     ) {
         BACKGROUND
     } else {
@@ -196,7 +196,6 @@ unsafe fn button(
     let symbol = page.map(Icon::page).or(match id {
         TECHNICIAN => Some(Icon::Sliders),
         REFRESH => Some(Icon::Refresh),
-        CONSOLE => Some(Icon::Terminal),
         CANCEL => Some(Icon::Stop),
         PREVIOUS => Some(Icon::Left),
         NEXT => Some(Icon::Right),
@@ -602,7 +601,7 @@ fn scene(dc: &mut Scene<'_>, area: &Layout, theme: &Theme, app: &App) {
 
     let x = area.left();
     let width = area.body_width();
-    let label = navigation::label(app.section, false);
+    let label = navigation::label(app.section, false, app.technician);
     let (title, subtitle) = navigation::heading(app);
     Icon::page(app.section).draw(dc, x, px(20), px(16), MUTED);
     text(

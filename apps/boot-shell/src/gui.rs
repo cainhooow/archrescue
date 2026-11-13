@@ -1,14 +1,17 @@
 //! Native Win32 shell. Long-running filesystem work is performed outside the UI thread.
 
 mod confirmation;
+mod console;
 mod deployment;
 mod layout;
 mod navigation;
 mod pages;
+mod picker;
 mod presentation;
 mod renderer;
 mod scroll;
 mod select;
+mod session;
 mod theme;
 mod window;
 
@@ -48,18 +51,20 @@ use windows_sys::Win32::{
     },
 };
 
-use crate::{i18n, views::state_label};
+use crate::{
+    i18n, paths,
+    resources::{Catalog, Location},
+    views::state_label,
+};
+use session::{CHOOSE_BACKUP, CHOOSE_WINDOWS, SELECT_RECOMMENDED};
 
 const REFRESH: usize = 200;
 const ADDRESS: usize = 201;
-const OPEN: usize = 202;
-const UP: usize = 203;
 const FILES: usize = 204;
 const DEST: usize = 205;
 const COPY: usize = 206;
 const CANCEL: usize = 207;
 const EXPORT: usize = 208;
-const CONSOLE: usize = 209;
 const CONTENT: usize = 210;
 const STATUS: usize = 211;
 const PREVIEW: usize = 212;
@@ -106,8 +111,9 @@ fn os_error(context: &str) -> Error {
 }
 
 enum Event {
-    Snapshot(Box<Report>),
-    Listing(PathBuf, Vec<Entry>),
+    Snapshot(Box<(Report, Catalog)>),
+    Listing(Location, Vec<Entry>, bool),
+    BackupVerified(Result<()>),
     Progress(Progress),
     Preview(Preview),
     Checkpoints(Vec<CheckpointEntry>),
@@ -117,6 +123,7 @@ enum Event {
     PlanExported(PathBuf),
     HandoffExported(PathBuf),
     Deployment(deployment::Update),
+    Console(console::Outcome),
     Integrity(Box<archrescue_integrity::IntegrityReport>),
     IntegrityProgress(archrescue_integrity::Progress),
     Failure(Error),
@@ -124,8 +131,9 @@ enum Event {
 
 #[derive(Clone)]
 struct Preview {
-    source: PathBuf,
-    destination: PathBuf,
+    source: Location,
+    destination: Location,
+    available_bytes: u64,
     selections: Vec<PathBuf>,
     files: usize,
     bytes: u64,
@@ -133,9 +141,15 @@ struct Preview {
 
 struct App {
     deployment: deployment::Deployment,
+    console: console::Console,
+    session: session::Session,
+    picker: Option<picker::Purpose>,
+    recommended: bool,
+    refresh_pending: bool,
     section: usize,
     technician: bool,
     preview: Option<Preview>,
+    current_repair: Option<repair::RepairPlan>,
     checkpoints: Option<Vec<CheckpointEntry>>,
     confirmation: Option<confirmation::Confirmation>,
     report: Option<Report>,
@@ -188,7 +202,7 @@ unsafe fn control(hwnd: HWND, id: usize) -> HWND {
 
 unsafe fn set(hwnd: HWND, id: usize, text: &str) {
     let control = control(hwnd, id);
-    let text = wide(&text.replace('\n', "\r\n"));
+    let text = wide(&text.replace("\r\n", "\n").replace('\n', "\r\n"));
 
     SetWindowTextW(control, text.as_ptr());
 }
@@ -296,6 +310,7 @@ unsafe fn show(hwnd: HWND, id: usize, visible: bool) {
 }
 
 unsafe fn render(hwnd: HWND, app: &App) {
+    session::render_fields(hwnd, app);
     let protect = app.section == BACKUP;
     let repair = app.section == REPAIR_PAGE;
     let verify = app.section == VERIFY_PAGE;
@@ -318,13 +333,27 @@ unsafe fn render(hwnd: HWND, app: &App) {
         },
     );
     show(hwnd, DISK_DETAILS, app.section == DASHBOARD);
+    show(
+        hwnd,
+        CHOOSE_WINDOWS,
+        protect || repair || app.section == DIAGNOSIS,
+    );
+    show(hwnd, CHOOSE_BACKUP, verify);
+    show(
+        hwnd,
+        SELECT_RECOMMENDED,
+        protect && app.recommended && app.preview.is_none() && app.checkpoints.is_none(),
+    );
     show(hwnd, ESP, repair);
     show(hwnd, ESP_LABEL, repair);
     show(hwnd, SOURCE_LABEL, protect);
     let destination = protect
         || repair
         || report_stage
-        || matches!(app.section, deployment::DEPLOY | deployment::RESTORE);
+        || matches!(
+            app.section,
+            deployment::DEPLOY | deployment::RESTORE | console::PAGE
+        );
     let destination_label = match app.section {
         REPORTS => "Pasta em disco separado",
         REPAIR_PAGE => "Destino de preservação",
@@ -333,9 +362,13 @@ unsafe fn render(hwnd: HWND, app: &App) {
     };
     set(hwnd, DESTINATION_LABEL, destination_label);
     for id in [DESTINATION_LABEL, DEST] {
-        show(hwnd, id, destination);
+        show(
+            hwnd,
+            id,
+            destination && (id != DESTINATION_LABEL || app.section != console::PAGE),
+        );
     }
-    for id in [ADDRESS, OPEN, UP, PREVIEW, COPY, CHECKPOINTS, RESUME] {
+    for id in [ADDRESS, PREVIEW, COPY, CHECKPOINTS, RESUME] {
         show(hwnd, id, protect);
     }
     show(hwnd, EXPORT, report_stage);
@@ -351,28 +384,30 @@ unsafe fn render(hwnd: HWND, app: &App) {
         control(hwnd, NEXT),
         navigation::adjacent(app.section, 1).is_some() as i32,
     );
-    EnableWindow(control(hwnd, CONSOLE), (!app.busy) as i32);
 
     let area = layout::Layout::read(hwnd);
     for page in navigation::ORDER {
-        set(hwnd, 100 + page, navigation::label(page, area.rail < 224));
+        set(
+            hwnd,
+            100 + page,
+            navigation::label(page, area.rail < 224, app.technician),
+        );
         InvalidateRect(control(hwnd, 100 + page), null(), 0);
     }
     for (id, full, compact) in [
         (REFRESH, "Atualizar diagnóstico", "Atualizar"),
-        (CONSOLE, "Console de diagnóstico", "Console"),
         (CANCEL, "Cancelar operação", "Cancelar"),
     ] {
-        let limit = if id == CONSOLE { 218 } else { 176 };
-        set(hwnd, id, if area.rail < limit { compact } else { full });
+        set(hwnd, id, if area.rail < 176 { compact } else { full });
     }
 
     for id in [
+        CHOOSE_WINDOWS,
+        CHOOSE_BACKUP,
+        SELECT_RECOMMENDED,
         ADDRESS,
         DEST,
         ESP,
-        OPEN,
-        UP,
         CHECKPOINTS,
         REFRESH,
         REPAIR,
@@ -396,13 +431,16 @@ unsafe fn render(hwnd: HWND, app: &App) {
     EnableWindow(control(hwnd, CANCEL), (app.busy && app.cancellable) as i32);
     EnableWindow(
         control(hwnd, EXPORT),
-        (!app.busy && app.report.is_some()) as i32,
+        (!app.busy && app.report.is_some() && app.session.destination(REPORTS).is_ok()) as i32,
     );
     let has_backup = app
         .report
         .as_ref()
         .is_some_and(|report| !report.transactions.is_empty());
-    EnableWindow(control(hwnd, VERIFY), (!app.busy && has_backup) as i32);
+    EnableWindow(
+        control(hwnd, VERIFY),
+        (!app.busy && (has_backup || app.session.backup.is_some())) as i32,
+    );
     set(
         hwnd,
         TECHNICIAN,
@@ -420,7 +458,9 @@ unsafe fn render(hwnd: HWND, app: &App) {
     invalidate_scene(hwnd);
 
     let structured = pages::render_page(hwnd, app);
-    if deployment::render(hwnd, app) || structured {
+    let deployment = deployment::render(hwnd, app);
+    let console = console::render(hwnd, app);
+    if console || deployment || structured {
         return;
     }
 
@@ -428,7 +468,13 @@ unsafe fn render(hwnd: HWND, app: &App) {
         let selection = preview
             .selections
             .iter()
-            .map(|path| path.display().to_string())
+            .map(|path| {
+                if app.recommended {
+                    session::folder_label(path)
+                } else {
+                    paths::display(path, app.technician)
+                }
+            })
             .collect::<Vec<_>>()
             .join("\n");
         set(hwnd, CONTENT, &selection);
@@ -444,7 +490,16 @@ unsafe fn render(hwnd: HWND, app: &App) {
         return;
     };
     let text = match app.section {
-        REPAIR_PAGE => crate::views::repair(report, app.technician),
+        REPAIR_PAGE => crate::views::repair(app.current_repair.as_ref(), app.technician),
+        VERIFY_PAGE if app.session.backup.is_some() => {
+            let backup = app.session.backup.as_ref().unwrap();
+            let status = match &app.session.backup_verification {
+                None => "Manifesto validado. Conteúdo aguarda verificação.".into(),
+                Some(Ok(())) => "Conteúdo conferido por SHA-256 nesta sessão.".into(),
+                Some(Err(error)) => error_message(error),
+            };
+            format!("{status}\r\n{}", backup.location.label(app.technician))
+        }
         VERIFY_PAGE => crate::views::verify(report, app.technician),
         REPORTS => crate::views::session(report, app.technician),
         _ => String::new(),
@@ -475,35 +530,39 @@ fn work(app: &mut App, job: impl FnOnce() -> Event + Send + 'static) {
 }
 
 unsafe fn refresh(hwnd: HWND, app: &mut App) {
-    set(hwnd, STATUS, i18n::LOADING);
-    work(app, || {
+    if app.report.is_none() {
+        set(hwnd, STATUS, i18n::LOADING);
+    }
+    let generation = app.session.catalog.generation + 1;
+    let registered = app.session.registered.clone();
+    work(app, move || {
         let inventory = archrescue_storage::inventory();
         let roots = inventory
             .volumes
             .iter()
-            .filter_map(|volume| volume.paths.first().cloned())
+            .filter_map(crate::resources::volume_root)
             .collect::<Vec<_>>();
 
         let report = Report::collect_with_inventory(&roots, inventory);
 
-        Event::Snapshot(Box::new(report))
+        let catalog = Catalog::discover(&report, &registered, generation);
+        Event::Snapshot(Box::new((report, catalog)))
     });
 
     render(hwnd, app);
 }
 
-unsafe fn browse(hwnd: HWND, app: &mut App, path: PathBuf) {
+unsafe fn browse(hwnd: HWND, app: &mut App, source: Location) {
     app.preview = None;
     app.checkpoints = None;
+    app.listing_loaded = false;
     set(hwnd, STATUS, i18n::LOADING);
     work(app, move || {
-        let directory = match archrescue_storage::safe_existing(&path) {
-            Ok(directory) => directory,
-            Err(error) => return Event::Failure(error),
-        };
-
-        match archrescue_backup::browse(&directory) {
-            Ok(entries) => Event::Listing(directory, entries),
+        match source
+            .revalidate()
+            .and_then(|directory| archrescue_backup::browse(&directory))
+        {
+            Ok(entries) => Event::Listing(source, entries, false),
             Err(error) => Event::Failure(error),
         }
     });
@@ -541,6 +600,7 @@ unsafe fn selected(hwnd: HWND, app: &App) -> Vec<PathBuf> {
     selected_indices(hwnd)
         .into_iter()
         .filter_map(|index| app.entries.get(index))
+        .filter(|entry| entry.error.is_none())
         .map(|entry| entry.name.clone())
         .collect()
 }
@@ -551,7 +611,7 @@ unsafe fn update_backup_selection(hwnd: HWND, app: &App) {
         match indices.as_slice() {
             [] => "Selecione um checkpoint e use Retomar.".to_owned(),
             [index] => checkpoints.get(*index).map_or_else(String::new, |entry| {
-                let path = entry.directory.display();
+                let path = paths::display(&entry.directory, app.technician);
                 let status = entry
                     .status
                     .as_ref()
@@ -566,7 +626,13 @@ unsafe fn update_backup_selection(hwnd: HWND, app: &App) {
         indices
             .into_iter()
             .filter_map(|index| app.entries.get(index))
-            .map(|entry| entry.name.display().to_string())
+            .map(|entry| {
+                if app.recommended {
+                    session::folder_label(&entry.name)
+                } else {
+                    paths::display(&entry.name, app.technician)
+                }
+            })
             .collect::<Vec<_>>()
             .join("\n")
     };
@@ -576,6 +642,11 @@ unsafe fn update_backup_selection(hwnd: HWND, app: &App) {
 unsafe fn stage(hwnd: HWND, app: &mut App, section: usize) {
     app.section = section;
     app.row_index = 0;
+    if section == BACKUP && app.session.source.is_none() && !app.busy {
+        if let Some(windows) = app.session.available_windows().cloned() {
+            session::recommended(hwnd, app, windows);
+        }
+    }
     render(hwnd, app);
     // Keep focus on the selected navigation button so Tab continues in page order.
     SetFocus(control(hwnd, 100 + navigation::owner(section)));
@@ -619,17 +690,30 @@ unsafe fn action(hwnd: HWND, app: &mut App, id: usize, notification: u32) {
         return;
     }
 
-    if deployment::action(hwnd, app, id, notification) {
+    if console::action(hwnd, app, id) || deployment::action(hwnd, app, id, notification) {
         return;
     }
 
     match id {
         REFRESH => refresh(hwnd, app),
-        OPEN => browse(hwnd, app, PathBuf::from(get(hwnd, ADDRESS))),
-        UP => {
-            if let Some(parent) = app.directory.parent() {
-                browse(hwnd, app, parent.to_owned());
-            }
+        CHOOSE_WINDOWS => session::request(app, picker::Purpose::Windows),
+        CHOOSE_BACKUP => session::request(app, picker::Purpose::Backup),
+        ADDRESS => session::request(app, picker::Purpose::Source),
+        ESP => session::request(app, picker::Purpose::Efi),
+        DEST => {
+            let purpose = match app.section {
+                BACKUP => picker::Purpose::SaveFiles,
+                REPAIR_PAGE => picker::Purpose::Preserve,
+                deployment::DEPLOY => picker::Purpose::Plan,
+                deployment::RESTORE => picker::Purpose::Handoff,
+                console::PAGE => picker::Purpose::ConsoleLog,
+                _ => picker::Purpose::Report,
+            };
+            session::request(app, purpose);
+        }
+        SELECT_RECOMMENDED => {
+            SendMessageW(control(hwnd, FILES), LB_SETSEL, 1, -1);
+            update_backup_selection(hwnd, app);
         }
         FILES if notification == LBN_SELCHANGE => update_backup_selection(hwnd, app),
         FILES if notification == LBN_DBLCLK => {
@@ -646,27 +730,30 @@ unsafe fn action(hwnd: HWND, app: &mut App, id: usize, notification: u32) {
                     .iter()
                     .any(|entry| entry.name == selection[0] && entry.directory)
                 {
-                    browse(hwnd, app, path);
+                    if let Some(source) = app.session.source.clone() {
+                        app.preview = None;
+                        set(hwnd, STATUS, i18n::LOADING);
+                        work(app, move || {
+                            let listing = (|| {
+                                source.revalidate()?;
+                                let location = Location::capture(&path)?;
+                                let entries = archrescue_backup::browse(&location.path)?;
+                                Ok(Event::Listing(location, entries, false))
+                            })();
+                            listing.unwrap_or_else(Event::Failure)
+                        });
+                        render(hwnd, app);
+                    }
                 }
             }
         }
         PREVIEW => preview_backup(hwnd, app),
-        COPY => start_backup(hwnd, app),
+        COPY => start_backup(app),
         CHECKPOINTS => list_checkpoints(hwnd, app),
         RESUME => resume_backup(hwnd, app),
         VERIFY => verify_backup(hwnd, app),
         REPAIR => preview_repair(hwnd, app),
         EXPORT => export_report(hwnd, app),
-        CONSOLE => {
-            match window::launch_console() {
-                Ok(()) => {
-                    set(hwnd, STATUS, "Console de diagnóstico aberto.");
-                    // Fullscreen otherwise obscures the new WinPE console.
-                    ShowWindow(hwnd, SW_MINIMIZE);
-                }
-                Err(error) => set(hwnd, STATUS, &format!("Falha ao abrir console: {error}")),
-            }
-        }
         _ => {}
     }
 }
@@ -678,21 +765,38 @@ unsafe fn preview_backup(hwnd: HWND, app: &mut App) {
         return;
     }
 
-    let source = app.directory.clone();
-    let destination = PathBuf::from(get(hwnd, DEST));
+    let Some(source) = app.session.source.clone() else {
+        set(
+            hwnd,
+            STATUS,
+            "Escolha a instalação do Windows ou uma pasta de origem.",
+        );
+        return;
+    };
+    let Ok(destination) = app.session.destination(BACKUP) else {
+        set(hwnd, STATUS, "Escolha onde salvar os arquivos.");
+        return;
+    };
     app.cancel = Arc::new(AtomicBool::new(false));
     let cancel = app.cancel.clone();
     work(app, move || {
-        match transaction::preview(&source, &selections, &destination, &cancel) {
-            Ok((files, bytes)) => Event::Preview(Preview {
+        let result = (|| {
+            let source_path = source.revalidate()?;
+            let destination_path = destination.revalidate()?;
+            let space =
+                crate::resources::writable(&destination_path, std::slice::from_ref(&source), 0)?;
+            let (files, bytes) =
+                transaction::preview(&source_path, &selections, &destination_path, &cancel)?;
+            Ok(Event::Preview(Preview {
                 source,
                 destination,
+                available_bytes: space.available,
                 selections,
                 files,
                 bytes,
-            }),
-            Err(error) => Event::Failure(error),
-        }
+            }))
+        })();
+        result.unwrap_or_else(Event::Failure)
     });
 
     app.cancellable = true;
@@ -700,20 +804,28 @@ unsafe fn preview_backup(hwnd: HWND, app: &mut App) {
     render(hwnd, app);
 }
 
-unsafe fn start_backup(hwnd: HWND, app: &mut App) {
+fn start_backup(app: &mut App) {
     let Some(preview) = app.preview.clone() else {
         return;
     };
-    if confirmation::matches_preview(hwnd, &preview) {
+    if confirmation::matches_preview(app, &preview) {
         app.confirmation = Some(confirmation::Confirmation::Start(preview));
     }
 }
 
 unsafe fn list_checkpoints(hwnd: HWND, app: &mut App) {
-    let destination = PathBuf::from(get(hwnd, DEST));
-    work(app, move || match transaction::checkpoints(&destination) {
-        Ok(entries) => Event::Checkpoints(entries),
-        Err(error) => Event::Failure(error),
+    let Ok(destination) = app.session.destination(BACKUP) else {
+        session::request(app, picker::Purpose::Backup);
+        return;
+    };
+    work(app, move || {
+        match destination
+            .revalidate()
+            .and_then(|path| transaction::checkpoints(&path))
+        {
+            Ok(entries) => Event::Checkpoints(entries),
+            Err(error) => Event::Failure(error),
+        }
     });
     set(hwnd, STATUS, "Procurando checkpoints no destino…");
     render(hwnd, app);
@@ -735,11 +847,24 @@ unsafe fn resume_backup(hwnd: HWND, app: &mut App) {
         return;
     }
 
-    let source = PathBuf::from(get(hwnd, ADDRESS));
+    let Some(source) = app.session.source.clone() else {
+        set(hwnd, STATUS, "Escolha a pasta original para retomar.");
+        return;
+    };
     let checkpoint = entry.directory.clone();
+    let expected_destination = entry
+        .manifest
+        .as_ref()
+        .map(|manifest| manifest.destination_identity.clone());
+    let fingerprint = entry
+        .manifest
+        .as_ref()
+        .map(|manifest| manifest.plan_fingerprint.clone());
     app.confirmation = Some(confirmation::Confirmation::Resume {
         source,
         checkpoint,
+        fingerprint,
+        expected_destination,
         recorded_state: entry.status.as_ref().map(|status| status.state),
     });
 }
@@ -779,6 +904,32 @@ unsafe fn begin_backup(
 }
 
 unsafe fn verify_backup(hwnd: HWND, app: &mut App) {
+    if let Some(backup) = app.session.backup.clone() {
+        let cancel = Arc::new(AtomicBool::new(false));
+        app.cancel = cancel.clone();
+        app.session.backup_verification = None;
+        work(app, move || {
+            let result = backup
+                .revalidate()
+                .and_then(|path| transaction::verify_payload(&path, &cancel))
+                .and_then(|manifest| {
+                    if manifest.plan_fingerprint == backup.fingerprint {
+                        Ok(())
+                    } else {
+                        Err(Error::new(
+                            ErrorKind::Conflict,
+                            "O manifesto mudou durante a verificação.",
+                        ))
+                    }
+                });
+            Event::BackupVerified(result)
+        });
+        app.cancellable = true;
+        set(hwnd, STATUS, "Relendo o conteúdo publicado do backup…");
+        render(hwnd, app);
+        return;
+    }
+
     let Some(backup) = app
         .report
         .as_ref()
@@ -788,7 +939,15 @@ unsafe fn verify_backup(hwnd: HWND, app: &mut App) {
     };
     let directory = backup.directory.clone();
     let source = backup.source_root.clone();
+    let expected = backup.manifest.plan_fingerprint.clone();
     begin_backup(hwnd, app, move |cancel, _| {
+        let manifest = transaction::manifest(&directory)?;
+        if manifest.plan_fingerprint != expected {
+            return Err(Error::new(
+                ErrorKind::Conflict,
+                "A operação de backup mudou.",
+            ));
+        }
         transaction::verify(&source, &directory, cancel)
     });
     set(
@@ -799,22 +958,36 @@ unsafe fn verify_backup(hwnd: HWND, app: &mut App) {
 }
 
 unsafe fn preview_repair(hwnd: HWND, app: &mut App) {
-    let Some(report) = &app.report else {
+    let Some(windows) = app.session.available_windows().cloned() else {
+        set(hwnd, STATUS, "Escolha uma instalação Windows disponível.");
         return;
     };
-    let [installation] = report.installations.installations.as_slice() else {
+    let Ok(destination) = app.session.destination(REPAIR_PAGE) else {
         set(
             hwnd,
             STATUS,
-            "O plano assistido exige um único candidato Windows offline.",
+            "Escolha onde preservar os arquivos EFI e os dados.",
         );
         return;
     };
-    let windows_root = installation.volume.clone();
-    let esp = PathBuf::from(get(hwnd, ESP));
-    let destination = PathBuf::from(get(hwnd, DEST));
+    let Some(efi) = app
+        .session
+        .efi
+        .clone()
+        .or_else(|| app.session.suggested_efi.clone())
+    else {
+        set(hwnd, STATUS, "Não foi possível identificar com segurança a partição de inicialização. Consulte as candidatas.");
+        return;
+    };
     work(app, move || {
-        match repair::plan(&windows_root, &esp, &destination, None, None) {
+        let result = (|| {
+            let windows_root = windows.revalidate()?;
+            let esp = efi.revalidate()?;
+            let destination = destination.revalidate()?;
+            crate::resources::writable(&destination, &[windows.location, efi], 64 * 1024 * 1024)?;
+            repair::plan(&windows_root, &esp, &destination, None, None)
+        })();
+        match result {
             Ok(plan) => Event::Repair(Box::new(plan)),
             Err(error) => Event::Failure(error),
         }
@@ -831,10 +1004,14 @@ unsafe fn export_report(hwnd: HWND, app: &mut App) {
     let Some(report) = app.report.clone() else {
         return;
     };
-    let destination = PathBuf::from(get(hwnd, DEST));
+    let Ok(destination) = app.session.destination(REPORTS) else {
+        return;
+    };
+    let sources = app.session.sources(REPORTS);
     work(app, move || {
         let output = (|| {
-            let destination = archrescue_storage::safe_existing(&destination)?;
+            let destination = destination.revalidate()?;
+            crate::resources::writable(&destination, &sources, 0)?;
             let destination_id = archrescue_storage::identity(&destination)?;
             for installation in &report.installations.installations {
                 let source_id = archrescue_storage::identity(&installation.volume)?;
@@ -900,10 +1077,19 @@ Gravados {}/{} bytes · Verificados {} bytes · {} arquivos · {} falhas",
             Event::PlanExported(path) => set(
                 hwnd,
                 STATUS,
-                &format!("Arquivo exportado: {}", path.display()),
+                &format!(
+                    "Arquivo exportado: {}",
+                    paths::display(&path, app.technician)
+                ),
             ),
-            Event::Snapshot(mut report) => {
-                deployment::refresh_disks(hwnd, app, &report);
+            Event::Snapshot(snapshot) => {
+                let (mut report, catalog) = *snapshot;
+                let old_volumes = app
+                    .report
+                    .as_ref()
+                    .map_or(0, |old| old.inventory.volumes.len());
+                let stale = app.session.replace_catalog(catalog);
+                app.session.suggest_efi(&report);
                 pages::refresh_sources(hwnd, app, &report);
                 if let Some(old) = app.report.take() {
                     report.integrity = old.integrity;
@@ -913,42 +1099,46 @@ Gravados {}/{} bytes · Verificados {} bytes · {} arquivos · {} falhas",
                     report.repair_plans = old.repair_plans;
                     report.repair_attempts = old.repair_attempts;
                     report.session_errors = old.session_errors;
+                    report.console_audit = old.console_audit;
                 }
-
-                if app.directory.as_os_str().is_empty() {
-                    let root = report
-                        .installations
-                        .installations
-                        .first()
-                        .map(|item| &item.volume)
-                        .or_else(|| {
-                            report
-                                .inventory
-                                .volumes
-                                .iter()
-                                .flat_map(|volume| &volume.paths)
-                                .next()
-                        });
-                    if let Some(root) = root {
-                        app.directory = root.clone();
-                        set(hwnd, ADDRESS, &root.to_string_lossy());
-                    }
+                let new_volumes = report.inventory.volumes.len();
+                app.report = Some(report);
+                app.session.backup_verification = None;
+                let status = if stale {
+                    "O Windows selecionado está indisponível. Atualize ou escolha outro."
+                } else if new_volumes > old_volumes {
+                    "Volumes encontrados. Inventário e diagnóstico atualizados."
+                } else if new_volumes < old_volumes {
+                    "Um ou mais volumes foram removidos. Confira suas seleções."
+                } else {
+                    "Inventário e diagnóstico atualizados."
+                };
+                let warning = app.session.catalog.warnings.first();
+                if old_volumes != new_volumes
+                    || stale
+                    || warning.is_some()
+                    || app
+                        .report
+                        .as_ref()
+                        .is_some_and(|report| report.transactions.is_empty())
+                {
+                    set(hwnd, STATUS, warning.map_or(status, String::as_str));
                 }
-                if get(hwnd, ESP).is_empty() {
-                    if let Some(esp) = report
-                        .diagnosis
-                        .associations
-                        .iter()
-                        .find_map(|item| item.mounted_efi.first())
-                    {
-                        set(hwnd, ESP, &esp.to_string_lossy());
-                    }
-                }
-
-                app.report = Some(*report);
-                set(hwnd, STATUS, "Inventário e diagnóstico atualizados.");
             }
-            Event::Listing(path, entries) => show_listing(hwnd, app, path, entries),
+            Event::Listing(location, entries, recommended) => {
+                app.recommended = recommended;
+                show_listing(hwnd, app, location, entries);
+            }
+            Event::BackupVerified(result) => {
+                let status = match &result {
+                    Ok(()) => "Conteúdo do backup conferido por SHA-256.".into(),
+                    Err(error) => error_message(error),
+                };
+                app.error_status = result.is_err();
+                app.session.backup_verification = Some(result);
+                set(hwnd, STATUS, &status);
+            }
+            Event::Console(result) => console::update(hwnd, app, result),
             Event::Preview(preview) => {
                 app.preview = Some(preview);
                 set(hwnd, STATUS, "Revise o plano e confirme em Iniciar backup.");
@@ -957,6 +1147,14 @@ Gravados {}/{} bytes · Verificados {} bytes · {} arquivos · {} falhas",
             Event::Backup(result) => {
                 app.preview = None;
                 app.section = VERIFY_PAGE;
+                app.session.backup = None;
+                app.session.backup_verification = None;
+                if let Some(parent) = result.directory.parent() {
+                    let parent = parent.to_owned();
+                    if !app.session.registered.contains(&parent) {
+                        app.session.registered.push(parent);
+                    }
+                }
                 app.error_status = result.status.error.is_some();
                 let message = result.status.error.as_ref().map_or_else(
                     || {
@@ -970,11 +1168,13 @@ Gravados {}/{} bytes · Verificados {} bytes · {} arquivos · {} falhas",
                 );
                 set(hwnd, STATUS, &message);
 
+                app.refresh_pending = true;
                 if let Some(report) = &mut app.report {
                     report.transactions.push(*result);
                 }
             }
             Event::Repair(plan) => {
+                app.current_repair = Some((*plan).clone());
                 if let Some(report) = &mut app.report {
                     report.repair_plans.push(*plan);
                 }
@@ -984,7 +1184,10 @@ Gravados {}/{} bytes · Verificados {} bytes · {} arquivos · {} falhas",
                 set(
                     hwnd,
                     STATUS,
-                    &format!("Relatório gravado e verificado: {}", path.display()),
+                    &format!(
+                        "Relatório gravado e verificado: {}",
+                        paths::display(&path, app.technician)
+                    ),
                 );
                 app.report_export = Some(path);
             }
@@ -992,7 +1195,10 @@ Gravados {}/{} bytes · Verificados {} bytes · {} arquivos · {} falhas",
                 set(
                     hwnd,
                     STATUS,
-                    &format!("Referência exportada: {}", path.display()),
+                    &format!(
+                        "Referência exportada: {}",
+                        paths::display(&path, app.technician)
+                    ),
                 );
                 app.handoff_export = Some(path);
             }
@@ -1067,28 +1273,35 @@ unsafe fn show_checkpoints(hwnd: HWND, app: &mut App, entries: Vec<CheckpointEnt
         if entries.is_empty() {
             "Nenhum checkpoint neste destino."
         } else {
-            "Informe a origem no campo superior, selecione um checkpoint e use Retomar."
+            "Escolha a pasta original, selecione um checkpoint e use Retomar."
         },
     );
     app.checkpoints = Some(entries);
 }
 
-unsafe fn show_listing(hwnd: HWND, app: &mut App, path: PathBuf, entries: Vec<Entry>) {
-    app.directory = path;
+unsafe fn show_listing(hwnd: HWND, app: &mut App, location: Location, entries: Vec<Entry>) {
+    app.directory = location.path.clone();
+    app.session.source = Some(location);
     app.entries = entries;
     app.listing_loaded = true;
 
-    set(hwnd, ADDRESS, &app.directory.to_string_lossy());
     SendMessageW(control(hwnd, FILES), LB_RESETCONTENT, 0, 0);
 
     for entry in &app.entries {
         let kind = if entry.directory { "Pasta" } else { "Arquivo" };
         let detail = if let Some(error) = &entry.error {
             format!("Indisponível: {error}")
+        } else if entry.directory {
+            "Calcular na prévia".into()
         } else {
             format!("{} bytes", entry.bytes)
         };
-        let text = format!("{}\t{kind}\t{detail}", entry.name.display());
+        let name = if app.recommended {
+            session::folder_label(&entry.name)
+        } else {
+            paths::friendly(&entry.name)
+        };
+        let text = format!("{name}\t{kind}\t{detail}");
 
         SendMessageW(
             control(hwnd, FILES),
@@ -1153,6 +1366,17 @@ unsafe extern "system" fn procedure(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM
     // Native window operations can send these messages synchronously while
     // application state is borrowed. They only need the window and must still run.
     match msg {
+        WM_DEVICECHANGE
+            if matches!(
+                wp as u32,
+                DBT_DEVICEARRIVAL | DBT_DEVICEREMOVECOMPLETE | DBT_DEVNODES_CHANGED
+            ) =>
+        {
+            if let Ok(mut app) = state.app.try_borrow_mut() {
+                app.refresh_pending = true;
+            }
+            return 1;
+        }
         WM_PAINT => {
             presentation::paint(hwnd, state);
             return 0;
@@ -1260,14 +1484,21 @@ unsafe extern "system" fn procedure(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM
             );
             state.selected_page.set(app.section);
             let confirmation = app.confirmation.take();
+            let picker = app.picker.take();
             drop(app_borrow);
             if let Some(confirmation) = confirmation {
                 confirmation.ask(hwnd, state);
+            } else if let Some(purpose) = picker {
+                session::run_picker(hwnd, state, purpose);
             }
             0
         }
         WM_TIMER => {
             events(hwnd, app);
+            if app.refresh_pending && !app.busy && !state.confirming.get() {
+                app.refresh_pending = false;
+                refresh(hwnd, app);
+            }
             state.selected_page.set(app.section);
             if state.render_failed.get() && !app.busy {
                 PostMessageW(hwnd, WM_CLOSE, 0, 0);
@@ -1313,9 +1544,15 @@ pub fn run() -> Result<()> {
         let app = Box::new(WindowState {
             app: RefCell::new(App {
                 deployment: deployment::Deployment::default(),
+                session: session::Session::default(),
+                picker: None,
+                recommended: false,
+                refresh_pending: false,
+                console: console::Console::default(),
                 section: DASHBOARD,
                 technician: false,
                 preview: None,
+                current_repair: None,
                 checkpoints: None,
                 confirmation: None,
                 report: None,
@@ -1412,7 +1649,7 @@ pub fn run() -> Result<()> {
                 hwnd,
                 100 + page,
                 "BUTTON",
-                navigation::label(page, false),
+                navigation::label(page, false, false),
                 WS_TABSTOP,
                 font,
             )?;
@@ -1420,8 +1657,6 @@ pub fn run() -> Result<()> {
 
         for (id, label) in [
             (REFRESH, "Atualizar"),
-            (OPEN, "Abrir"),
-            (UP, "Subir"),
             (DISK_DETAILS, "Detalhes dos discos"),
             (PREVIEW, "Plane&jar"),
             (COPY, "&Iniciar backup"),
@@ -1435,44 +1670,29 @@ pub fn run() -> Result<()> {
             (REPAIR_UNAVAILABLE, "Executar BCDBoot"),
             (CANCEL, "Cancelar"),
             (EXPORT, "Exportar relatório"),
-            (CONSOLE, "Console de diagnóstico"),
         ] {
             add(hwnd, id, "BUTTON", label, WS_TABSTOP, font)?;
         }
 
         add(hwnd, SOURCE_LABEL, "STATIC", "Origem", 0, font)?;
-        add(
-            hwnd,
-            ADDRESS,
-            "EDIT",
-            "",
-            WS_TABSTOP | ES_AUTOHSCROLL as u32,
-            font,
-        )?;
         add(hwnd, DESTINATION_LABEL, "STATIC", "Destino", 0, font)?;
         add(
             hwnd,
-            DEST,
-            "EDIT",
-            "",
-            WS_TABSTOP | ES_AUTOHSCROLL as u32,
+            ESP_LABEL,
+            "STATIC",
+            "Partição de inicialização",
+            0,
             font,
         )?;
-        add(hwnd, ESP_LABEL, "STATIC", "Raiz da partição EFI", 0, font)?;
-        add(
-            hwnd,
-            ESP,
-            "EDIT",
-            "",
-            WS_TABSTOP | ES_AUTOHSCROLL as u32,
-            font,
-        )?;
-        for (id, hint) in [
-            (DEST, "Destino: pasta em outro disco"),
-            (ADDRESS, "Origem: pasta que contém os dados"),
-            (ESP, "ESP: raiz da partição EFI acessível"),
+        for (id, label) in [
+            (ADDRESS, "Escolher pasta"),
+            (DEST, "Escolher destino"),
+            (ESP, "Escolher partição EFI"),
+            (CHOOSE_WINDOWS, "Escolher Windows"),
+            (CHOOSE_BACKUP, "Escolher backup"),
+            (SELECT_RECOMMENDED, "Selecionar recomendadas"),
         ] {
-            SendMessageW(control(hwnd, id), 0x1501, 1, wide(hint).as_ptr() as isize);
+            add(hwnd, id, "BUTTON", label, WS_TABSTOP, font)?;
         }
 
         add(
@@ -1513,6 +1733,7 @@ pub fn run() -> Result<()> {
             font,
         )?;
         pages::controls(hwnd, font)?;
+        console::controls(hwnd, font)?;
         deployment::controls(hwnd, font)?;
         if SetTimer(hwnd, 1, 100, None) == 0 {
             return Err(os_error("Start recovery event timer"));

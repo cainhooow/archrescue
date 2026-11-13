@@ -313,37 +313,35 @@ pub fn verify_payload(directory: &Path, cancel: &AtomicBool) -> Result<BackupMan
     Ok(manifest)
 }
 
+pub fn checkpoint(directory: &Path) -> CheckpointEntry {
+    let (manifest, status, error) = match safe_existing(directory)
+        .and_then(|path| manifest(&path).map(|manifest| (path, manifest)))
+    {
+        Ok((path, manifest)) => {
+            let (status, error) = match read_status(&path, &manifest) {
+                Ok(status) => (status, None),
+                Err(error) => (None, Some(error)),
+            };
+            (Some(manifest), status, error)
+        }
+        Err(error) => (None, None, Some(error)),
+    };
+
+    CheckpointEntry {
+        directory: directory.into(),
+        manifest,
+        status,
+        error,
+    }
+}
+
 pub fn checkpoints(destination: &Path) -> Result<Vec<CheckpointEntry>> {
     let destination = safe_existing(destination)?;
     let mut entries = Vec::new();
     for child in fs::read_dir(destination).map_err(|error| Error::io("List backups", error))? {
         let child = child.map_err(|error| Error::io("Read backup entry", error))?;
-        if !child.file_name().to_string_lossy().starts_with(PREFIX) {
-            continue;
-        }
-
-        let directory = child.path();
-        match manifest(&directory) {
-            Ok(manifest) => {
-                let status = read_status(&directory, &manifest);
-                let (status, error) = match status {
-                    Ok(status) => (status, None),
-                    Err(error) => (None, Some(error)),
-                };
-
-                entries.push(CheckpointEntry {
-                    directory,
-                    manifest: Some(manifest),
-                    status,
-                    error,
-                });
-            }
-            Err(error) => entries.push(CheckpointEntry {
-                directory,
-                manifest: None,
-                status: None,
-                error: Some(error),
-            }),
+        if child.file_name().to_string_lossy().starts_with(PREFIX) {
+            entries.push(checkpoint(&child.path()));
         }
     }
 

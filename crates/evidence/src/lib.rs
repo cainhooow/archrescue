@@ -44,6 +44,8 @@ pub struct Report {
     pub decisions: Vec<String>,
     #[serde(default)]
     pub session_errors: Vec<Error>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub console_audit: Vec<serde_json::Value>,
     pub limitations: Vec<String>,
 }
 
@@ -79,6 +81,7 @@ impl Report {
             repair_attempts: vec![],
             decisions: vec![],
             session_errors: vec![],
+            console_audit: vec![],
             limitations: vec![
                 "No hardware health or bootability verdict is inferred from enumeration".into(),
                 "WinPE RAM-disk exports are volatile; choose a persistent authorized destination"

@@ -2,7 +2,7 @@
 
 use super::*;
 
-pub const ORDER: [usize; 9] = [
+pub const ORDER: [usize; 10] = [
     DASHBOARD,
     DIAGNOSIS,
     INTEGRITY_PAGE,
@@ -12,6 +12,7 @@ pub const ORDER: [usize; 9] = [
     REPORTS,
     deployment::DEPLOY,
     deployment::RESTORE,
+    console::PAGE,
 ];
 
 pub fn owner(section: usize) -> usize {
@@ -22,13 +23,15 @@ pub fn owner(section: usize) -> usize {
     }
 }
 
-pub fn label(section: usize, compact: bool) -> &'static str {
+pub fn label(section: usize, compact: bool, technician: bool) -> &'static str {
     match (section, compact) {
         (DASHBOARD | DISKS, _) => "Detectar",
         (DIAGNOSIS, _) => "Diagnosticar",
         (INTEGRITY_PAGE, true) => "Integridade",
         (INTEGRITY_PAGE, false) => "Integridade do Windows",
-        (BACKUP, _) => "Proteger dados",
+        (BACKUP, false) if technician => "Backup e preservação",
+        (BACKUP, true) => "Salvar arquivos",
+        (BACKUP, false) => "Salvar meus arquivos",
         (REPAIR_PAGE, _) => "Reparar",
         (VERIFY_PAGE, _) => "Verificar",
         (REPORTS, _) => "Relatar",
@@ -36,6 +39,7 @@ pub fn label(section: usize, compact: bool) -> &'static str {
         (deployment::DEPLOY, false) => "Implantar Windows",
         (deployment::RESTORE, true) => "Restaurar",
         (deployment::RESTORE, false) => "Restaurar arquivos",
+        (console::PAGE, _) => "Console",
         _ => "",
     }
 }
@@ -78,10 +82,14 @@ pub fn heading(app: &App) -> (&'static str, &'static str) {
         ),
         BACKUP if app.checkpoints.is_some() => (
             "Checkpoints de backup",
-            "Escolha uma operação no destino e informe a origem para retomar.",
+            "Escolha uma operação e confirme a pasta original para retomar.",
         ),
         BACKUP => (
-            "Proteger dados",
+            if app.technician {
+                "Backup e preservação de dados"
+            } else {
+                "Salvar meus arquivos"
+            },
             "Selecione arquivos e pastas para copiar o conteúdo a um disco separado.",
         ),
         REPAIR_PAGE => (
@@ -99,6 +107,10 @@ pub fn heading(app: &App) -> (&'static str, &'static str) {
         deployment::DEPLOY => (
             "Planejar implantação",
             "Inspecione uma imagem, selecione o alvo GPT e revise o plano de implantação.",
+        ),
+        console::PAGE => (
+            "Console de diagnóstico",
+            "Execute uma ação de diagnóstico e consulte a saída nesta sessão.",
         ),
         _ => (
             "Restaurar arquivos após reinstalar",

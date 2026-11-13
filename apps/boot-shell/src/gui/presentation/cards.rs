@@ -554,9 +554,6 @@ impl Cards<'_, '_> {
         let bottom = form - self.area.gap();
         self.panel(rect(x, form, width, 105));
         self.field(rect(x + 13, form + 28, width - 26, 30));
-        if app.preview.is_none() {
-            self.field(rect(x, self.area.body_top(DASHBOARD) + 18, width - 156, 30));
-        }
 
         if let Some(preview) = &app.preview {
             surface(
@@ -574,7 +571,7 @@ impl Cards<'_, '_> {
             );
             self.line(
                 rect(x + 13, top + 61, left - 26, 23),
-                &preview.source.display().to_string(),
+                &preview.source.label(app.technician),
                 TEXT,
             );
             fill(self.dc, rect(x + 13, top + 90, left - 26, 1), BORDER);
@@ -585,12 +582,12 @@ impl Cards<'_, '_> {
             );
             self.line(
                 rect(x + 13, top + 118, left - 26, 23),
-                &preview.destination.display().to_string(),
+                &preview.destination.label(app.technician),
                 TEXT,
             );
             self.paragraph(rect(x + 13, top + 149, left - 26, (bottom - top).min(192) - 153), "O destino receberá o manifesto, o checkpoint e os arquivos verificados em uma pasta exclusiva.", MUTED);
 
-            let count_width = (right_width - 6) / 3;
+            let count_width = (right_width - 12) / 3;
             self.metric(
                 right,
                 top,
@@ -602,9 +599,17 @@ impl Cards<'_, '_> {
             self.metric(
                 right + count_width + 6,
                 top,
-                right_width - count_width - 6,
+                count_width,
                 "Tamanho",
                 &bytes(preview.bytes),
+                TEXT,
+            );
+            self.metric(
+                right + 2 * (count_width + 6),
+                top,
+                count_width,
+                "Livre",
+                &bytes(preview.available_bytes),
                 TEXT,
             );
             self.panel(rect(
@@ -652,7 +657,7 @@ impl Cards<'_, '_> {
                 } else {
                     (
                         "Abra uma pasta de origem",
-                        "Confirme o caminho, use Abrir e selecione os itens.",
+                        "Escolha o Windows ou abra uma pasta para selecionar os arquivos.",
                     )
                 };
                 self.empty(
@@ -668,7 +673,7 @@ impl Cards<'_, '_> {
                 );
                 self.paragraph(
                     rect(right + 12, top + 44, right_width - 24, 60),
-                    "Informe uma pasta existente em outro disco e escolha a operação.",
+                    "Escolha uma pasta em outro disco para salvar seus arquivos.",
                     MUTED,
                 );
                 return;
@@ -724,6 +729,21 @@ impl Cards<'_, '_> {
         let x = self.area.left();
         let (left, right, right_width) = self.area.columns(60);
         let top = self.area.body_top(DASHBOARD);
+        if let Some(backup) = &app.session.backup {
+            self.panel(rect(x, top, left, 210));
+            self.heading(rect(x + 13, top + 14, left - 26, 32), "Backup selecionado");
+            self.line(
+                rect(x + 13, top + 54, left - 26, 28),
+                &backup.location.label(app.technician),
+                MUTED,
+            );
+            self.panel(rect(right, top, right_width, 148));
+            self.heading(
+                rect(right + 13, top + 8, right_width - 26, 28),
+                "Backups encontrados",
+            );
+            return;
+        }
         let Some(backup) = app
             .report
             .as_ref()
@@ -732,8 +752,8 @@ impl Cards<'_, '_> {
             self.empty(
                 rect(x, top, left, 175),
                 Icon::Check,
-                "Nenhum backup nesta sessão",
-                "Inicie ou retome um backup para obter um resultado verificável.",
+                "Selecione um backup",
+                "Escolha uma operação encontrada para verificar seu conteúdo.",
             );
             self.panel(rect(right, top, right_width, 148));
             self.heading(
@@ -778,8 +798,8 @@ impl Cards<'_, '_> {
             "Nova verificação",
         );
         self.paragraph(
-            rect(right + 13, top + 40, right_width - 26, 52),
-            "A releitura confere o conteúdo gravado com os hashes do manifesto.",
+            rect(right + 13, top + 40, right_width - 26, 28),
+            "Confira o conteúdo pelo SHA-256 do manifesto.",
             MUTED,
         );
     }
@@ -859,7 +879,10 @@ impl Cards<'_, '_> {
             self.notice(
                 rect(right, top + 158, right_width, 105),
                 "Relatório verificado",
-                &format!("report.json e report.txt\n{}", path.display()),
+                &format!(
+                    "report.json e report.txt\n{}",
+                    paths::display(path, app.technician)
+                ),
                 (SUCCESS_SURFACE, theme::SUCCESS),
             );
         } else {
@@ -892,16 +915,13 @@ impl Cards<'_, '_> {
             "Execução do reparo",
         );
         self.paragraph(rect(right + 13, top + 40, right_width - 26, 75), "Somente laboratório. O BCDBoot exige clone registrado, preservação verificada e autorização vinculada ao plano.", WARNING);
-        if let Some(report) = &app.report {
-            let count = report.installations.installations.len();
-            if count != 1 {
-                self.notice(
+        if app.report.is_some() && app.session.available_windows().is_none() {
+            self.notice(
                     rect(right, top + 174, right_width, 98),
                     "Candidato offline necessário",
-                    "A prévia assistida exige exatamente uma instalação Windows identificada.",
+                    "Escolha uma instalação Windows identificada para revisar a partição de inicialização.",
                     (WARNING_SURFACE, WARNING),
                 );
-            }
         }
     }
 
@@ -915,7 +935,7 @@ impl Cards<'_, '_> {
             self.notice(
                 rect(x, top, left, 75),
                 "Execução da instalação indisponível",
-                "Informe um WIM, ESD ou a raiz de uma mídia montada.",
+                "Escolha uma imagem WIM/ESD ou abra a mídia montada.",
                 (METRIC, WARNING),
             );
             self.panel(rect(right, top, right_width, 75));
@@ -927,7 +947,7 @@ impl Cards<'_, '_> {
             if deployment::qualification(app).is_some() {
                 "Prévia de implantação"
             } else {
-                "Mídia e índices"
+                "Imagem e edições do Windows"
             },
         );
 
@@ -936,7 +956,7 @@ impl Cards<'_, '_> {
         let review = deployment::qualification(app);
         let (label, detail, color) = review.unwrap_or((
             "Revisão do alvo",
-            "Selecione a mídia, o índice e a identidade GPT para preparar o plano.",
+            "Escolha a imagem, a edição do Windows e o disco de instalação.",
             MUTED,
         ));
         self.heading(rect(right + 13, top + 8, right_width - 26, 26), label);
@@ -999,7 +1019,7 @@ impl Cards<'_, '_> {
             self.notice(
                 rect(x, top + 208, self.area.body_width(), 78),
                 "Referência exportada",
-                &path.display().to_string(),
+                &paths::display(path, app.technician),
                 (SUCCESS_SURFACE, theme::SUCCESS),
             );
         } else {
@@ -1019,7 +1039,7 @@ fn bytes(value: u64) -> String {
 }
 
 fn display_path(path: &std::path::Path) -> String {
-    let path = path.display().to_string();
+    let path = paths::friendly(path);
     if let Some(unc) = path.strip_prefix(r"\\?\UNC\") {
         return format!(r"\\{unc}");
     }

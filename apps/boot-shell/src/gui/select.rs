@@ -96,6 +96,22 @@ unsafe extern "system" fn procedure(hwnd: HWND, message: u32, wp: WPARAM, lp: LP
             InvalidateRect(hwnd, null(), 0);
             return 0;
         }
+        CB_DELETESTRING => {
+            let mut options = choice.options.borrow_mut();
+            if wp >= options.len() {
+                return CB_ERR as isize;
+            }
+            options.remove(wp);
+            choice.selected.set(choice.selected.get().and_then(
+                |selected| match selected.cmp(&wp) {
+                    std::cmp::Ordering::Less => Some(selected),
+                    std::cmp::Ordering::Equal => None,
+                    std::cmp::Ordering::Greater => Some(selected - 1),
+                },
+            ));
+            InvalidateRect(hwnd, null(), 0);
+            return options.len() as isize;
+        }
         CB_SETCURSEL => {
             let selected = (wp < choice.options.borrow().len()).then_some(wp);
             choice.selected.set(selected);

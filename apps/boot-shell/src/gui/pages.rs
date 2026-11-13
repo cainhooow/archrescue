@@ -102,7 +102,10 @@ pub unsafe fn layout(hwnd: HWND, area: &layout::Layout, section: usize) {
 }
 
 pub unsafe fn refresh_sources(hwnd: HWND, app: &mut App, report: &Report) {
-    let previous = app.roots.get(app.root_index).cloned();
+    let previous = app
+        .session
+        .available_windows()
+        .map(|windows| windows.installation.volume.clone());
     app.roots = report
         .installations
         .probes
@@ -118,13 +121,23 @@ pub unsafe fn refresh_sources(hwnd: HWND, app: &mut App, report: &Report) {
     let combo = control(hwnd, ROOT);
     SendMessageW(combo, CB_RESETCONTENT, 0, 0);
     for root in &app.roots {
-        let label = wide(&format!("Origem  ·  {}", root.display()));
+        let label = wide(&format!(
+            "Origem  ·  {}",
+            paths::display(root, app.technician)
+        ));
         SendMessageW(combo, CB_ADDSTRING, 0, label.as_ptr() as isize);
     }
     app.root_index = previous
         .and_then(|root| app.roots.iter().position(|item| item == &root))
-        .unwrap_or(0);
+        .unwrap_or(usize::MAX);
     SendMessageW(combo, CB_SETCURSEL, app.root_index, 0);
+}
+
+pub unsafe fn select_root(hwnd: HWND, app: &mut App, path: &std::path::Path) {
+    if let Some(index) = app.roots.iter().position(|root| root == path) {
+        app.root_index = index;
+        SendMessageW(control(hwnd, ROOT), CB_SETCURSEL, index, 0);
+    }
 }
 
 pub fn selected_scan(app: &App) -> Option<&IntegrityReport> {
@@ -156,14 +169,25 @@ pub unsafe fn action(hwnd: HWND, app: &mut App, id: usize, notification: u32) ->
         ROOT if notification == CBN_SELCHANGE && !app.busy => {
             app.root_index = SendMessageW(control(hwnd, ROOT), CB_GETCURSEL, 0, 0) as usize;
             app.row_index = 0;
+            if let Some(windows) = app
+                .roots
+                .get(app.root_index)
+                .and_then(|root| {
+                    app.session
+                        .catalog
+                        .windows
+                        .iter()
+                        .find(|windows| windows.installation.volume == *root)
+                })
+                .cloned()
+            {
+                session::select_windows(hwnd, app, windows);
+            }
             render(hwnd, app);
         }
         SCAN if !app.busy => start(hwnd, app),
         PROTECT if !app.busy => {
             stage(hwnd, app, BACKUP);
-            if let Some(root) = app.roots.get(app.root_index).cloned() {
-                browse(hwnd, app, root);
-            }
         }
         REPORT_ACTION => stage(hwnd, app, REPORTS),
         _ => return false,
@@ -292,7 +316,7 @@ fn diagnosis_rows(report: &Report, technician: bool) -> Vec<Row> {
             };
             let mut detail = format!(
                 "{state}\n{}\n\n{}\n\nPróxima ação\n{}",
-                finding.affected.display(),
+                paths::display(&finding.affected, technician),
                 finding.evidence,
                 finding.next_action
             );
@@ -305,7 +329,10 @@ fn diagnosis_rows(report: &Report, technician: bool) -> Vec<Row> {
                 );
             }
             Row::new(
-                format!("{state}  ·  {}", finding.affected.display()),
+                format!(
+                    "{state}  ·  {}",
+                    paths::display(&finding.affected, technician)
+                ),
                 detail,
             )
         })
@@ -313,7 +340,10 @@ fn diagnosis_rows(report: &Report, technician: bool) -> Vec<Row> {
     if technician {
         for association in &report.diagnosis.associations {
             rows.push(Row::new(
-                format!("Associação GPT · {}", association.installation.display()),
+                format!(
+                    "Associação GPT · {}",
+                    paths::display(&association.installation, technician)
+                ),
                 format!("{association:#?}"),
             ));
         }
@@ -361,7 +391,7 @@ fn integrity_rows(scan: &IntegrityReport, technician: bool) -> Vec<Row> {
     let mut summary = format!(
         "{}\n{}\n{}\n\n{} verificações com evidência · {} registradas\n{}\n\n{}",
         scan.status.label(),
-        scan.windows_directory.display(),
+        paths::display(&scan.windows_directory, technician),
         version,
         evaluated,
         scan.checks.len(),
@@ -376,7 +406,7 @@ fn integrity_rows(scan: &IntegrityReport, technician: bool) -> Vec<Row> {
             summary,
             "\n\nMídia de referência · índice {}\n{}\n{}",
             reference.index,
-            reference.path.display(),
+            paths::display(&reference.path, technician),
             reference.reason
         );
     }
@@ -416,7 +446,7 @@ fn integrity_rows(scan: &IntegrityReport, technician: bool) -> Vec<Row> {
             check.expected_component,
             check.category.label(),
             check.observation.label(),
-            check.path.display(),
+            paths::display(&check.path, technician),
             check.evidence,
             check.next_action,
         );
@@ -493,7 +523,7 @@ fn disk_rows(report: &Report, technician: bool) -> Vec<Row> {
     for volume in &report.inventory.volumes {
         let name = volume.paths.first().map_or_else(
             || "Sem caminho de acesso".into(),
-            |path| path.display().to_string(),
+            |path| paths::display(path, technician),
         );
         let filesystem = volume.filesystem.as_deref().unwrap_or("FS indisponível");
         rows.push(Row::new(
@@ -509,7 +539,7 @@ fn volume_detail(volume: &archrescue_storage::Volume, technician: bool) -> Strin
     let paths = volume
         .paths
         .iter()
-        .map(|path| path.display().to_string())
+        .map(|path| paths::display(path, technician))
         .collect::<Vec<_>>()
         .join(", ");
     let mut detail = format!(
