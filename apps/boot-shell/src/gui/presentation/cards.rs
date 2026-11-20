@@ -553,6 +553,7 @@ impl Cards<'_, '_> {
         let form = self.area.backup_form(app);
         let bottom = form - self.area.gap();
         self.panel(rect(x, form, width, 105));
+        self.line(rect(x + 13, form + 9, width - 26, 17), "Destino", MUTED);
         self.field(rect(x + 13, form + 28, width - 26, 30));
 
         if let Some(preview) = &app.preview {

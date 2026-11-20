@@ -413,13 +413,33 @@ pub fn writable(destination: &Path, sources: &[Location], minimum_bytes: u64) ->
             ));
         }
         if let Ok(system_id) = storage::identity(Path::new(&system)) {
-            storage::require_separate(&system_id, &destination_id)?;
+            storage::require_separate(&system_id, &destination_id).map_err(|error| {
+                Error::new(
+                    error.kind,
+                    if error.kind == ErrorKind::Validation {
+                        "O destino está no disco do ambiente em execução."
+                    } else {
+                        "Não foi possível comprovar que o destino está em outro disco."
+                    },
+                )
+            })?;
         }
     }
 
     for source in sources {
         let source = source.revalidate()?;
-        storage::require_separate(&storage::identity(&source)?, &destination_id)?;
+        storage::require_separate(&storage::identity(&source)?, &destination_id).map_err(
+            |error| {
+                Error::new(
+                    error.kind,
+                    if error.kind == ErrorKind::Validation {
+                        "A origem e o destino estão no mesmo volume ou disco físico."
+                    } else {
+                        "Não foi possível comprovar que a origem e o destino estão em discos físicos diferentes."
+                    },
+                )
+            },
+        )?;
     }
 
     if partition.partition.efi || partition.filesystem.is_empty() {

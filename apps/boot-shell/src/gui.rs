@@ -380,7 +380,8 @@ unsafe fn render(hwnd: HWND, app: &App) {
         show(
             hwnd,
             id,
-            destination && (id != DESTINATION_LABEL || app.section != console::PAGE),
+            destination
+                && (id != DESTINATION_LABEL || !matches!(app.section, BACKUP | console::PAGE)),
         );
     }
     for id in [ADDRESS, PREVIEW, COPY, CHECKPOINTS, RESUME] {

@@ -243,7 +243,6 @@ pub unsafe fn arrange(hwnd: HWND, app: &App) {
                 right_width - 20,
                 (bottom - top - 54).clamp(1, 102),
             );
-            place(hwnd, DESTINATION_LABEL, x + 13, form + 9, width - 26, 17);
             place(hwnd, DEST, x + 19, form + 31, width - 38, 24);
             let mut button_x = x + 13;
             for (id, desired) in [
