@@ -12,7 +12,9 @@ use archrescue_storage::{Disk, Inventory};
 use std::path::Path;
 
 #[cfg(windows)]
-use archrescue_storage::windows::{is_partition_guid, mounted_partition, MountedPartition};
+use archrescue_storage::windows::{
+    drive_volume_roots, is_partition_guid, mounted_partition, MountedPartition,
+};
 
 #[cfg(windows)]
 const ESP_TYPE: &str = "c12a7328-f81f-11d2-ba4b-00a0c93ec93b";
@@ -79,16 +81,19 @@ pub(super) fn resolve(source: &MountedPartition, inventory: &Inventory) -> Resol
         );
     }
 
+    let drive_roots = drive_volume_roots();
     let mut identified: Option<(PathBuf, String, u32)> = None;
     let mut reason = "A ESP no mesmo disco não tem um volume acessível.".into();
     for volume in &inventory.volumes {
         if volume.physical_disks != [source.disk_number] {
             continue;
         }
-        let roots = volume
-            .paths
+        let drive_mounts = drive_roots
             .iter()
-            .map(PathBuf::as_path)
+            .filter(|(_, guid)| guid.eq_ignore_ascii_case(&volume.identity))
+            .map(|(root, _)| root.as_path());
+        let roots = drive_mounts
+            .chain(volume.paths.iter().map(PathBuf::as_path))
             .chain([Path::new(&volume.identity)]);
         for root in roots {
             let Ok(target) = mounted_partition(root) else {

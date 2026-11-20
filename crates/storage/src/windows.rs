@@ -250,6 +250,20 @@ pub fn identity(path: &Path) -> Result<VolumeIdentity> {
     })
 }
 
+/// Find direct drive mounts that WinPE can omit from the volume path list.
+pub fn drive_volume_roots() -> Vec<(PathBuf, String)> {
+    // SAFETY: GetLogicalDrives takes no pointers and returns the drive-letter bitmap.
+    let drives = unsafe { GetLogicalDrives() };
+    (b'A'..=b'Z')
+        .filter(|letter| drives & (1 << (letter - b'A')) != 0)
+        .filter_map(|letter| {
+            let root = PathBuf::from(format!("{}:\\", letter as char));
+            let (mount, volume) = mount_and_volume(&root).ok()?;
+            (mount == root).then_some((root, volume))
+        })
+        .collect()
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MountedPartition {
     pub disk_number: u32,
