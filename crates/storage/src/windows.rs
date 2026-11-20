@@ -726,6 +726,32 @@ pub fn require_writable_disk(device_path: &str) -> Result<()> {
     Ok(())
 }
 
+pub(crate) fn normalize_efi_mount_alias(path: &Path, canonical: PathBuf) -> PathBuf {
+    use std::path::{Component, Prefix};
+
+    // WinPE can return a mounted folder as the canonical DOS name for an
+    // ESP accessed directly by drive letter or GUID. That introduces
+    // a reparse point even though the original path passed safe_existing.
+    let components = path.components().count();
+    if canonical.components().count() <= components {
+        return canonical;
+    }
+
+    let Ok(identified) = canonicalize_efi_path(path) else {
+        return canonical;
+    };
+
+    // A verified drive root is also valid input for BCDBoot. Keep the
+    // explicit root for that caller and use the checked GUID for other paths.
+    if let (2, Some(Component::Prefix(prefix))) = (components, path.components().next()) {
+        if let Prefix::Disk(letter) | Prefix::VerbatimDisk(letter) = prefix.kind() {
+            return PathBuf::from(format!(r"\\?\{}:\", letter as char));
+        }
+    }
+
+    identified
+}
+
 /// WinPE FAT32 roots can fail DOS-name normalization while GUID normalization succeeds.
 /// Every path component was already inspected by safe_existing before this narrow recovery.
 pub(crate) fn canonicalize_efi_path(path: &Path) -> Result<PathBuf> {

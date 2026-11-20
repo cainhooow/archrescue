@@ -183,6 +183,9 @@ pub fn safe_existing(path: &Path) -> Result<PathBuf> {
     }
 
     match fs::canonicalize(path) {
+        #[cfg(windows)]
+        Ok(canonical) => Ok(windows::normalize_efi_mount_alias(path, canonical)),
+        #[cfg(not(windows))]
         Ok(path) => Ok(path),
         #[cfg(windows)]
         Err(error) if error.raw_os_error() == Some(3) => windows::canonicalize_efi_path(path),
