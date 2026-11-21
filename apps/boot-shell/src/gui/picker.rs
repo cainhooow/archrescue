@@ -194,10 +194,22 @@ impl Request {
                         };
                         request.rows.push(Row {
                             label: format!("Disco {} · Partição {} · {}", association.disk_number, partition.number, resources::size(partition.length)),
-                            detail: format!("Partição EFI no disco do Windows{identity}. Consulte o estado da associação na página Reparar."),
+                            detail: format!("Candidata EFI no disco do Windows{identity}. Esta consulta não autoriza o reparo: a associação precisa ser única e comprovada. Volte para Reparar e use Atualizar depois de conferir a conexão."),
                             target: Target::Unavailable,
                         });
                     }
+                }
+                for windows in &catalog.windows {
+                    if selected_windows
+                        .is_some_and(|selected| selected.location.same_location(&windows.location))
+                    {
+                        continue;
+                    }
+                    request.rows.push(Row {
+                        label: format!("Escolher outro Windows · {}", windows.label(technician)),
+                        detail: "Identificar automaticamente a ESP desta instalação. A seleção anterior e sua prévia serão descartadas.".into(),
+                        target: Target::Selection(Selection::Windows(Box::new(windows.clone()))),
+                    });
                 }
             }
             Purpose::DeploymentDisk => {
@@ -866,6 +878,8 @@ unsafe fn refresh(hwnd: HWND, dialog: &Dialog<'_>, model: &mut Model) {
         DETAILS,
         if model.visible.is_empty() {
             "Nenhum recurso nesta lista. Use Voltar ou altere o filtro."
+        } else if dialog.request.purpose == Purpose::Efi {
+            "Revise as candidatas sem autorizar gravações ou escolha outro Windows encontrado. Cancele para voltar ao reparo e atualizar o diagnóstico."
         } else if dialog.request.purpose == Purpose::Media {
             "Escolha uma imagem WIM/ESD ou abra um volume. Arquivos ISO exigem mídia montada."
         } else {

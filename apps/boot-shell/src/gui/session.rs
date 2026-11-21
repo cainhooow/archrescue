@@ -171,7 +171,7 @@ Preserve os dados selecionados e a árvore EFI em outro disco. Escolha uma pasta
                 if technician { location.label(true) } else { paths::friendly(&location.path) },
             ),
             Self::Blocked(Resolution::Missing) => "Nenhuma ESP no disco deste Windows. Confira a conexão e escolha outra instalação, se disponível. Atualize o diagnóstico depois de conferir o disco.".into(),
-            Self::Blocked(Resolution::Ambiguous) => "Mais de uma ESP ou identidade EFI divergente. Consulte as partições e confira a topologia do disco antes de atualizar o diagnóstico.".into(),
+            Self::Blocked(Resolution::Ambiguous) => "Mais de uma ESP ou identidade EFI divergente. O reparo permanece bloqueado porque ainda não há um alvo comprovado.\n\nUse Consultar partições EFI para revisar as candidatas ou escolher outro Windows encontrado. Depois de conferir a conexão do disco, use Atualizar. Não é necessário digitar o caminho da ESP.".into(),
             Self::Blocked(Resolution::Unsupported(reason) | Resolution::Inaccessible(reason)) => format!(
                 "ESP inacessível ou incompatível. {reason}
 Confira o disco e as permissões, depois atualize o diagnóstico."
