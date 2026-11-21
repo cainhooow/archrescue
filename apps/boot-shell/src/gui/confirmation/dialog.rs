@@ -224,11 +224,15 @@ unsafe fn initialize(hwnd: HWND, dialog: &Dialog<'_>) -> Result<()> {
             id,
             "EDIT",
             value,
-            WS_TABSTOP | ES_MULTILINE as u32 | ES_READONLY as u32,
+            WS_TABSTOP
+                | WS_VSCROLL
+                | ES_MULTILINE as u32
+                | ES_AUTOVSCROLL as u32
+                | ES_READONLY as u32,
             theme.mono(),
         )?;
-        // Native multiline editing keeps the full value selectable and wraps at
-        // the field edge. Keyboard scrolling also reaches exceptionally long paths.
+        // Native multiline editing keeps the full value selectable. A visible
+        // scrollbar makes paths beyond the bounded row height discoverable.
         let field = control(hwnd, id);
         SendMessageW(field, EM_SETMARGINS, 3, 0);
         place(hwnd, id, value_x, value_y, value_width, height);
