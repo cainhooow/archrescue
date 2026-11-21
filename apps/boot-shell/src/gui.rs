@@ -1062,6 +1062,9 @@ unsafe fn preview_repair(hwnd: HWND, app: &mut App) {
     let generation = app.session.catalog.generation;
     let data = app.session.repair_data.clone();
     let efi_checkpoint = app.session.repair_efi.clone();
+
+    // A failed revalidation must not leave a previous preview on screen.
+    app.current_repair = None;
     work(app, move || {
         let result = (|| {
             let windows_root = windows.revalidate()?;
